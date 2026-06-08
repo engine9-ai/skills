@@ -11,7 +11,7 @@ How to interpret failed Task API responses. Response bodies use a `detail` field
 | **404** | Not found | Wrong flow slug, flow run id, or task run id |
 | **422** | Validation error | Fix request body (missing required field) |
 | **500** | Server error | Unexpected failure — retry or contact administrator |
-| **503** | Service unavailable | Server not configured (usually missing flows directory) |
+| **503** | Service unavailable | API not fully configured for your environment — contact administrator |
 
 Prefect documents similar HTTP semantics for its REST API: [Prefect Server REST overview](https://docs.prefect.io/v3/api-ref/rest-api/server/).
 
@@ -48,7 +48,7 @@ Prefect-style validation: [Create Flow Run](https://docs.prefect.io/v3/api-ref/r
 }
 ```
 
-Contact your administrator — [admin configuration](../../../server/api/task/docs/admin/configuration.md).
+Contact your administrator — the API is not fully provisioned for your account or environment.
 
 ### Server error (500)
 
@@ -65,8 +65,8 @@ Contact your administrator — [admin configuration](../../../server/api/task/do
 | Status | `detail` | Cause |
 |--------|----------|-------|
 | 422 | `flow_id required` | Body missing `flow_id` |
-| 404 | Flow not found (in `detail` from TaskWorker) | Slug does not exist for your account |
-| 503 | Flow directory not configured | Administrator env vars |
+| 404 | Flow not found | Slug does not exist for your account |
+| 503 | Flow directory not configured | Flows not provisioned — contact administrator |
 
 **Example — missing flow_id:**
 
@@ -95,7 +95,7 @@ curl $CURL_TLS -sS -X POST \
 | Status | Cause |
 |--------|-------|
 | 404 | No flow file with that slug |
-| 503 | Flows directory not configured |
+| 503 | API not fully configured |
 
 ### `GET /flow_runs/:id` / `GET /task_runs/:id`
 
@@ -116,7 +116,7 @@ Prefect task run state updates: [Set Task Run State](https://docs.prefect.io/v3/
 
 | Status | Cause |
 |--------|-------|
-| 503 | Flows directory not configured |
+| 503 | API not fully configured |
 | 401 | Missing auth |
 
 ## Authentication errors (401)
@@ -124,8 +124,8 @@ Prefect task run state updates: [Set Task Run State](https://docs.prefect.io/v3/
 No body shape is guaranteed. Common causes:
 
 - Header omitted: `Authorization: Bearer ...`
-- Expired OAuth or Firebase token
-- `localdev` token but account not in server allowlist
+- Expired or invalid Google OAuth access token
+- Dev token not valid for your account or environment
 
 ```bash
 # This will 401
@@ -138,10 +138,10 @@ These are not HTTP errors — handle in application logic.
 
 | Observation | Meaning |
 |-------------|---------|
-| `state_type: PENDING` indefinitely | Executor not running — [admin execution](../../../server/api/task/docs/admin/execution.md) |
+| `state_type: PENDING` indefinitely | Background execution not running — contact administrator |
 | `state_type: FAILED` | Task failed — inspect `state` and error artifacts |
 | Empty `GET /flows` array | No flows published for your account |
-| Wrong output in `output.json` | Wrong flow or task_key — verify `flow_id` and poll correct `task_run_id` |
+| Unexpected task output | Wrong flow or task_key — verify `flow_id` and poll correct `task_run_id` |
 
 ## Retry guidance
 

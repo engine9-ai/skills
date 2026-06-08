@@ -1,13 +1,13 @@
 # Task API — end-user documentation
 
-Guides for developers and integrators who **call the Engine9 Task API** over HTTP. You do not need server repo access — your administrator provides a base URL, credentials, and account id.
+Guides for developers and integrators who **call the Engine9 Task API** over HTTP. Your administrator provides a base URL, credentials, and account id.
 
 **Cursor agents:** start with [SKILL.md](./SKILL.md).
 
 ## Start here
 
 1. [concepts.md](./concepts.md) — flows, runs, IDs, states, async execution
-2. [authentication.md](./authentication.md) — required headers on every request
+2. [authentication.md](./authentication.md) — required headers and Google OAuth tokens
 3. [getting-started.md](./getting-started.md) — environment variables and first calls
 4. [echo-walkthrough.md](./echo-walkthrough.md) — create → list → poll → read Echo output
 5. [endpoints.md](./endpoints.md) — per-route reference with multiple examples
@@ -17,12 +17,13 @@ Guides for developers and integrators who **call the Engine9 Task API** over HTT
 
 | Item | Example |
 |------|---------|
-| Base URL | `https://api.example.com` or `https://127.0.0.1:8443` |
-| Bearer token | OAuth access token, Firebase ID token, or dev token |
+| Base URL | `https://api.example.com` |
+| Bearer token | Google OAuth access token (or approved dev token for local use) — see [authentication.md](./authentication.md) |
 | Account id | `acme` — sent as `X-ENGINE9-ACCOUNT-ID` |
 | Available flows | Slugs from `GET /flows`, e.g. `echo-flow`, `nightly-sync` |
+| Output retrieval | How to fetch completed task results for your environment |
 
-**Server setup** (operators): in the `server` repository, see `api/task/docs/admin/`.
+Operators and deployment setup are documented separately (ask your administrator).
 
 ## API shape
 
@@ -40,8 +41,4 @@ GET  /task_runs/:id
 ...
 ```
 
-Request and response bodies follow a **Prefect-compatible** JSON shape. Engine9-specific behavior (async execution, artifact paths) is documented here; Prefect is referenced only in [errors.md](./errors.md) for HTTP status semantics.
-
-## Implementation (server repo)
-
-Router: `server/api/task/index.js`, mounted alongside `/mcp` on the Engine9 API.
+Request and response bodies follow a **Prefect-compatible** JSON shape. Engine9-specific behavior (async execution, result references) is documented here; Prefect is referenced only in [errors.md](./errors.md) for HTTP status semantics.

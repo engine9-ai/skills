@@ -297,24 +297,18 @@ curl $CURL_TLS -sS -X POST \
 
 ---
 
-## Debug
+## Diagnostics
 
 ### `GET /flows_dir`
 
-Returns the server-resolved flows directory for your account (useful when debugging empty `/flows`).
+Returns account context for the current request (useful when `GET /flows` is unexpectedly empty). Exact response shape may vary by deployment; confirm with your administrator.
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows_dir"
 ```
 
-```json
-{
-  "flows_dir": "/var/engine9/accounts/test/flows",
-  "accountId": "test"
-}
-```
-
 ---
+
 
 ## Typical integration sequence
 

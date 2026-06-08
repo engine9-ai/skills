@@ -1,6 +1,6 @@
 # Getting started
 
-Minimal steps to make your first Task API calls after your administrator has deployed the server.
+Minimal steps to make your first Task API calls once your administrator has given you a base URL and credentials.
 
 ## 1. Collect connection details
 
@@ -9,7 +9,7 @@ From your administrator:
 ```
 Base URL:     https://api.example.com
 Account id:   acme
-Token:        <how to obtain — OAuth, Firebase, or dev token>
+Token:        <Google OAuth access token, or dev token for local use — see authentication.md>
 TLS notes:    self-signed? use curl -k
 ```
 
@@ -32,7 +32,7 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows" | jq .
 
 **Success:** HTTP 200, JSON array (may be `[]` if no flows published yet).
 
-**Empty array?** Ask your administrator to publish flow files to your account — [admin flow definitions](../../../server/api/task/docs/admin/flow-definitions.md).
+**Empty array?** Ask your administrator to provision flows for your account.
 
 ## 4. Inspect one flow
 
@@ -85,7 +85,7 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
   "$BASE_URL/task_runs/$TASK_RUN_ID" | jq '.state.state_details.output_path'
 ```
 
-Fetch the output file per your environment (path is on the server filesystem).
+Retrieve the result using the method your administrator documents (the API returns a reference in `state.state_details.output_path`).
 
 ## Full walkthrough
 

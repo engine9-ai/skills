@@ -1,6 +1,6 @@
 # Echo walkthrough
 
-Complete example: list the **Echo** sample flow, create a flow run, list runs, poll for completion, and read output. Assumes your administrator has published `echo-flow` or `echo-flow-fast` to your account.
+Complete example: list the **Echo** sample flow, create a flow run, list runs, poll for completion, and read output. Assumes your administrator has provisioned `echo-flow` or `echo-flow-fast` for your account.
 
 ## Prerequisites
 
@@ -9,9 +9,9 @@ You need (from your administrator):
 - Running Task API at a known base URL
 - Valid Bearer token
 - Account id (examples use `test`)
-- `echo-flow` or `echo-flow-fast` in your account's flows directory
+- `echo-flow` or `echo-flow-fast` available via `GET /flows`
 
-Set variables:
+Set variables (examples use a local dev token; production clients use a Google OAuth access token — see [authentication.md](./authentication.md)):
 
 ```bash
 export BASE_URL="https://127.0.0.1:8443"
@@ -22,27 +22,16 @@ export CURL_TLS="-k"
 
 ## What the Echo flow does
 
-The Echo flow has one task that calls `EchoWorker.echo`. The worker returns the task `options` object unchanged (plus metadata like `last_run` and `cwd`).
+The Echo flow has one task that returns its input `options` unchanged (plus metadata like `last_run`). It is useful for verifying that authentication, scheduling, and result retrieval work end to end.
 
-Definition (for reference — you do not POST this):
+Inspect the live definition (you do not POST this — use `GET /flows`):
 
-```json5
-{
-  id: 'echo-flow',
-  name: 'Echo Flow',
-  tasks: [
-    {
-      task_key: 'echo-step',
-      name: 'Echo step',
-      worker_path: 'workers/EchoWorker',
-      worker_method: 'echo',
-      options: { message: 'hello from echo-flow', seconds: 1 },
-    },
-  ],
-}
+```bash
+curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
+  "$BASE_URL/flows/echo-flow" | jq '{id, name, tasks}'
 ```
 
-Use `"flow_id": "echo-flow"` when creating runs. For a faster task, ask for `echo-flow-fast` (`seconds: 1`).
+Use `"flow_id": "echo-flow"` when creating runs. For a faster step, use `echo-flow-fast` if your administrator has provisioned it.
 
 ---
 
@@ -211,8 +200,7 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
     task_key,
     state_type,
     flow_run_id,
-    worker: .task_inputs.worker_path,
-    method: .task_inputs.worker_method
+    options: .task_inputs.options
   }'
 ```
 
@@ -262,7 +250,7 @@ import os, time, requests
 
 base = os.environ["BASE_URL"]
 headers = {
-    "Authorization": f"Bearer {os.environ['ENGINE9_TOKEN']}",
+    "Authorization": f"Bearer {os.environ['TASK_API_TOKEN']}",
     "X-ENGINE9-ACCOUNT-ID": "test",
 }
 task_run_id = os.environ["TASK_RUN_ID"]
@@ -284,28 +272,27 @@ print("output_path:", data.get("state", {}).get("state_details", {}).get("output
 
 ## Step 6: Read Echo output
 
-When `state_type` is `COMPLETED`:
+When `state_type` is `COMPLETED`, get the result reference:
 
 ```bash
-OUTPUT_PATH=$(curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
-  "$BASE_URL/task_runs/$TASK_RUN_ID" | jq -r '.state.state_details.output_path')
-
-echo "Output file: $OUTPUT_PATH"
-cat "$OUTPUT_PATH" | jq .
+curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
+  "$BASE_URL/task_runs/$TASK_RUN_ID" | jq '{
+    state_type,
+    output_path: .state.state_details.output_path
+  }'
 ```
 
-Expected content (abridged):
+Retrieve the payload using the method your administrator documents (direct file access, signed URL, or another API). Expected content (abridged):
 
 ```json
 {
   "message": "hello from echo-flow",
   "seconds": 1,
-  "last_run": "2026-06-08T12:00:00.000Z",
-  "cwd": "/path/to/server"
+  "last_run": "2026-06-08T12:00:00.000Z"
 }
 ```
 
-The `message` and `seconds` values come from the flow definition's `options`.
+The `message` and `seconds` values match the task `options` from the flow definition.
 
 ---
 
@@ -313,10 +300,10 @@ The `message` and `seconds` values come from the flow definition's `options`.
 
 | Symptom | What to check |
 |---------|----------------|
-| `404` on `POST /flow_runs/` | Wrong `flow_id` slug; flow not published to your account |
+| `404` on `POST /flow_runs/` | Wrong `flow_id` slug; flow not provisioned for your account |
 | `422 flow_id required` | POST body missing `flow_id` |
 | `401` | Token or account header — [authentication.md](./authentication.md) |
-| `503` | Server not configured — ask administrator |
-| Stuck `PENDING` | Task executor not running — [admin execution](../../../server/api/task/docs/admin/execution.md) |
+| `503` | API not configured — ask administrator |
+| Stuck `PENDING` | Background execution not running — ask administrator |
 
 HTTP status details: [errors.md](./errors.md).
