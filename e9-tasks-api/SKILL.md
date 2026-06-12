@@ -1,5 +1,5 @@
 ---
-name: task-api
+name: e9-tasks-api
 description: >-
   Use the Engine9 Prefect-compatible Task API (flows, flow runs, task runs) to
   list definitions, create runs, poll state, and read Echo task output. Same
@@ -9,6 +9,10 @@ description: >-
 # Engine9 Task API
 
 Use this skill when calling the Task API from scripts, curl, or integrations — or when troubleshooting auth, account scoping, and run state.
+
+When the user is working through **MCP** (not REST/curl), do not discover flows or worker methods from local code — use MCP `account` and MCP `task` per [e9-mcp](../e9-mcp/SKILL.md). This skill's `GET /flows` applies to direct Task API calls against the running server.
+
+For designing and building flow JSON5 files (developers only), see [e9-dev-tasks](../e9-dev-tasks/SKILL.md).
 
 ## Documentation
 

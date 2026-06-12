@@ -4,7 +4,7 @@ Read this before calling the API. Terms match the JSON fields you will see in re
 
 ## Flow (definition)
 
-A **flow** is a named workflow template: an ordered list of tasks. Flows are provisioned for your account by your administrator — you discover them via the API; you do not create or upload flow definitions through these endpoints.
+A **flow** is a named workflow template: an ordered list of tasks. Flows are provisioned for your account by your administrator — you discover them via the API; you do not create or upload flow definitions through these endpoints. Developers authoring JSON5 flow files should use the [e9-dev-tasks](../e9-dev-tasks/SKILL.md) skill instead.
 
 You interact with definitions via:
 

@@ -1,0 +1,161 @@
+---
+name: e9-mcp
+description: Use the engine9 MCP server — MCP-only discovery (never local code), prefer native tools over task, discover plugin methods via account when no native match exists, and invoke task as the catch-all for worker execution.
+---
+
+# Engine9 MCP
+
+Use this skill when calling engine9 MCP tools from Cursor or another MCP client. For `/e9` and `/e9a` slash commands and client setup, see [e9-cli](../e9-cli/SKILL.md). For the Prefect-compatible REST Task API, see [e9-tasks-api](../e9-tasks-api/SKILL.md).
+
+## MCP-only discovery — do not use local code
+
+When interacting with an engine9 MCP server, **discover capabilities exclusively from the MCP server**. Do not search, read, or infer behavior from local workspace code (`server/workers/`, `plugins/`, `interfaces/`, etc.).
+
+Local code is an **unreliable** source for MCP work because:
+
+- The connected MCP server may be a different deployment, version, or branch than the workspace on disk.
+- Plugin installs and metadata are **account-specific** — only MCP `account` reflects what is installed for the target account.
+- Worker allowlists, tool schemas, and routing (`remote`, `workers/...` vs plugin paths) are enforced by the **running server**, not by files in the repo.
+- Method names, option keys, and paths in local source may be deprecated, renamed, or not exposed via MCP at all.
+
+**Use these sources instead:**
+
+| Need | Source |
+|------|--------|
+| Available MCP tools and parameters | MCP tool schemas (client tool descriptors for the connected server) |
+| Installed plugins, submodules, methods | MCP `account` → `plugins[].metadata` |
+| Allowlisted synchronous worker calls | MCP `worker_invoke` tool schema + server response errors |
+| Schedule or check async work | MCP `task` (after resolving path/method from `account`) |
+| List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
+
+If a path, method, or option is not present in MCP responses, report that to the user — do not guess from local code.
+
+## Tool selection strategy
+
+**Prefer explicit native MCP tools when there is a quality match.** Only fall back to `task` when no native tool covers the request.
+
+| User intent | Prefer |
+|-------------|--------|
+| Am I connected / signed in? | `ok`, then `user` |
+| Who am I / which accounts do I have? | `user` |
+| Search people by email, phone, name, or id | `search` |
+| Run a SQL/EQL query | `eql` |
+| Describe tables, indexes, or schema | `worker_invoke` (SQLWorker) |
+| Compute plugin or input UUIDs | `plugin_id`, `input_id` |
+| Chat / conversation history | `chat` |
+| Run a plugin worker method | `task` (after discovery via `account`) |
+
+`task` is the **catch-all** for behaviors that do not have a native MCP call. Do not reach for `task` when a native tool already covers the request with equal or better fidelity.
+
+## Available MCP tools
+
+These are the native tools registered on the engine9 MCP server (excluding `task`):
+
+### `ok`
+
+Returns server status, current time, and whether the request is authenticated. No sign-in required.
+
+### `user`
+
+Returns the current authenticated user: uid, email, admin flag, and account access map. **Prefer this** over `task` for identity and account-list questions.
+
+### `account`
+
+Lists plugins installed on an account with marketplace metadata merged onto each plugin.
+
+- Required: `account_id`
+- Returns: `{ ok: true, plugins: [...] }` — each plugin includes `path`, DB fields, and `metadata` (alias, submodules, methods, auth_fields, …)
+
+Also used as the **discovery step** before calling `task` when no native tool matches (see fallback workflow below).
+
+### `search`
+
+Searches people by metadata filters and returns person summaries with related records.
+
+- Required: `account_id`
+- Filters: `emails`, `person_ids`, `phones`, `given_names`, `last_names`
+- Optional: `limit` (max 1000, default 10)
+
+### `eql`
+
+Runs a SELECT built from an EQL object and returns generated SQL plus query rows.
+
+- Required: `account_id`, `eql` (query object with `table`, `columns`, `conditions`, etc.)
+
+### `worker_invoke`
+
+Invokes an allowlisted worker method for an account.
+
+- Required: `account_id`, `workerPath`, `method`
+- Optional: `args` (options object)
+- Allowlisted workers include `workers/SQLWorker.js` (describe, indexes, tables, eql) and `workers/ServerBaseWorker.js` (describe, tables, info)
+
+### `plugin_id`
+
+Computes `plugin_id` from `account_id` and `remote_plugin_id`.
+
+### `input_id`
+
+Computes `input_id` from `plugin_id` and `remote_input_id`.
+
+### `chat`
+
+Store and replay account-scoped conversations.
+
+- Required: `account_id`
+- Actions: `send` (default), `history`, `list`, `sample`, `list_samples`
+
+## Fallback workflow: no native match → `account` → `task`
+
+When the user's request does not map cleanly to a native tool:
+
+1. **Ensure account scope** — `account_id` must be known (from session `engine9.account_id` or ask the user / suggest `/e9a`).
+2. **Call `account`** immediately with `{ "account_id": "<account_id>" }`.
+3. **Scan the returned plugins** for a matching path/method combination:
+   - Each plugin has a `path` (e.g. `@frakture-com/channelbots/RENxtBot`) and `metadata.submodules` with method lists.
+   - Match user intent to a plugin path + submodule + method name.
+   - Resolve alias/submodule shorthand (e.g. `renxt/people`) against `metadata.alias` and `metadata.submodules` keys.
+4. **Call `task`** with the resolved `path`, `method`, `account_id`, and any `options` the user provided.
+
+Do not invent paths or methods — only use combinations present in the `account` response.
+
+### Path resolution for `task`
+
+Prefer canonical colon paths:
+
+- `@frakture-com/channelbots/RENxtBot:People`
+- `@engine9/plugins/e9workers:SQLWorker`
+
+Slash alias shorthand (`renxt/people`) is resolved by the server against installed plugins, but agents should resolve against cached `engine9.plugins` (from `/e9a`) first.
+
+Do **not** use legacy Frakture dotted paths (`channelbots.RENxtBot.People`).
+
+### Example: scheduling a plugin method
+
+User: "List custom fields on RENxt people for account bfred_lambda_legal"
+
+1. No native tool for this specific plugin method → fallback path.
+2. Call `account` with `{ "account_id": "bfred_lambda_legal" }`.
+3. Find plugin with alias `renxt`, submodule `People`, method `listCustomFields`.
+4. Call `task`:
+
+```json
+{
+  "account_id": "bfred_lambda_legal",
+  "path": "@frakture-com/channelbots/RENxtBot:People",
+  "method": "listCustomFields"
+}
+```
+
+5. To poll status, call `task` again with `action: "check"` and `flow_run_id` / `task_run_ids` from the schedule response.
+
+## Account-scoped calls
+
+All tools except `ok`, `plugin_id`, and `input_id` require authentication. Account-scoped tools require an `account_id` the signed-in user can access. Do not guess account ids.
+
+## Quick validation flow
+
+1. Call `ok` to verify connectivity and auth state.
+2. Call `user` to confirm signed-in identity and account access.
+3. Set account scope via `/e9a <account_id>` or call `account` to cache plugins.
+4. Call `search` with a known email to validate account-scoped data access.

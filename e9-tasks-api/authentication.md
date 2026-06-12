@@ -106,13 +106,13 @@ curl $CURL_TLS -sS -X POST \
 
 ```javascript
 const baseUrl = 'https://api.example.com';
-const accountId = 'acme';
+const account_id = 'acme';
 const token = process.env.TASK_API_TOKEN; // Google OAuth access token
 
 const res = await fetch(`${baseUrl}/flows`, {
   headers: {
     Authorization: `Bearer ${token}`,
-    'X-ENGINE9-ACCOUNT-ID': accountId,
+    'X-ENGINE9-ACCOUNT-ID': account_id,
   },
 });
 const flows = await res.json();

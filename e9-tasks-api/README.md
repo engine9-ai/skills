@@ -13,6 +13,8 @@ Guides for developers and integrators who **call the Engine9 Task API** over HTT
 5. [endpoints.md](./endpoints.md) — per-route reference with multiple examples
 6. [errors.md](./errors.md) — HTTP status codes (Prefect links for error semantics only)
 
+Developers authoring JSON5 flow files: see [e9-dev-tasks](../e9-dev-tasks/SKILL.md) (not for normal API users).
+
 ## What you need from your administrator
 
 | Item | Example |
