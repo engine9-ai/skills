@@ -16,7 +16,7 @@ Engine9 server workers treat timeline data in two main stages:
 - **Raw input → Timeline ID files** (with `person_id` and `id`) – handled primarily by `InputWorker.id` and `PersonWorker.loadPeople`.
 - **Timeline ID files → database tables** – handled by `InputWorker.loadTimeline`, `loadTimelineTables`, `loadTimelineFile`, and `loadTimelineDetails`, often with help from `SQLiteWorker` and `ClickHouseWorker`.
 
-For library-level timeline file formats and `@engine9/input-tools` helpers, see `input-tools/skills/timeline/SKILL.md`.
+For library-level timeline file formats and `@engine9/input-tools` helpers, see [inputs/timeline/SKILL.md](../inputs/timeline/SKILL.md).
 
 ## Timeline ID files in InputWorker
 

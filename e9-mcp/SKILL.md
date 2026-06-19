@@ -7,6 +7,20 @@ description: Use the engine9 MCP server — MCP-only discovery (never local code
 
 Use this skill when calling engine9 MCP tools from Cursor or another MCP client. For `/e9` and `/e9a` slash commands and client setup, see [e9-cli](../e9-cli/SKILL.md). For the Prefect-compatible REST Task API, see [e9-tasks-api](../e9-tasks-api/SKILL.md).
 
+## Connect MCP when disconnected
+
+Before calling engine9 MCP tools, ensure the client is connected and authenticated.
+
+| Signal | Action |
+|--------|--------|
+| Tool error `"Not connected"` | Call `mcp_auth` with `{}` on the engine9 MCP server, then retry |
+| MCP `STATUS.md` says authentication required | Call `mcp_auth` with `{}` before other tools |
+| `ok` returns unauthenticated | Call `mcp_auth`, then `user` |
+
+**Required:** attempt `mcp_auth` automatically — do not tell the user MCP is unavailable without trying. Do not substitute local `e9` CLI or repo worker code for `/e9` MCP workflows.
+
+After `mcp_auth`, retry the failed call. If it still fails, check server health and Cursor MCP config (see [e9-cli — MCP connection](../e9-cli/SKILL.md#mcp-connection--connect-before-e9-calls)).
+
 ## MCP-only discovery — do not use local code
 
 When interacting with an engine9 MCP server, **discover capabilities exclusively from the MCP server**. Do not search, read, or infer behavior from local workspace code (`server/workers/`, `plugins/`, `interfaces/`, etc.).
@@ -39,6 +53,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Am I connected / signed in? | `ok`, then `user` |
 | Who am I / which accounts do I have? | `user` |
 | Search people by email, phone, name, or id | `search` |
+| List segments or schedule segment builds | `segment` |
 | Run a SQL/EQL query | `eql` |
 | Describe tables, indexes, or schema | `worker_invoke` (SQLWorker) |
 | Compute plugin or input UUIDs | `plugin_id`, `input_id` |
@@ -75,6 +90,30 @@ Searches people by metadata filters and returns person summaries with related re
 - Required: `account_id`
 - Filters: `emails`, `person_ids`, `phones`, `given_names`, `last_names`
 - Optional: `limit` (max 1000, default 10)
+
+### `segment`
+
+List account segments or schedule `SegmentWorker.buildSegmentPersonFile`.
+
+- Required: `account_id`, `command` (`list` or `build`)
+- **list** — rows from `segment` (plugin_name, build_status, segment_directory when present). Optional `fields: '*'` for all columns.
+- **build** — enqueue a segment person-file build. Requires `segment_id` or `definition_path`. Optional: `plugin_id`, `filename`, `engine`, `duckdb_file`, `input_id`, `label`, `remote`.
+
+Example list:
+
+```json
+{ "command": "list", "account_id": "test" }
+```
+
+Example build by definition path:
+
+```json
+{
+  "command": "build",
+  "account_id": "test",
+  "definition_path": "local$@engine9/interfaces/channels/email:segments:email_openers_30d"
+}
+```
 
 ### `eql`
 

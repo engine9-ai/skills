@@ -9,6 +9,27 @@ Use this skill when setting up or troubleshooting an MCP connection to an engine
 
 For MCP tool selection and invocation strategy, see [e9-mcp](../e9-mcp/SKILL.md).
 
+## MCP connection — connect before `/e9` calls
+
+When an MCP tool call fails with **"Not connected"**, an auth error, or the MCP filesystem `STATUS.md` says the server needs authentication, **connect MCP first** — do not fall back to the local `e9` CLI or workspace worker code for `/e9` requests.
+
+### Required behavior
+
+1. **Identify the engine9 MCP server** for this workspace (e.g. `engine9.local`, `engine9.io`, or the project MCP key from `.cursor/mcp.json`).
+2. **Call `mcp_auth`** on that server with an empty arguments object `{}`. This triggers Cursor's OAuth / sign-in flow for the server.
+3. **Retry the original MCP call** (e.g. `ok`, `user`, `account`, `search`, `segment`, `task`).
+4. If auth succeeds but calls still fail, verify the server is running (`curl -k -sS https://local.engine9.io:8443/mcp/health` or `http://127.0.0.1:3334/mcp/health`) and ask the user to reload MCP servers in Cursor if config changed.
+
+### Do not
+
+- Do not answer `/e9 …` by running `e9` shell commands when MCP is the intended path.
+- Do not read local worker source to substitute for a failed MCP call.
+- Do not skip `mcp_auth` and report "MCP isn't connected" without attempting connection.
+
+### Local dev without OAuth
+
+Project `.cursor/mcp.json` may define `engine9.local_noauth` with `Authorization: Bearer localdev`. If OAuth fails in local dev, confirm that server entry is enabled and `ENGINE9_MCP_LOCALDEV_ACCOUNTS` is configured on the running API.
+
 ## MCP-only discovery
 
 When handling `/e9` or `/e9a` requests, **do not read local workspace code** to discover plugins, worker methods, paths, or options. Local source does not reliably match the connected MCP server or the account's installed plugins. Use MCP tool schemas, MCP `account` (cached as `engine9.plugins`), and MCP `task` / `worker_invoke` only. See [e9-mcp — MCP-only discovery](../e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code).
@@ -83,11 +104,19 @@ Or allow a subset:
 
 ## `/e9a` — account scope
 
-Primary command form: `/e9a <lookup>`
+Primary command forms:
 
-Examples: `/e9a test`, `/e9a engine9`, `/e9a authentic_amy_mcgrath`
+- `/e9a <lookup>` — single exact account id (default)
+- `/e9a parent <parent_id>` — active child accounts of `<parent_id>` (comma-separated parent ids allowed)
+- `/e9a all` — all active accounts
+
+Examples: `/e9a test`, `/e9a engine9`, `/e9a parent frakture_master`, `/e9a all`
+
+The CLI bin script (`server/bin/e9a`) writes `.e9_parameters` for subsequent `e9` worker runs. For `parent` and `all`, it resolves account ids from server account config and writes `-a id1,id2,...`. For a single lookup it writes `-a <lookup>` as before.
 
 ### Required behavior
+
+**Default `/e9a <lookup>`:**
 
 1. Do not call `user` (or any account lookup tool) to resolve `<lookup>`.
 2. Do not perform fuzzy matching, alias matching, or ambiguity checks.
@@ -95,6 +124,12 @@ Examples: `/e9a test`, `/e9a engine9`, `/e9a authentic_amy_mcgrath`
 4. Call MCP `account` with `{ "account_id": "<lookup>" }`.
 5. On success, persist the returned `plugins` array for subsequent `/e9` requests.
 6. Reuse stored account and plugins unless the user runs another `/e9a`.
+
+**`/e9a parent <parent_id>` or `/e9a all`:**
+
+1. Resolve account ids from server account config (active = `disabled` not true; parent mode matches `parent_ids`).
+2. Set `engine9.account_ids` to the full list; set `engine9.account_id` to the first id.
+3. Do not load plugins for every account; report the resolved ids and count.
 
 ### Session persistence
 
@@ -121,6 +156,8 @@ Supported forms:
 
 - `/e9` — bootstrap (connectivity, identity, account scope)
 - `/e9 search foo@bar.com`
+- `/e9 segment list` — MCP `segment` with `command: list`
+- `/e9 segment build <segment_id|definition_path>` — MCP `segment` with `command: build`
 - `/e9 task <plugin-path-or-alias> <method> [options...]`
 
 ### Session and account requirements
@@ -145,6 +182,12 @@ Supported forms:
    - Require `engine9.account_id` and `engine9.plugins` (run `/e9a` first if missing).
    - Resolve the plugin path from cached plugins before calling MCP `task`.
    - Pass the canonical **plugin path** (colon submodule form), not legacy Frakture dotted paths.
+4. `/e9 segment list`:
+   - Ensure active `account_id` exists (or request it / suggest `/e9a`).
+   - Call MCP `segment` with `{ "command": "list", "account_id": "<account_id>" }`.
+5. `/e9 segment build ...`:
+   - Ensure active `account_id` exists.
+   - Call MCP `segment` with `command: build` and either `segment_id` or `definition_path` from the user args.
 
 ## `/e9 search` parsing rules
 
