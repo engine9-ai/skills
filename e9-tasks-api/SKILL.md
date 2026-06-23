@@ -3,7 +3,7 @@ name: e9-tasks-api
 description: >-
   Use the Engine9 Prefect-compatible Task API (flows, flow runs, task runs) to
   list definitions, create runs, poll state, and read Echo task output. Same
-  Bearer auth as /mcp — Google OAuth access token.
+  Bearer auth as /mcp — Firebase ID token (Engine9 OAuth).
 ---
 
 # Engine9 Task API
@@ -19,7 +19,7 @@ For designing and building flow JSON5 files (developers only), see [e9-dev-tasks
 | Doc | Use when |
 |-----|----------|
 | [concepts.md](./concepts.md) | Terminology: flows, runs, IDs, async execution |
-| [authentication.md](./authentication.md) | Google OAuth access token, `X-ENGINE9-ACCOUNT-ID` |
+| [authentication.md](./authentication.md) | Firebase ID token (Engine9 OAuth), `X-ENGINE9-ACCOUNT-ID` |
 | [getting-started.md](./getting-started.md) | First requests in five minutes |
 | [echo-walkthrough.md](./echo-walkthrough.md) | Full Echo create → list → poll → output |
 | [endpoints.md](./endpoints.md) | Every route with curl examples |
@@ -29,7 +29,7 @@ For designing and building flow JSON5 files (developers only), see [e9-dev-tasks
 
 - Routes at API origin root (`/flows`, `/flow_runs/`, `/task_runs/` — not under `/api/task`)
 - Auth: `Authorization: Bearer` + `X-ENGINE9-ACCOUNT-ID`
-- Token: Google OAuth access token — see [authentication.md](./authentication.md)
+- Token: Firebase ID token (Engine9 OAuth) — see [authentication.md](./authentication.md)
 - `POST /flow_runs/` creates `PENDING` task runs — does not block until execution finishes
 - Poll `GET /task_runs/:id` until `state_type` is `COMPLETED`
 - Results: `state.state_details.output_path` (retrieve per your deployment)

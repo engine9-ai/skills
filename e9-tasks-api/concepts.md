@@ -178,6 +178,6 @@ You                    Task API                 Background execution
 
 ## Next steps
 
-- [authentication.md](./authentication.md) — headers and Google OAuth
+- [authentication.md](./authentication.md) — headers and Firebase ID tokens (Engine9 OAuth)
 - [getting-started.md](./getting-started.md) — curl setup
 - [echo-walkthrough.md](./echo-walkthrough.md) — full worked example

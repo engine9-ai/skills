@@ -7,7 +7,7 @@ Guides for developers and integrators who **call the Engine9 Task API** over HTT
 ## Start here
 
 1. [concepts.md](./concepts.md) — flows, runs, IDs, states, async execution
-2. [authentication.md](./authentication.md) — required headers and Google OAuth tokens
+2. [authentication.md](./authentication.md) — required headers and Firebase ID tokens (Engine9 OAuth)
 3. [getting-started.md](./getting-started.md) — environment variables and first calls
 4. [echo-walkthrough.md](./echo-walkthrough.md) — create → list → poll → read Echo output
 5. [endpoints.md](./endpoints.md) — per-route reference with multiple examples
@@ -20,7 +20,7 @@ Developers authoring JSON5 flow files: see [e9-dev-tasks](../e9-dev-tasks/SKILL.
 | Item | Example |
 |------|---------|
 | Base URL | `https://api.example.com` |
-| Bearer token | Google OAuth access token (or approved dev token for local use) — see [authentication.md](./authentication.md) |
+| Bearer token | Firebase ID token via Engine9 OAuth (or approved dev token for local use) — see [authentication.md](./authentication.md) |
 | Account id | `acme` — sent as `X-ENGINE9-ACCOUNT-ID` |
 | Available flows | Slugs from `GET /flows`, e.g. `echo-flow`, `nightly-sync` |
 | Output retrieval | How to fetch completed task results for your environment |

@@ -9,7 +9,7 @@ From your administrator:
 ```
 Base URL:     https://api.example.com
 Account id:   acme
-Token:        <Google OAuth access token, or dev token for local use — see authentication.md>
+Token:        <Firebase ID token via Engine9 OAuth, or dev token for local use — see authentication.md>
 TLS notes:    self-signed? use curl -k
 ```
 

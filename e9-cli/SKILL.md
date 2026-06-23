@@ -1,6 +1,6 @@
 ---
 name: e9-cli
-description: Connect Cursor to engine9 MCP, set account scope with /e9a, and handle /e9 command-style interactions including person search and task scheduling.
+description: Connect Cursor to engine9 MCP — log in first via mcp_auth, set account scope with /e9a, and handle /e9 command-style interactions including person search and task scheduling.
 ---
 
 # Engine9 CLI
@@ -9,26 +9,31 @@ Use this skill when setting up or troubleshooting an MCP connection to an engine
 
 For MCP tool selection and invocation strategy, see [e9-mcp](../e9-mcp/SKILL.md).
 
-## MCP connection — connect before `/e9` calls
+## Step 0 — Log in (always first)
 
-When an MCP tool call fails with **"Not connected"**, an auth error, or the MCP filesystem `STATUS.md` says the server needs authentication, **connect MCP first** — do not fall back to the local `e9` CLI or workspace worker code for `/e9` requests.
+**Every `/e9` request starts here.** Do not grep, curl, read config files, start servers, or run CLI commands to "figure out" auth — just log in.
 
-### Required behavior
+1. Call **`mcp_auth`** on the engine9 MCP server with **`{}`**.
+2. Cursor opens a **sign-in prompt for the user** — wait for them to complete it.
+3. Call **`ok`**, then **`user`**, to confirm signed in.
+4. Proceed with the user's request.
 
-1. **Identify the engine9 MCP server** for this workspace (e.g. `engine9.local`, `engine9.io`, or the project MCP key from `.cursor/mcp.json`).
-2. **Call `mcp_auth`** on that server with an empty arguments object `{}`. This triggers Cursor's OAuth / sign-in flow for the server.
-3. **Retry the original MCP call** (e.g. `ok`, `user`, `account`, `search`, `segment`, `task`).
-4. If auth succeeds but calls still fail, verify the server is running (`curl -k -sS https://local.engine9.io:8443/mcp/health` or `http://127.0.0.1:3334/mcp/health`) and ask the user to reload MCP servers in Cursor if config changed.
+If `user` already succeeds this session, skip to step 4.
 
-### Do not
+**Login is only `mcp_auth` → user completes prompt → verify with `user`.** Nothing else.
 
-- Do not answer `/e9 …` by running `e9` shell commands when MCP is the intended path.
-- Do not read local worker source to substitute for a failed MCP call.
-- Do not skip `mcp_auth` and report "MCP isn't connected" without attempting connection.
+## Troubleshooting after login
+
+Only if login succeeded (`user` works) but other MCP calls still fail:
+
+- Ask the user to reload MCP servers in Cursor (Settings → MCP) if config recently changed.
+- For local dev server issues, see [Server endpoint and startup](#server-endpoint-and-startup) below.
+
+Do **not** use shell commands or config greps as a substitute for step 0 login.
 
 ### Local dev without OAuth
 
-Project `.cursor/mcp.json` may define `engine9.local_noauth` with `Authorization: Bearer localdev`. If OAuth fails in local dev, confirm that server entry is enabled and `ENGINE9_MCP_LOCALDEV_ACCOUNTS` is configured on the running API.
+Project `.cursor/mcp.json` may define `engine9.local_noauth` with `Authorization: Bearer localdev`. That entry skips the OAuth prompt; it is not a login workaround when the OAuth server is configured — still call `mcp_auth` on the correct server entry first.
 
 ## MCP-only discovery
 
@@ -63,7 +68,7 @@ Create or update `~/.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
-    "engine9.io": {
+    "engine9.ai": {
       "url": "https://<your-api-host>/mcp"
     }
   }
@@ -72,7 +77,7 @@ Create or update `~/.cursor/mcp.json`:
 
 Notes:
 
-- The server key (`engine9.io` above) should match engine9's MCP server name (`ENGINE9_MCP_SERVER_NAME`, default `engine9.io`).
+- The server key (`engine9.ai` above) should match engine9's MCP server name (`ENGINE9_MCP_SERVER_NAME`, default `engine9.ai`).
 - If local standalone MCP runs without TLS, use `http://127.0.0.1:3334/mcp`.
 - After config changes, reload MCP servers in Cursor.
 
@@ -84,7 +89,7 @@ Allow all engine9 tools:
 
 ```json
 {
-  "mcpAllowlist": ["engine9.io:*"]
+  "mcpAllowlist": ["engine9.ai:*"]
 }
 ```
 
@@ -92,7 +97,7 @@ Or allow a subset:
 
 ```json
 {
-  "mcpAllowlist": ["engine9.io:ok", "engine9.io:user", "engine9.io:account", "engine9.io:search", "engine9.io:task"]
+  "mcpAllowlist": ["engine9.ai:ok", "engine9.ai:user", "engine9.ai:account", "engine9.ai:search", "engine9.ai:task"]
 }
 ```
 
@@ -169,9 +174,9 @@ Supported forms:
 
 ### Recommended `/e9` bootstrap flow
 
+0. **[Step 0 — Log in](#step-0--log-in-always-first)** — `mcp_auth` → user completes prompt → `user`.
 1. `/e9` with no subcommand:
-   - Verify connectivity via MCP `ok`.
-   - Verify identity/access via MCP `user`.
+   - Confirm signed in via MCP `user`.
    - Confirm active `account_id` (from session or user); if missing, suggest `/e9a <account_id>`.
    - If `engine9.plugins` is not cached for that account, call MCP `account` or suggest `/e9a`.
 2. `/e9 search ...`:

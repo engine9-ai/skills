@@ -1,25 +1,33 @@
 ---
 name: e9-mcp
-description: Use the engine9 MCP server — MCP-only discovery (never local code), prefer native tools over task, discover plugin methods via account when no native match exists, and invoke task as the catch-all for worker execution.
+description: Use the engine9 MCP server — log in first via mcp_auth, MCP-only discovery (never local code), prefer native tools over task, discover plugin methods via account when no native match exists, and invoke task as the catch-all for worker execution.
 ---
 
 # Engine9 MCP
 
 Use this skill when calling engine9 MCP tools from Cursor or another MCP client. For `/e9` and `/e9a` slash commands and client setup, see [e9-cli](../e9-cli/SKILL.md). For the Prefect-compatible REST Task API, see [e9-tasks-api](../e9-tasks-api/SKILL.md).
 
-## Connect MCP when disconnected
+## Step 0 — Log in (always first)
 
-Before calling engine9 MCP tools, ensure the client is connected and authenticated.
+**Every `/e9` or MCP request starts here.** Do not grep, curl, read config files, start servers, or run CLI commands to "figure out" auth — just log in.
 
-| Signal | Action |
-|--------|--------|
-| Tool error `"Not connected"` | Call `mcp_auth` with `{}` on the engine9 MCP server, then retry |
-| MCP `STATUS.md` says authentication required | Call `mcp_auth` with `{}` before other tools |
-| `ok` returns unauthenticated | Call `mcp_auth`, then `user` |
+1. Call **`mcp_auth`** on the engine9 MCP server with **`{}`**.
+2. Cursor opens a **sign-in prompt for the user** — wait for them to complete it.
+3. Call **`ok`**, then **`user`**, to confirm signed in.
+4. Proceed with the user's request.
 
-**Required:** attempt `mcp_auth` automatically — do not tell the user MCP is unavailable without trying. Do not substitute local `e9` CLI or repo worker code for `/e9` MCP workflows.
+If `user` already succeeds this session, skip to step 4.
 
-After `mcp_auth`, retry the failed call. If it still fails, check server health and Cursor MCP config (see [e9-cli — MCP connection](../e9-cli/SKILL.md#mcp-connection--connect-before-e9-calls)).
+**Login is only `mcp_auth` → user completes prompt → verify with `user`.** Nothing else.
+
+| Do not use for login | Why |
+|---------------------|-----|
+| Shell commands (`curl`, `grep`, `npm run mcp`, …) | Not login; wastes time |
+| Reading `mcp.json`, `STATUS.md`, `.env`, local config | Not login |
+| `e9 oauth token`, local CLI, repo worker code | Wrong path for Cursor MCP |
+| Reporting "MCP unavailable" before `mcp_auth` | Always try `mcp_auth` first |
+
+After login, if MCP tools still fail, see [e9-cli — troubleshooting](../e9-cli/SKILL.md#troubleshooting-after-login).
 
 ## MCP-only discovery — do not use local code
 
@@ -194,7 +202,8 @@ All tools except `ok`, `plugin_id`, and `input_id` require authentication. Accou
 
 ## Quick validation flow
 
-1. Call `ok` to verify connectivity and auth state.
-2. Call `user` to confirm signed-in identity and account access.
-3. Set account scope via `/e9a <account_id>` or call `account` to cache plugins.
-4. Call `search` with a known email to validate account-scoped data access.
+After [Step 0 — Log in](#step-0--log-in-always-first):
+
+1. Call `user` to confirm signed-in identity and account access.
+2. Set account scope via `/e9a <account_id>` or call `account` to cache plugins.
+3. Call `search` with a known email to validate account-scoped data access.

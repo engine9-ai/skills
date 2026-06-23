@@ -124,7 +124,7 @@ Prefect task run state updates: [Set Task Run State](https://docs.prefect.io/v3/
 No body shape is guaranteed. Common causes:
 
 - Header omitted: `Authorization: Bearer ...`
-- Expired or invalid Google OAuth access token
+- Expired or invalid Firebase ID token
 - Dev token not valid for your account or environment
 
 ```bash

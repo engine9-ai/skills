@@ -11,7 +11,7 @@ You need (from your administrator):
 - Account id (examples use `test`)
 - `echo-flow` or `echo-flow-fast` available via `GET /flows`
 
-Set variables (examples use a local dev token; production clients use a Google OAuth access token — see [authentication.md](./authentication.md)):
+Set variables (examples use a local dev token; production clients use a Firebase ID token via Engine9 OAuth — see [authentication.md](./authentication.md)):
 
 ```bash
 export BASE_URL="https://127.0.0.1:8443"
