@@ -29,10 +29,10 @@ Typical layout:
 
 ```javascript
 const metadata = {
-  name: '@engine9/interfaces/example',
-  version: '1.0.0',
-  dependencies: { '@engine9/interfaces/person': '>1.0.0' }, // optional
-  schemas: ['schema.js'] // optional hint when schema file name is nonstandard
+  name: "@engine9/interfaces/example",
+  version: "1.0.0",
+  dependencies: { "@engine9/interfaces/person": ">=1.0.0" }, // optional
+  schemas: ["schema.js"], // optional hint when schema file name is nonstandard
 };
 ```
 
@@ -47,27 +47,30 @@ Minimal example:
 ```javascript
 export const tables = [
   {
-    name: 'example_row',
+    name: "example_row",
     columns: {
-      id: 'id',
-      person_id: 'foreign_id',
+      id: "id",
+      person_id: "foreign_id",
       status: {
-        type: 'string',
+        type: "string",
         nullable: false,
-        default_value: 'active',
-        values: ['active', 'archived']
+        default_value: "active",
+        values: ["active", "archived"],
       },
-      payload: 'json',
-      created_at: 'created_at',
-      modified_at: 'modified_at'
+      payload: "json",
+      created_at: "created_at",
+      modified_at: "modified_at",
     },
-    indexes: [{ columns: ['person_id'] }, { columns: ['person_id', 'status'], unique: true }]
+    indexes: [
+      { columns: ["person_id"] },
+      { columns: ["person_id", "status"], unique: true },
+    ],
   },
   {
-    name: 'example_summary',
-    type: 'view',
-    sql: `select person_id, count(*) as cnt from example_row group by 1`
-  }
+    name: "example_summary",
+    type: "view",
+    sql: `select person_id, count(*) as cnt from example_row group by 1`,
+  },
 ];
 export default { tables };
 ```
@@ -80,12 +83,15 @@ Bind `sql.tables.upsert` and push rows onto `tablesToUpsert.<table>`.
 
 ```javascript
 export const bindings = {
-  tablesToUpsert: { path: 'sql.tables.upsert' }
+  tablesToUpsert: { path: "sql.tables.upsert" },
 };
 export async function transform({ batch, tablesToUpsert }) {
   tablesToUpsert.example_row = tablesToUpsert.example_row || [];
   for (const row of batch) {
-    tablesToUpsert.example_row.push({ person_id: row.person_id, status: row.status });
+    tablesToUpsert.example_row.push({
+      person_id: row.person_id,
+      status: row.status,
+    });
   }
 }
 export default { bindings, transform };
@@ -100,14 +106,14 @@ Declare `description`, `bindings` with a SELECT shaped as EQL (`table`, `columns
 ```javascript
 export const bindings = {
   rows: {
-    path: 'sql.query',
+    path: "sql.query",
     options: {
-      table: 'example_row',
-      columns: ['person_id', 'status'],
-      lookup: ['person_id'],
-      conditions: []
-    }
-  }
+      table: "example_row",
+      columns: ["person_id", "status"],
+      lookup: ["person_id"],
+      conditions: [],
+    },
+  },
 };
 export const transform = ({ batch, rows, options }) => {
   const map = Object.fromEntries(rows.map((r) => [r.person_id, r.status]));
@@ -115,7 +121,7 @@ export const transform = ({ batch, rows, options }) => {
     b.status = b.status ?? map[b.person_id] ?? null;
   });
 };
-export default { description: 'Attach latest status', bindings, transform };
+export default { description: "Attach latest status", bindings, transform };
 ```
 
 Reference: `person_email/transforms/outbound/appendEmail.js`.
@@ -187,9 +193,9 @@ Reference: `job/ui.console.json5` (menus + job CRUD), `person_address/ui.console
 Export named and default aggregates so `compilePlugin` can read `transforms`, `schema`, etc.:
 
 ```javascript
-import schema from './schema.js';
-import upsert from './transforms/inbound/upsert_tables.js';
-const metadata = { name: '@engine9/interfaces/example', version: '1.0.0' };
+import schema from "./schema.js";
+import upsert from "./transforms/inbound/upsert_tables.js";
+const metadata = { name: "@engine9/interfaces/example", version: "1.0.0" };
 export const transforms = { upsert };
 export { metadata, schema };
 export default { metadata, schema, transforms };
@@ -205,16 +211,16 @@ Implements integration behavior and optional account setup. Convention:
 
 ```javascript
 const metadata = {
-  name: 'Human Name',
-  prefix: 'e9myplugin',
+  name: "Human Name",
+  prefix: "e9myplugin",
   unique: true,
-  version: '1.0.0',
-  dependencies: { '@engine9/interfaces/message': '>1.0.0' }
+  version: "1.0.0",
+  dependencies: { "@engine9/interfaces/message": ">1.0.0" },
 };
 export default {
   metadata,
   schema, // optional table DDL module
-  install // optional async (context) => { message }
+  install, // optional async (context) => { message }
   // Plus feature classes, see below
 };
 ```
