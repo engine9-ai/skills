@@ -9,6 +9,8 @@ Use this skill when setting up or troubleshooting an MCP connection to an engine
 
 For MCP tool selection and invocation strategy, see [e9-mcp](../e9-mcp/SKILL.md).
 
+**On any MCP tool error, follow [e9-mcp — MCP tool errors — stop immediately](../e9-mcp/SKILL.md#mcp-tool-errors--stop-immediately).** Do not call downstream account-scoped tools after a failed `account`, `task`, `search`, or similar call.
+
 ## Step 0 — Log in (always first)
 
 **Every `/e9` request starts here.** Do not grep, curl, read config files, start servers, or run CLI commands to "figure out" auth — just log in.
@@ -127,8 +129,9 @@ The CLI bin script (`server/bin/e9a`) writes `.e9_parameters` for subsequent `e9
 2. Do not perform fuzzy matching, alias matching, or ambiguity checks.
 3. Set the provided value as active account scope immediately.
 4. Call MCP `account` with `{ "account_id": "<lookup>" }`.
-5. On success, persist the returned `plugins` array for subsequent `/e9` requests.
-6. Reuse stored account and plugins unless the user runs another `/e9a`.
+5. On success (`{ ok: true, plugins: [...] }`), persist the returned `plugins` array for subsequent `/e9` requests.
+6. On failure (`isError: true`, or text like `Cannot connect to the … database` / `Not authorized for account`): **stop**. Report the error. Do not cache plugins. Do not proceed to `/e9 task` or other account-scoped calls.
+7. Reuse stored account and plugins unless the user runs another `/e9a`.
 
 **`/e9a parent <parent_id>` or `/e9a all`:**
 
@@ -153,7 +156,7 @@ Rules:
 
 On success: confirm the exact `account_id`, state how many plugins were loaded, and note that future `/e9` requests will use this account.
 
-On MCP failure: confirm `account_id` was set, report the MCP error, and note that plugins were not cached.
+On MCP failure: confirm `account_id` was set, report the MCP error verbatim, note that plugins were not cached, and **stop** — do not run further account-scoped tools in the same request.
 
 ## `/e9` command contract
 
@@ -185,8 +188,10 @@ Supported forms:
    - Call `search` with mapped filters and `account_id`.
 3. `/e9 task ...`:
    - Require `engine9.account_id` and `engine9.plugins` (run `/e9a` first if missing).
+   - If `/e9a` or MCP `account` failed for this account, **stop** — do not call `task`.
    - Resolve the plugin path from cached plugins before calling MCP `task`.
    - Pass the canonical **plugin path** (colon submodule form), not legacy Frakture dotted paths.
+   - If MCP `task` returns `isError: true` or a fatal error message, **stop** — do not retry or call other account tools.
 4. `/e9 segment list`:
    - Ensure active `account_id` exists (or request it / suggest `/e9a`).
    - Call MCP `segment` with `{ "command": "list", "account_id": "<account_id>" }`.

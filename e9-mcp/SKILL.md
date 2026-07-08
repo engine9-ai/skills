@@ -29,6 +29,53 @@ If `user` already succeeds this session, skip to step 4.
 
 After login, if MCP tools still fail, see [e9-cli — troubleshooting](../e9-cli/SKILL.md#troubleshooting-after-login).
 
+## MCP tool errors — stop immediately
+
+Engine9 MCP tools return failures with **`isError: true`** (MCP standard) plus optional **`structuredContent`**:
+
+| Field | Meaning |
+|-------|---------|
+| `status` | `timeout`, `unauthorized`, `validation`, or `error` |
+| `requiresUserNotification` | User should be told about this failure |
+| `safeToRetryAutomatically` | When `false`, do not retry or route around the error |
+
+Success responses use JSON text in `content` with `{ ok: true, ... }`. Failures use **plain text** in `content` (not `{ ok: false }` JSON).
+
+### Hard stop — do not continue
+
+When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `segment`, `worker_invoke`, `chat`, etc.).
+
+1. Tool result has **`isError: true`**
+2. Response text matches a fatal pattern (even when only plain text is visible):
+   - `Cannot connect to the <account_id> database`
+   - `Not authorized for account`
+   - `Authentication required`
+3. MCP **`account`** did not return parseable `{ ok: true, plugins: [...] }`
+4. **`structuredContent.safeToRetryAutomatically`** is `false`
+
+### What to do on stop
+
+1. Report the MCP error message verbatim to the user.
+2. Do **not** retry automatically or call downstream tools as a workaround.
+3. Do **not** guess plugin paths or methods when `account` failed — plugin discovery did not succeed.
+4. For **`Cannot connect to the <account_id> database`**: the account database is unreachable; every account-scoped operation will fail the same way until connectivity is restored.
+
+### Examples
+
+Database unreachable (`status: timeout`):
+
+```
+Cannot connect to the liftoff_maggie_hassan database
+```
+
+Unauthorized account (`status: unauthorized`):
+
+```
+Not authorized for account liftoff_hassan
+```
+
+In both cases: stop. Do not call `task` or other account tools afterward.
+
 ## MCP-only discovery — do not use local code
 
 When interacting with an engine9 MCP server, **discover capabilities exclusively from the MCP server**. Do not search, read, or infer behavior from local workspace code (`server/workers/`, `plugins/`, `interfaces/`, etc.).
@@ -157,7 +204,7 @@ Store and replay account-scoped conversations.
 When the user's request does not map cleanly to a native tool:
 
 1. **Ensure account scope** — `account_id` must be known (from session `engine9.account_id` or ask the user / suggest `/e9a`).
-2. **Call `account`** immediately with `{ "account_id": "<account_id>" }`.
+2. **Call `account`** immediately with `{ "account_id": "<account_id>" }`. If this fails, **stop** — do not call `task`.
 3. **Scan the returned plugins** for a matching path/method combination:
    - Each plugin has a `path` (e.g. `@frakture-com/channelbots/RENxtBot`) and `metadata.submodules` with method lists.
    - Match user intent to a plugin path + submodule + method name.
