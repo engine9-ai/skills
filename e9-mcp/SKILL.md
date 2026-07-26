@@ -43,7 +43,7 @@ Success responses use JSON text in `content` with `{ ok: true, ... }`. Failures 
 
 ### Hard stop — do not continue
 
-When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `segment`, `worker_invoke`, `chat`, etc.).
+When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `worker_invoke`, `chat`, etc.).
 
 1. Tool result has **`isError: true`**
 2. Response text matches a fatal pattern (even when only plain text is visible):
@@ -95,6 +95,8 @@ Local code is an **unreliable** source for MCP work because:
 | Installed plugins, submodules, methods | MCP `account` → `plugins[].metadata` |
 | Allowlisted synchronous worker calls | MCP `worker_invoke` tool schema + server response errors |
 | Schedule or check async work | MCP `task` (after resolving path/method from `account`) |
+| Analyze / summarize / profile table contents | MCP `analyze` (uses `tables` then `analyze`) |
+| Date histogram on indexed datetime column | MCP `worker_invoke` → SQLWorker.histo |
 | List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
 
 If a path, method, or option is not present in MCP responses, report that to the user — do not guess from local code.
@@ -109,7 +111,9 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Who am I / which accounts do I have? | `user` |
 | Search people by email, phone, name, or id | `search` |
 | List segments or schedule segment builds | `segment` |
-| Run a SQL/EQL query | `eql` |
+| Create accounts / manage domains or domain secrets | e9-account Worker (`cloud-services/e9-account`) — not MCP |
+| Run a SQL/EQL query | `eql` / `sql` |
+| Analyze / summarize / profile a table | `analyze` |
 | Describe tables, indexes, or schema | `worker_invoke` (SQLWorker) |
 | Compute plugin or input UUIDs | `plugin_id`, `input_id` |
 | Chat / conversation history | `chat` |
@@ -170,11 +174,41 @@ Example build by definition path:
 }
 ```
 
+### Account / domain management (e9-account)
+
+Account creation and domain secrets are **not** MCP tools. Use the **e9-account** Cloudflare Worker (`cloud-services/e9-account`):
+
+1. Auth with Delegate (`GET /auth/login` → `/auth/delegate`)
+2. `POST /v1/accounts/create` — optional `{ slug, name, backend }`; returns endpoints + `public_api_key` (not shared secret)
+3. `GET /v1/accounts/:slug/shared-secret` — same owner only
+
+Canonical store: ACCOUNT_REGISTRY D1. KV: `DOMAINS_KV` + `DOMAIN_API_KEYS`.
+
 ### `eql`
 
 Runs a SELECT built from an EQL object and returns generated SQL plus query rows.
 
 - Required: `account_id`, `eql` (query object with `table`, `columns`, `conditions`, etc.)
+
+### `analyze`
+
+Analyzes (summarizes/profiles) table contents via `SQLWorker.analyze`. Returns `columns` (not deprecated `fields`) with types, min/max, distinct counts, and samples. When indexed datetime columns exist, histo buckets/min/max are merged onto those column objects (`bucket_column: true` on the column used for bucketing). Sample analysis and histo run in parallel.
+
+- Required: `account_id`, `table` (passed to `SQLWorker.tables({ filter })`)
+- Optional: `max_tables` (default 3, max 10)
+- Workflow:
+  1. `tables({ filter })` — regex first; if no matches, language-token fallback on `filter`
+  2. `analyze` on each matched table (sample + optional histo in parallel)
+
+Standalone date histograms: `worker_invoke` with `workers/SQLWorker.js` method `histo` (`{ table, column }`).
+
+Example — user says "Summarize the ROI transaction table" → call `analyze`:
+
+```json
+{ "account_id": "test", "table": "ROI transaction" }
+```
+
+Prefer `analyze` over hand-written SQL or multi-step `worker_invoke` when the user wants a table profile/summary.
 
 ### `worker_invoke`
 
@@ -182,7 +216,9 @@ Invokes an allowlisted worker method for an account.
 
 - Required: `account_id`, `workerPath`, `method`
 - Optional: `args` (options object)
-- Allowlisted workers include `workers/SQLWorker.js` (describe, indexes, tables, eql) and `workers/ServerBaseWorker.js` (describe, tables, info)
+- Allowlisted workers include `workers/SQLWorker.js` (describe, indexes, tables, eql, analyze, histo) and `workers/ServerBaseWorker.js` (describe, tables, info)
+- `histo`: native SQL buckets over an indexed datetime column (`{ table, column, target_buckets? }`); reports min/max for all indexed datetime columns + count per bucket
+- For table name resolution + field profiling, prefer the native `analyze` tool
 
 ### `plugin_id`
 

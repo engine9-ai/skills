@@ -168,6 +168,8 @@ Supported forms:
 - `/e9 segment build <segment_id|definition_path>` — MCP `segment` with `command: build`
 - `/e9 task <plugin-path-or-alias> <method> [options...]`
 
+Account/domain create and secrets: use **e9-account** (`cloud-services/e9-account`), not MCP `/e9 domain`.
+
 ### Session and account requirements
 
 - Every MCP call that is account-scoped MUST include `account_id`.
@@ -198,7 +200,6 @@ Supported forms:
 5. `/e9 segment build ...`:
    - Ensure active `account_id` exists.
    - Call MCP `segment` with `command: build` and either `segment_id` or `definition_path` from the user args.
-
 ## `/e9 search` parsing rules
 
 For tokenized arguments after `search`:
