@@ -1,6 +1,6 @@
 # Endpoints reference
 
-All routes are on the **API origin root**. Every request requires an **`e9k_` API key** and `X-ENGINE9-ACCOUNT-ID`. See [authentication.md](./authentication.md) for keys and scopes.
+All routes are on the **API origin root**. Every request requires an **`e9key_` API key** and `X-ENGINE9-ACCOUNT-ID`. See [authentication.md](./authentication.md) for keys and scopes.
 
 Unless noted, responses are JSON. Successful reads return **200**; schedule/check return **200** with the result object.
 

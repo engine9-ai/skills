@@ -19,7 +19,7 @@ For designing and building flow JSON5 files (developers only), see [e9-dev-tasks
 | Doc | Use when |
 |-----|----------|
 | [concepts.md](./concepts.md) | Terminology: flows, runs, IDs, async execution |
-| [authentication.md](./authentication.md) | **API keys (`e9k_…`), scopes (`tasks:read` / `tasks:schedule`), account header** |
+| [authentication.md](./authentication.md) | **API keys (`e9key_…`), scopes (`tasks:read` / `tasks:schedule`), account header** |
 | [getting-started.md](./getting-started.md) | First requests in five minutes |
 | [echo-walkthrough.md](./echo-walkthrough.md) | Full Echo schedule → check walkthrough |
 | [endpoints.md](./endpoints.md) | Every route with curl examples |
@@ -27,8 +27,9 @@ For designing and building flow JSON5 files (developers only), see [e9-dev-tasks
 
 ## Quick reference
 
+- **Base URL:** `https://data.engine9.ai` (production default)
 - Routes at API origin root (`/flows`, `/tasks/schedule`, `/tasks/check`, `/flow_runs/`, … — not under `/api/task`)
-- Auth: `Authorization: Bearer e9k_…` (or `X-API-Key`) + `X-ENGINE9-ACCOUNT-ID`
+- Auth: `Authorization: Bearer e9key_…` (or `X-API-Key`) + `X-ENGINE9-ACCOUNT-ID`
 - Scopes: `tasks:read` (discover/check), `tasks:schedule` (schedule) — see [authentication.md](./authentication.md)
 - Prefer **`POST /tasks/schedule`** and **`POST /tasks/check`** (same as MCP `task`)
 - `POST /flow_runs/` with `flow_id` also calls `scheduleTasks` for a published flow slug
@@ -64,7 +65,7 @@ Details: [endpoints.md](./endpoints.md).
 
 | Status | Fix |
 |--------|-----|
-| 401 | Missing/invalid `e9k_` key or account header — [authentication.md](./authentication.md) |
+| 401 | Missing/invalid `e9key_` key or account header — [authentication.md](./authentication.md) |
 | 403 | Wrong account or missing scope |
 | 404 | Wrong flow slug or run id |
 | 422 | Missing `flow_id` / `path`+`method` / `flow_run_id` |

@@ -1,17 +1,17 @@
 # Authentication and scopes
 
-The Task API authenticates with **Engine9 API keys** (`e9k_…`) — the same layer-1 keys used by `@engine9/core` site APIs. Keys are stored (hashed) in the **account database** and scoped to that account.
+The Task API authenticates with **Engine9 API keys** (`e9key_…`) — the same layer-1 keys used by `@engine9/core` site APIs. Keys are stored (hashed) in the **account database** and scoped to that account.
 
 MCP (`POST /mcp`) continues to use Firebase / Engine9 OAuth / `localdev`. Do **not** send Firebase ID tokens to the Task API.
 
 ## Required headers
 
 ```http
-Authorization: Bearer e9k_<key>
+Authorization: Bearer e9key_<key>
 X-ENGINE9-ACCOUNT-ID: <account_id>
 ```
 
-`X-API-Key: e9k_<key>` is also accepted instead of the Bearer form.
+`X-API-Key: e9key_<key>` is also accepted instead of the Bearer form.
 
 The account header selects which account database verifies the key. A key created for account `acme` only works when `X-ENGINE9-ACCOUNT-ID` is `acme`.
 
@@ -19,14 +19,14 @@ The account header selects which account database verifies the key. A key create
 
 ```http
 GET /flows HTTP/1.1
-Host: api.example.com
-Authorization: Bearer e9k_0123456789abcdef0123456789abcdef01234567
+Host: data.engine9.ai
+Authorization: Bearer e9key_0123456789abcdef0123456789abcdef01234567
 X-ENGINE9-ACCOUNT-ID: acme
 ```
 
 ## Authentication and scopes (canonical)
 
-Engine9 API keys carry optional **scopes**. Empty scopes mean full access. Non-empty scopes are a ceiling: the request needs the listed scope (or `*`).
+Engine9 API keys require a **non-empty scopes list** at creation. A request is allowed when the key includes that route’s scope, or includes `admin`. Empty scopes deny access (they do **not** mean “all access”).
 
 | Scope | Used by | Allows |
 |-------|---------|--------|
@@ -35,9 +35,12 @@ Engine9 API keys carry optional **scopes**. Empty scopes mean full access. Non-e
 | `data:read` | Core `GET /read/:name` | Configured reads |
 | `tasks:read` | Task API | List/read flows; check run status (`GET /flows*`, `POST /tasks/check`, `GET /flow_runs/:id`, `GET /task_runs/:id`, filters) |
 | `tasks:schedule` | Task API | Schedule work (`POST /tasks/schedule`, `POST /flow_runs/`, `*/set_state`) |
-| `*` | Any | All scopes |
+| `admin` | Any | All scopes (use this instead of the old `*` wildcard) |
+| `public` | Inbound | Public forms / e9-inbound (`e9publickey_` prefix; same `api_key` table) |
 
-Constants: `SCOPES` from `@engine9/core` / `@engine9/core/api` (`TASKS_READ`, `TASKS_SCHEDULE`, …).
+Constants: `SCOPES` from `@engine9/core` / `@engine9/core/api` (`TASKS_READ`, `TASKS_SCHEDULE`, `ADMIN`, `PUBLIC`, …).
+
+Prefixes: `e9key_…` for normal scopes; `e9publickey_…` when the key includes `public`.
 
 ### Task API scope matrix
 
@@ -79,8 +82,8 @@ Keys are SHA-256 hashed at rest (`api_key` table). Rotate with `SqlApiKeyStore.r
 ## curl variables
 
 ```bash
-export BASE_URL="https://api.example.com"
-export AUTH="Authorization: Bearer e9k_<your-key>"
+export BASE_URL="https://data.engine9.ai"
+export AUTH="Authorization: Bearer e9key_<your-key>"
 export ACCOUNT="X-ENGINE9-ACCOUNT-ID: acme"
 export CURL_TLS=""          # use "-k" for self-signed HTTPS in dev
 ```
@@ -143,9 +146,9 @@ curl $CURL_TLS -sS -X POST \
 ### JavaScript (fetch)
 
 ```javascript
-const baseUrl = 'https://api.example.com';
+const baseUrl = 'https://data.engine9.ai';
 const account_id = 'acme';
-const key = process.env.ENGINE9_API_KEY; // e9k_…
+const key = process.env.ENGINE9_API_KEY; // e9key_…
 
 const res = await fetch(`${baseUrl}/flows`, {
   headers: {
@@ -162,7 +165,7 @@ const flows = await res.json();
 import os
 import requests
 
-base_url = "https://api.example.com"
+base_url = "https://data.engine9.ai"
 headers = {
     "Authorization": f"Bearer {os.environ['ENGINE9_API_KEY']}",
     "X-ENGINE9-ACCOUNT-ID": "acme",

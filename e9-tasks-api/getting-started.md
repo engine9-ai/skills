@@ -1,23 +1,23 @@
 # Getting started
 
-Minimal steps to make your first Task API calls once your administrator has given you a base URL, API key, and account id.
+Minimal steps to make your first Task API calls. The default production base URL is **`https://data.engine9.ai`**.
 
 ## 1. Collect connection details
 
 From your administrator:
 
 ```
-Base URL:     https://api.example.com
+Base URL:     https://data.engine9.ai
 Account id:   acme
-API key:      e9k_…  (scopes: tasks:read,tasks:schedule)
-TLS notes:    self-signed? use curl -k
+API key:      e9key_…  (scopes: tasks:read,tasks:schedule)
+TLS notes:    production uses a public cert; local dev may need curl -k
 ```
 
 ## 2. Set shell variables
 
 ```bash
-export BASE_URL="https://api.example.com"
-export AUTH="Authorization: Bearer e9k_<your-key>"
+export BASE_URL="https://data.engine9.ai"
+export AUTH="Authorization: Bearer e9key_<your-key>"
 export ACCOUNT="X-ENGINE9-ACCOUNT-ID: acme"
 export CURL_TLS=""    # set to "-k" for self-signed dev certs
 ```

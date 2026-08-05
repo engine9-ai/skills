@@ -6,7 +6,7 @@ How to interpret failed Task API responses. Response bodies use a `detail` field
 
 | Status | Meaning | Typical fix |
 |--------|---------|-------------|
-| **401** | Unauthorized | Send valid `e9k_` API key + account header — [authentication.md](./authentication.md) |
+| **401** | Unauthorized | Send valid `e9key_` API key + account header — [authentication.md](./authentication.md) |
 | **403** | Forbidden | Unknown/disabled account, or missing `tasks:read` / `tasks:schedule` scope |
 | **404** | Not found | Wrong flow slug, flow run id, or task run id |
 | **422** | Validation error | Fix request body (missing required field) |

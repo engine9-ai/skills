@@ -1,23 +1,23 @@
 # Echo walkthrough
 
-Complete example: list the **Echo** sample flow, create a flow run, list runs, poll for completion, and read output. Assumes your administrator has provisioned `echo-flow` or `echo-flow-fast` for your account.
+Complete example: list the **Echo** sample flow, create a flow run, list runs, poll for completion, and read output. Assumes your administrator has provisioned `echo-flow` for your account.
 
 ## Prerequisites
 
 You need (from your administrator):
 
 - Running Task API at a known base URL
-- Valid `e9k_…` API key with `tasks:read` and `tasks:schedule`
+- Valid `e9key_…` API key with `tasks:read` and `tasks:schedule`
 - Account id (examples use `test`)
-- `echo-flow` or `echo-flow-fast` available via `GET /flows`
+- `echo-flow` available via `GET /flows`
 
 Set variables (see [authentication.md](./authentication.md)):
 
 ```bash
-export BASE_URL="https://127.0.0.1:8443"
-export AUTH="Authorization: Bearer e9k_<your-key>"
+export BASE_URL="https://data.engine9.ai"
+export AUTH="Authorization: Bearer e9key_<your-key>"
 export ACCOUNT="X-ENGINE9-ACCOUNT-ID: test"
-export CURL_TLS="-k"
+export CURL_TLS=""
 ```
 
 ## What the Echo flow does
@@ -31,7 +31,7 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
   "$BASE_URL/flows/echo-flow" | jq '{id, name, tasks}'
 ```
 
-Use `"flow_id": "echo-flow"` when creating runs. For a faster step, use `echo-flow-fast` if your administrator has provisioned it.
+Use `"flow_id": "echo-flow"` when creating runs.
 
 ---
 

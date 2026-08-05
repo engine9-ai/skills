@@ -52,9 +52,11 @@ When handling `/e9` or `/e9a` requests, **do not read local workspace code** to 
 
 Engine9 MCP is exposed at `POST /mcp` (with `GET /mcp/health` for health checks).
 
+**Production default:** `https://data.engine9.ai/mcp` (same host as the Task API and `/data` routes).
+
 - Preferred server startup: run the main API (`node api/index.js`) so MCP and other APIs share one port.
 - Standalone MCP startup: from `engine9/server`, run `npm run mcp`.
-- Default standalone MCP URL:
+- Local standalone MCP URL:
   - `http://127.0.0.1:3334/mcp` (when TLS is off)
   - `https://127.0.0.1:3334/mcp` (when `ENGINE9_SSL_CERT_PATH` is set)
 
@@ -71,7 +73,7 @@ Create or update `~/.cursor/mcp.json`:
 {
   "mcpServers": {
     "engine9.ai": {
-      "url": "https://<your-api-host>/mcp"
+      "url": "https://data.engine9.ai/mcp"
     }
   }
 }

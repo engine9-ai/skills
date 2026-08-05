@@ -178,6 +178,6 @@ You                    Task API                 Background execution
 
 ## Next steps
 
-- [authentication.md](./authentication.md) — API keys (`e9k_…`) and scopes
+- [authentication.md](./authentication.md) — API keys (`e9key_…`) and scopes
 - [getting-started.md](./getting-started.md) — curl setup
 - [echo-walkthrough.md](./echo-walkthrough.md) — full worked example
