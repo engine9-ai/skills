@@ -1,80 +1,91 @@
-# Authentication (API consumer)
+# Authentication and scopes
 
-Every Task API request must be authenticated. Unauthenticated requests receive **401 Unauthorized**.
+The Task API authenticates with **Engine9 API keys** (`e9k_…`) — the same layer-1 keys used by `@engine9/core` site APIs. Keys are stored (hashed) in the **account database** and scoped to that account.
 
-## Required header
+MCP (`POST /mcp`) continues to use Firebase / Engine9 OAuth / `localdev`. Do **not** send Firebase ID tokens to the Task API.
 
-```http
-Authorization: Bearer <your-token>
-```
-
-For most integrations, `<your-token>` is a **Firebase ID token** obtained through the Engine9 OAuth login flow your administrator configures. (Engine9 is its own OAuth authorization server backed by Firebase; the OAuth `access_token` it issues is the Firebase ID token.)
-
-## Account header
-
-Send your account id on **every** request:
+## Required headers
 
 ```http
+Authorization: Bearer e9k_<key>
 X-ENGINE9-ACCOUNT-ID: <account_id>
 ```
 
-This scopes flows, runs, and results to your account. If omitted, the API may use an account embedded in your authenticated identity when one is available.
+`X-API-Key: e9k_<key>` is also accepted instead of the Bearer form.
 
-**Example — both headers:**
+The account header selects which account database verifies the key. A key created for account `acme` only works when `X-ENGINE9-ACCOUNT-ID` is `acme`.
+
+**Example:**
 
 ```http
 GET /flows HTTP/1.1
 Host: api.example.com
-Authorization: Bearer ya29.a0AfH6...
+Authorization: Bearer e9k_0123456789abcdef0123456789abcdef01234567
 X-ENGINE9-ACCOUNT-ID: acme
 ```
 
-## Firebase ID token (via Engine9 OAuth)
+## Authentication and scopes (canonical)
 
-This is the standard authentication path for the Task API.
+Engine9 API keys carry optional **scopes**. Empty scopes mean full access. Non-empty scopes are a ceiling: the request needs the listed scope (or `*`).
 
-### When to use it
+| Scope | Used by | Allows |
+|-------|---------|--------|
+| `people:write` | Core `POST /people` | Inbound people pipeline |
+| `tables:write` | Core `POST /upsert/:table` | Allowlisted table upserts |
+| `data:read` | Core `GET /read/:name` | Configured reads |
+| `tasks:read` | Task API | List/read flows; check run status (`GET /flows*`, `POST /tasks/check`, `GET /flow_runs/:id`, `GET /task_runs/:id`, filters) |
+| `tasks:schedule` | Task API | Schedule work (`POST /tasks/schedule`, `POST /flow_runs/`, `*/set_state`) |
+| `*` | Any | All scopes |
 
-Use a Firebase ID token when your client completes the **Engine9 OAuth 2.0 authorization code (PKCE) flow** and receives an **access token**. This is the same path used by Cursor, MCP clients, and other OAuth-based integrations against Engine9.
+Constants: `SCOPES` from `@engine9/core` / `@engine9/core/api` (`TASKS_READ`, `TASKS_SCHEDULE`, …).
 
-### How it works
+### Task API scope matrix
 
-1. Your client opens `/oauth/authorize`, which redirects you to **Google** sign-in (backed by Firebase).
-2. After authorization, the client receives a `code` and exchanges it at `/oauth/token` for an **access token** (the Firebase ID token) and a `refresh_token`.
-3. Send `Authorization: Bearer <access_token>` on every Task API request.
-4. The API verifies the Firebase ID token (`verifyIdToken`) and resolves your Firebase `uid` to your Engine9 user account.
-5. Combine with `X-ENGINE9-ACCOUNT-ID` to scope requests to the correct account.
+| Route | Scope |
+|-------|--------|
+| `GET /flows`, `GET /flows/:id`, `POST /flows/filter`, `GET /flows_dir` | `tasks:read` |
+| `POST /tasks/check` | `tasks:read` |
+| `GET /flow_runs/:id`, `POST /flow_runs/filter` | `tasks:read` |
+| `GET /task_runs/:id`, `POST /task_runs/filter` | `tasks:read` |
+| `POST /tasks/schedule` | `tasks:schedule` |
+| `POST /flow_runs/` | `tasks:schedule` |
+| `POST /flow_runs/:id/set_state`, `POST /task_runs/:id/set_state` | `tasks:schedule` |
 
-The same access token works for other Engine9 API routes on the same host (including MCP at `POST /mcp`), so you authorize once per session.
+For a partner that discovers flows and schedules jobs, issue a key with both:
 
-### Typical clients
+```text
+tasks:read,tasks:schedule
+```
 
-| Client | How you get the token |
-|--------|----------------------|
-| **Cursor / MCP** | Connect via the configured MCP server; Cursor completes OAuth and attaches the access token automatically |
-| **Custom scripts** | Use `e9 oauth token` (loopback OAuth flow), or your administrator provides a pre-issued token for testing |
-| **curl / HTTP clients** | Obtain a token through the OAuth flow, then export it as a shell variable |
+## Obtaining a key
 
-### Token lifetime
+Your administrator creates a key against the account database (plaintext shown once):
 
-Firebase ID tokens expire (about 1 hour). Your client should refresh via `/oauth/token` (`grant_type=refresh_token`) or re-authenticate before expiry. If requests suddenly return **401**, obtain a new token and retry.
+```bash
+npx e9core create-api-key \
+  --db "<account database_connection>" \
+  --name "partner-tasks" \
+  --scopes tasks:read,tasks:schedule
+```
 
-## Local development token
+Or print SQL for D1 / migrations:
 
-Your administrator may provide a fixed development token for non-production environments (for example `Bearer localdev` in local setups). Use only what they document; do not use dev tokens in production.
+```bash
+npx e9core create-api-key --print-sql --name "partner-tasks" --scopes tasks:read,tasks:schedule
+```
+
+Keys are SHA-256 hashed at rest (`api_key` table). Rotate with `SqlApiKeyStore.rotate({ id })` (or recreate + revoke).
 
 ## curl variables
 
-Set once per shell session:
-
 ```bash
 export BASE_URL="https://api.example.com"
-export AUTH="Authorization: Bearer <firebase-id-token>"
+export AUTH="Authorization: Bearer e9k_<your-key>"
 export ACCOUNT="X-ENGINE9-ACCOUNT-ID: acme"
 export CURL_TLS=""          # use "-k" for self-signed HTTPS in dev
 ```
 
-Every example in this documentation uses:
+Every example uses:
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" ...
@@ -91,7 +102,23 @@ curl $CURL_TLS -sS \
   "$BASE_URL/flows"
 ```
 
-### Create flow run (POST with JSON body)
+### Schedule (MCP-parity)
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" \
+  -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "@engine9/plugins/e9workers:SQLWorker",
+    "method": "query",
+    "options": { "sql": "select 1 as ok" },
+    "label": "partner smoke"
+  }' \
+  "$BASE_URL/tasks/schedule"
+```
+
+### Schedule a published flow by slug
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -102,16 +129,27 @@ curl $CURL_TLS -sS -X POST \
   "$BASE_URL/flow_runs/"
 ```
 
+### Check status
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" \
+  -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{"flow_run_id":"<id from schedule>"}' \
+  "$BASE_URL/tasks/check"
+```
+
 ### JavaScript (fetch)
 
 ```javascript
 const baseUrl = 'https://api.example.com';
 const account_id = 'acme';
-const token = process.env.TASK_API_TOKEN; // Firebase ID token (Engine9 OAuth access_token)
+const key = process.env.ENGINE9_API_KEY; // e9k_…
 
 const res = await fetch(`${baseUrl}/flows`, {
   headers: {
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${key}`,
     'X-ENGINE9-ACCOUNT-ID': account_id,
   },
 });
@@ -126,7 +164,7 @@ import requests
 
 base_url = "https://api.example.com"
 headers = {
-    "Authorization": f"Bearer {os.environ['TASK_API_TOKEN']}",
+    "Authorization": f"Bearer {os.environ['ENGINE9_API_KEY']}",
     "X-ENGINE9-ACCOUNT-ID": "acme",
 }
 
@@ -135,19 +173,23 @@ flows.raise_for_status()
 print(flows.json())
 ```
 
-## Verifying your credentials
+## Verifying credentials
 
 A successful `GET /flows` returns **200** with a JSON array (possibly empty).
 
-Failures:
-
 | Status | Likely cause |
 |--------|----------------|
-| 401 | Missing, expired, or invalid Firebase ID token |
-| 503 | API not fully configured — contact your administrator |
+| 401 | Missing/invalid key, or missing `X-ENGINE9-ACCOUNT-ID` |
+| 403 | Unknown/disabled account, or missing required scope |
+| 503 | `api_key` table missing or account DB unreachable — contact administrator |
 
-See [errors.md](./errors.md) for full status code reference.
+See [errors.md](./errors.md) for the full status list.
 
 ## Content-Type
 
 Send `Content-Type: application/json` on all `POST` requests with a body.
+
+## Related
+
+- Canonical three-layer auth map and key stores: `@engine9/core` README (`Engine9 auth map`)
+- Administrator Task API setup: `server/api/task/docs/admin/authentication.md`

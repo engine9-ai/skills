@@ -43,7 +43,7 @@ Success responses use JSON text in `content` with `{ ok: true, ... }`. Failures 
 
 ### Hard stop — do not continue
 
-When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `worker_invoke`, `chat`, etc.).
+When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `chat`, etc.).
 
 1. Tool result has **`isError: true`**
 2. Response text matches a fatal pattern (even when only plain text is visible):
@@ -93,10 +93,10 @@ Local code is an **unreliable** source for MCP work because:
 |------|--------|
 | Available MCP tools and parameters | MCP tool schemas (client tool descriptors for the connected server) |
 | Installed plugins, submodules, methods | MCP `account` → `plugins[].metadata` |
-| Allowlisted synchronous worker calls | MCP `worker_invoke` tool schema + server response errors |
+| Schema / tables / indexes / raw SQL | MCP `sql` (`command`: query, describe, indexes, tables, info, histo, transform_eql) |
 | Schedule or check async work | MCP `task` (after resolving path/method from `account`) |
 | Analyze / summarize / profile table contents | MCP `analyze` (uses `tables` then `analyze`) |
-| Date histogram on indexed datetime column | MCP `worker_invoke` → SQLWorker.histo |
+| Date histogram on indexed datetime column | MCP `sql` with `command: "histo"` |
 | List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
 
 If a path, method, or option is not present in MCP responses, report that to the user — do not guess from local code.
@@ -109,15 +109,17 @@ If a path, method, or option is not present in MCP responses, report that to the
 |-------------|--------|
 | Am I connected / signed in? | `ok`, then `user` |
 | Who am I / which accounts do I have? | `user` |
+| Find accounts by prefix, parent, type, tags, or installed plugin | `account` with `command: "search"` (one call — do not fan out) |
+| List plugins / methods on one account | `account` with `account_id` (or `command: "plugins"`) |
 | Search people by email, phone, name, or id | `search` |
 | List segments or schedule segment builds | `segment` |
 | Create accounts / manage domains or domain secrets | e9-account Worker (`cloud-services/e9-account`) — not MCP |
-| Run a SQL/EQL query | `eql` / `sql` |
+| Run a SQL/EQL query | `eql` / `sql` (`command: "query"` or omit when `sql` is set) |
 | Analyze / summarize / profile a table | `analyze` |
-| Describe tables, indexes, or schema | `worker_invoke` (SQLWorker) |
+| Describe tables, indexes, list tables, histo | `sql` with `command: "describe"` / `"indexes"` / `"tables"` / `"histo"` |
 | Compute plugin or input UUIDs | `plugin_id`, `input_id` |
 | Chat / conversation history | `chat` |
-| Run a plugin worker method | `task` (after discovery via `account`) |
+| Run a plugin worker method | `task` (after discovery via `account` plugins) |
 
 `task` is the **catch-all** for behaviors that do not have a native MCP call. Do not reach for `task` when a native tool already covers the request with equal or better fidelity.
 
@@ -135,12 +137,35 @@ Returns the current authenticated user: uid, email, admin flag, and account acce
 
 ### `account`
 
-Lists plugins installed on an account with marketplace metadata merged onto each plugin.
+Two commands:
+
+**`command: plugins`** (default when `account_id` is set) — list plugins installed on one account with marketplace metadata merged onto each plugin.
 
 - Required: `account_id`
-- Returns: `{ ok: true, plugins: [...] }` — each plugin includes `path`, DB fields, and `metadata` (alias, submodules, methods, auth_fields, …)
+- Returns: `{ ok: true, command: "plugins", plugins: [...] }` — each plugin includes `path`, DB fields, and `metadata` (alias, submodules, methods, auth_fields, …)
+- Backward compatible: `{ "account_id": "<id>" }` still means plugins.
 
-Also used as the **discovery step** before calling `task` when no native tool matches (see fallback workflow below).
+**`command: search`** — find accessible accounts in **one call** using config filters and optional installed-plugin probes. Prefer this over `user` + many per-account plugin loads when the question is “which accounts match …?”.
+
+- Requires at least one filter: `prefix` / `prefixes`, `parents`, `ids`, `name`, `type`, `tags`, or `plugins`
+- Optional: `recursive` (with `parents`), `include_disabled`, `include_plugins`, `limit` (default 50), `max_scan` (default 100 for plugin probes), `concurrency`
+- Returns: `{ ok: true, command: "search", count, accounts: [...], warnings, filters, truncated* }`
+- `plugins` filter matches installed plugin `path` / `name` / `table_prefix` substrings (e.g. `["acoustic"]`). Apply `prefix`/`parents` first so DB probes stay bounded.
+- Per-account DB failures go into `warnings` (do not fail the whole search).
+
+Example — Authentic accounts with Acoustic:
+
+```json
+{ "command": "search", "prefixes": ["authentic"], "plugins": ["acoustic"] }
+```
+
+Example — direct children of a parent:
+
+```json
+{ "command": "search", "parents": ["frakture_master"] }
+```
+
+Plugins command is also the **discovery step** before calling `task` when no native tool matches (see fallback workflow below).
 
 ### `search`
 
@@ -190,6 +215,33 @@ Runs a SELECT built from an EQL object and returns generated SQL plus query rows
 
 - Required: `account_id`, `eql` (query object with `table`, `columns`, `conditions`, etc.)
 
+For EQL **expression fragments** (not a full query), use `sql` with `command: "transform_eql"` instead.
+
+### `sql`
+
+Realtime SQL and schema introspection via `SQLWorker` (replaces the former `worker_invoke` allowlist).
+
+| command | Purpose |
+|---------|---------|
+| `query` (default when `sql` is set) | Execute a single SQL statement |
+| `describe` | Column schema for `table` |
+| `indexes` | Indexes for `table` |
+| `tables` (default when `sql` omitted) | List/filter table names (`filter`, `includeTemp`, …) |
+| `info` | Driver/dialect info |
+| `histo` | Date histogram on an indexed datetime column |
+| `transform_eql` | EQL expression → SQL fragment (`eql` + `table`) |
+
+Examples:
+
+```json
+{ "account_id": "test", "sql": "select 1" }
+{ "account_id": "test", "command": "describe", "table": "person" }
+{ "account_id": "test", "command": "tables", "filter": "person" }
+{ "account_id": "test", "command": "histo", "table": "transaction", "column": "ts" }
+```
+
+There is **no** `worker_invoke` tool. Plugin methods still use `task` (async).
+
 ### `analyze`
 
 Analyzes (summarizes/profiles) table contents via `SQLWorker.analyze`. Returns `columns` (not deprecated `fields`) with types, min/max, distinct counts, and samples. When indexed datetime columns exist, histo buckets/min/max are merged onto those column objects (`bucket_column: true` on the column used for bucketing). Sample analysis and histo run in parallel.
@@ -200,7 +252,7 @@ Analyzes (summarizes/profiles) table contents via `SQLWorker.analyze`. Returns `
   1. `tables({ filter })` — regex first; if no matches, language-token fallback on `filter`
   2. `analyze` on each matched table (sample + optional histo in parallel)
 
-Standalone date histograms: `worker_invoke` with `workers/SQLWorker.js` method `histo` (`{ table, column }`).
+Standalone date histograms: `sql` with `command: "histo"`. Schema-only: `sql` `describe` / `indexes` / `tables`.
 
 Example — user says "Summarize the ROI transaction table" → call `analyze`:
 
@@ -208,17 +260,7 @@ Example — user says "Summarize the ROI transaction table" → call `analyze`:
 { "account_id": "test", "table": "ROI transaction" }
 ```
 
-Prefer `analyze` over hand-written SQL or multi-step `worker_invoke` when the user wants a table profile/summary.
-
-### `worker_invoke`
-
-Invokes an allowlisted worker method for an account.
-
-- Required: `account_id`, `workerPath`, `method`
-- Optional: `args` (options object)
-- Allowlisted workers include `workers/SQLWorker.js` (describe, indexes, tables, eql, analyze, histo) and `workers/ServerBaseWorker.js` (describe, tables, info)
-- `histo`: native SQL buckets over an indexed datetime column (`{ table, column, target_buckets? }`); reports min/max for all indexed datetime columns + count per bucket
-- For table name resolution + field profiling, prefer the native `analyze` tool
+Prefer `analyze` over hand-written SQL when the user wants a table profile/summary.
 
 ### `plugin_id`
 
@@ -239,8 +281,8 @@ Store and replay account-scoped conversations.
 
 When the user's request does not map cleanly to a native tool:
 
-1. **Ensure account scope** — `account_id` must be known (from session `engine9.account_id` or ask the user / suggest `/e9a`).
-2. **Call `account`** immediately with `{ "account_id": "<account_id>" }`. If this fails, **stop** — do not call `task`.
+1. **Ensure account scope** — `account_id` must be known (from session `engine9.account_id`, `account` search, or ask the user / suggest `/e9a`). If you only know org/prefix/plugin constraints, call `account` with `command: "search"` first, then pick one `account_id`.
+2. **Call `account`** immediately with `{ "account_id": "<account_id>" }` (plugins command). If this fails, **stop** — do not call `task`.
 3. **Scan the returned plugins** for a matching path/method combination:
    - Each plugin has a `path` (e.g. `@frakture-com/channelbots/RENxtBot`) and `metadata.submodules` with method lists.
    - Match user intent to a plugin path + submodule + method name.
@@ -288,5 +330,5 @@ All tools except `ok`, `plugin_id`, and `input_id` require authentication. Accou
 After [Step 0 — Log in](#step-0--log-in-always-first):
 
 1. Call `user` to confirm signed-in identity and account access.
-2. Set account scope via `/e9a <account_id>` or call `account` to cache plugins.
+2. If account id is unknown, call `account` with `command: "search"` and the known filters (prefix/parent/plugin). Otherwise set scope via `/e9a <account_id>` or call `account` plugins to cache methods.
 3. Call `search` with a known email to validate account-scoped data access.

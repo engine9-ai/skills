@@ -118,7 +118,7 @@ Run SQLTaskManager alongside workers (or as a long-lived process) after `createF
 
 ## Designing tasks
 
-Each task is the same shape: pick a worker, a method, and an `options` object. Options must match `Worker.prototype.{method}.metadata.options` (see worker source or MCP `worker_invoke` describe).
+Each task is the same shape: pick a worker, a method, and an `options` object. Options must match `Worker.prototype.{method}.metadata.options` (see worker source, or MCP `sql` with `command: "describe"` for table schema).
 
 Example (echo):
 

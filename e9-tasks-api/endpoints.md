@@ -1,8 +1,63 @@
 # Endpoints reference
 
-All routes are on the **API origin root**. Every request requires `Authorization: Bearer` and typically `X-ENGINE9-ACCOUNT-ID`. See [authentication.md](./authentication.md).
+All routes are on the **API origin root**. Every request requires an **`e9k_` API key** and `X-ENGINE9-ACCOUNT-ID`. See [authentication.md](./authentication.md) for keys and scopes.
 
-Unless noted, responses are JSON. Successful reads return **200**; creates return **200** with the created object.
+Unless noted, responses are JSON. Successful reads return **200**; schedule/check return **200** with the result object.
+
+---
+
+## Schedule and check (MCP parity)
+
+These routes mirror the MCP `task` tool and call `TaskWorker.scheduleTasks` / `checkTasks`.
+
+### `POST /tasks/schedule`
+
+**Scope:** `tasks:schedule`
+
+Provide `flow_path` **or** both `path` and `method` (same as MCP).
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "@frakture-com/channelbots/RENxtBot:People",
+    "method": "listCustomFields",
+    "label": "renxt/people listCustomFields"
+  }' \
+  "$BASE_URL/tasks/schedule"
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `flow_path` | One of | Absolute/server path to a JSON5 flow file |
+| `path` + `method` | One of | Plugin path + worker method (resolved like MCP) |
+| `options` | No | Options object for the worker method |
+| `label`, `tracking_code`, `start_after_timestamp` | No | Schedule metadata |
+| `remote` | No | Default `true` (remote job-list); `false` for local workers |
+
+**Response:** `{ ok: true, action: "schedule", result: { flow_run_id, task_run_ids, … } }`
+
+---
+
+### `POST /tasks/check`
+
+**Scope:** `tasks:read`
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{"flow_run_id": "<id from schedule>"}' \
+  "$BASE_URL/tasks/check"
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `flow_run_id` | One of | From schedule response |
+| `task_run_ids` | One of | Optional with `flow_run_id` |
+| `remote` | No | Default `true` |
+| `flow_path` | No | Routing hint when `remote` is false |
 
 ---
 
@@ -88,7 +143,9 @@ Supported `sort`: `CREATED_DESC` (default), `CREATED_ASC`.
 
 ### `POST /flow_runs/`
 
-Create a flow run and one task run per task in the flow.
+**Scope:** `tasks:schedule`
+
+Schedule a **published** flow by slug. Resolves the account flows directory JSON5 file and calls `scheduleTasks` (same engine as MCP / `POST /tasks/schedule`).
 
 **Minimal body:**
 
@@ -100,7 +157,7 @@ curl $CURL_TLS -sS -X POST \
   "$BASE_URL/flow_runs/"
 ```
 
-**With name and parameters:**
+**With label and remote flag:**
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -109,8 +166,7 @@ curl $CURL_TLS -sS -X POST \
   -d '{
     "flow_id": "echo-flow",
     "name": "nightly-echo-check",
-    "parameters": { "env": "prod" },
-    "account_id": "test"
+    "remote": true
   }' \
   "$BASE_URL/flow_runs/"
 ```
@@ -118,14 +174,11 @@ curl $CURL_TLS -sS -X POST \
 | Field | Required | Description |
 |-------|----------|-------------|
 | `flow_id` | **Yes** | Flow slug (e.g. `echo-flow`), not the UUID |
-| `account_id` | No | Defaults from `X-ENGINE9-ACCOUNT-ID` |
-| `name` | No | Label for this run |
-| `parameters` | No | Key-value parameters for the flow |
-| `state` | No | Initial state override (advanced) |
+| `name` / `label` | No | Job list label |
+| `tracking_code`, `start_after_timestamp` | No | Schedule metadata |
+| `remote` | No | Default `true` |
 
-**Response:** Flow run object with `id`, `flow_slug`, `state_type`, `task_runs[]`.
-
-**Note:** Does not execute tasks — task runs start as `PENDING`. See [concepts.md](./concepts.md#scheduling-vs-execution).
+**Response:** `scheduleTasks` result (`flow_run_id`, `task_run_ids`, …).
 
 **422** — missing `flow_id`. **404** — unknown flow slug.
 
@@ -133,12 +186,14 @@ curl $CURL_TLS -sS -X POST \
 
 ### `GET /flow_runs/:id`
 
+**Scope:** `tasks:read` — polls via `checkTasks` (default `remote=true`; pass `?remote=false` for local).
+
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
   "$BASE_URL/flow_runs/$FLOW_RUN_ID"
 ```
 
-**404** — unknown flow run id.
+Prefer `POST /tasks/check` for MCP-shaped clients.
 
 ---
 

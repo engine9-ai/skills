@@ -7,15 +7,15 @@ Complete example: list the **Echo** sample flow, create a flow run, list runs, p
 You need (from your administrator):
 
 - Running Task API at a known base URL
-- Valid Bearer token
+- Valid `e9k_…` API key with `tasks:read` and `tasks:schedule`
 - Account id (examples use `test`)
 - `echo-flow` or `echo-flow-fast` available via `GET /flows`
 
-Set variables (examples use a local dev token; production clients use a Firebase ID token via Engine9 OAuth — see [authentication.md](./authentication.md)):
+Set variables (see [authentication.md](./authentication.md)):
 
 ```bash
 export BASE_URL="https://127.0.0.1:8443"
-export AUTH="Authorization: Bearer localdev"
+export AUTH="Authorization: Bearer e9k_<your-key>"
 export ACCOUNT="X-ENGINE9-ACCOUNT-ID: test"
 export CURL_TLS="-k"
 ```
@@ -79,9 +79,9 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
 
 ---
 
-## Step 2: Create a flow run
+## Step 2: Schedule the flow
 
-**Important:** `flow_id` is the flow **slug** (`echo-flow`), not the UUID `flow_id` field on the flow object.
+**Important:** `flow_id` is the flow **slug** (`echo-flow`), not the UUID `flow_id` field on the flow object. Scheduling goes through `scheduleTasks` (same as MCP).
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -89,73 +89,39 @@ curl $CURL_TLS -sS -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "flow_id": "echo-flow",
-    "name": "echo-demo-2026-06-08",
-    "parameters": {}
+    "name": "echo-demo-2026-06-08"
   }' \
   "$BASE_URL/flow_runs/" | tee /tmp/echo-flow-run.json | jq .
 ```
 
-Save IDs:
+Save IDs (shape matches MCP `task` schedule — `flow_run_id` / `task_run_ids`):
 
 ```bash
-export FLOW_RUN_ID=$(jq -r '.id' /tmp/echo-flow-run.json)
-export TASK_RUN_ID=$(jq -r '.task_runs[0].id' /tmp/echo-flow-run.json)
+export FLOW_RUN_ID=$(jq -r '.flow_run_id // .id' /tmp/echo-flow-run.json)
+export TASK_RUN_ID=$(jq -r '.task_run_ids[0] // .task_runs[0].id // empty' /tmp/echo-flow-run.json)
 echo "FLOW_RUN_ID=$FLOW_RUN_ID"
 echo "TASK_RUN_ID=$TASK_RUN_ID"
 ```
 
-Example response fields:
-
-```json
-{
-  "id": "0196f1d0-87cf-7b6f-b9a0-8f5d2d6c2f9e",
-  "flow_slug": "echo-flow",
-  "state_type": "SCHEDULED",
-  "task_runs": [
-    {
-      "id": "0196f1d1-2c55-7d89-9c24-6fe4f7fd93ea",
-      "task_key": "echo-step",
-      "state_type": "PENDING"
-    }
-  ]
-}
-```
-
-### Create with explicit account_id in body
-
-Usually unnecessary if you send the header:
-
-```bash
-curl $CURL_TLS -sS -X POST \
-  -H "$AUTH" -H "$ACCOUNT" \
-  -H "Content-Type: application/json" \
-  -d '{"flow_id":"echo-flow","account_id":"test"}' \
-  "$BASE_URL/flow_runs/" | jq '{id, flow_slug, state_type}'
-```
-
 ---
 
-## Step 3: List flow runs
+## Step 3: Check status
 
-### By flow slug
+Prefer MCP-parity check:
 
 ```bash
 curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
-  -d '{
-    "flow_runs": { "flow_id": { "eq_": "echo-flow" } },
-    "sort": "CREATED_DESC",
-    "limit": 5
-  }' \
-  "$BASE_URL/flow_runs/filter" | jq '[.[] | {id, name, state_type, created}]'
+  -d "{\"flow_run_id\": \"$FLOW_RUN_ID\"}" \
+  "$BASE_URL/tasks/check" | jq .
 ```
 
-### Read one flow run
+Or GET:
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
-  "$BASE_URL/flow_runs/$FLOW_RUN_ID" | jq '{id, flow_slug, state_type, start_time, end_time}'
+  "$BASE_URL/flow_runs/$FLOW_RUN_ID" | jq .
 ```
 
 ### Only completed runs

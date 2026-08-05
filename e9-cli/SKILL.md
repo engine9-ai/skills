@@ -39,7 +39,7 @@ Project `.cursor/mcp.json` may define `engine9.local_noauth` with `Authorization
 
 ## MCP-only discovery
 
-When handling `/e9` or `/e9a` requests, **do not read local workspace code** to discover plugins, worker methods, paths, or options. Local source does not reliably match the connected MCP server or the account's installed plugins. Use MCP tool schemas, MCP `account` (cached as `engine9.plugins`), and MCP `task` / `worker_invoke` only. See [e9-mcp — MCP-only discovery](../e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code).
+When handling `/e9` or `/e9a` requests, **do not read local workspace code** to discover plugins, worker methods, paths, or options. Local source does not reliably match the connected MCP server or the account's installed plugins. Use MCP tool schemas, MCP `account` (cached as `engine9.plugins`), and MCP `task` / `sql` / `analyze` only. See [e9-mcp — MCP-only discovery](../e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code).
 
 ## What this skill covers
 
@@ -121,6 +121,8 @@ Examples: `/e9a test`, `/e9a engine9`, `/e9a parent frakture_master`, `/e9a all`
 
 The CLI bin script (`server/bin/e9a`) writes `.e9_parameters` for subsequent `e9` worker runs. For `parent` and `all`, it resolves account ids from server account config and writes `-a id1,id2,...`. For a single lookup it writes `-a <lookup>` as before.
 
+**Discovering accounts (MCP):** when the user asks which accounts match a prefix, parent, type, tags, or installed plugin, call MCP `account` with `command: "search"` in **one** request — do not use `/e9a all` plus per-account plugin loads. Example: `{ "command": "search", "prefixes": ["authentic"], "plugins": ["acoustic"] }`. Use `/e9a <id>` afterward to pin a single primary account and cache its plugins.
+
 ### Required behavior
 
 **Default `/e9a <lookup>`:**
@@ -128,8 +130,8 @@ The CLI bin script (`server/bin/e9a`) writes `.e9_parameters` for subsequent `e9
 1. Do not call `user` (or any account lookup tool) to resolve `<lookup>`.
 2. Do not perform fuzzy matching, alias matching, or ambiguity checks.
 3. Set the provided value as active account scope immediately.
-4. Call MCP `account` with `{ "account_id": "<lookup>" }`.
-5. On success (`{ ok: true, plugins: [...] }`), persist the returned `plugins` array for subsequent `/e9` requests.
+4. Call MCP `account` with `{ "account_id": "<lookup>" }` (plugins command; `command: "plugins"` optional).
+5. On success (`{ ok: true, plugins: [...] }` or `{ ok: true, command: "plugins", plugins: [...] }`), persist the returned `plugins` array for subsequent `/e9` requests.
 6. On failure (`isError: true`, or text like `Cannot connect to the … database` / `Not authorized for account`): **stop**. Report the error. Do not cache plugins. Do not proceed to `/e9 task` or other account-scoped calls.
 7. Reuse stored account and plugins unless the user runs another `/e9a`.
 
