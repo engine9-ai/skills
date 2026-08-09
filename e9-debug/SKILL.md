@@ -21,8 +21,9 @@ Interactive debugging across **agent**, **developer**, and **e9 MCP server(s)**.
 2. **Step 1 never looks at code.** Recreate from interfaces and data only (MCP tools, URLs, SQL, describe/show tables).
 3. **Do not open local workspace source** until Step 4 is explicitly started (and the user confirms they want code inspection).
 4. **Be wary of scale.** Avoid full-table `COUNT(*)`, unbounded scans, and expensive aggregates unless scoped (filters, limits, sampled windows). Prefer `analyze`, `DESCRIBE` / `SHOW TABLES`, indexed filters, and small LIMIT probes.
-5. **One primary account** must be selected before deep debugging, even if many are affected.
-6. Stages may loop — if recreation fails or scope changes, return to the relevant earlier step.
+5. **Account resolution uses MCP `account`, never SQL fan-out.** Installed plugins come from the `account` tool — not from querying each account database yourself. Do not loop `sql` across accounts to discover installs, plugin tables, or which accounts have a plugin.
+6. **One primary account** must be selected before deep debugging, even if many are affected.
+7. Stages may loop — if recreation fails or scope changes, return to the relevant earlier step.
 
 ## Progress checklist
 
@@ -74,10 +75,19 @@ If `user` already succeeds this session on the intended server, Step 0 is done.
 
 This stage looks at **interfaces and data** only to recreate the issue.
 
-### A) Identify the affected account (filter first when the id is unknown)
+### A) Identify the affected account (MCP `account` only — no SQL for discovery)
 
-- Multiple accounts may be affected, but **one account must be selected** to continue deep SQL/analyze.
-- When the report names an **org, prefix, parent, or plugin** (e.g. “Authentic accounts that use Acoustic”) rather than a single `account_id`, resolve candidates with **one** MCP call:
+Multiple accounts may be affected, but **one account must be selected** to continue deep SQL/analyze.
+
+**The `account` MCP tool returns installed plugins.** Use it for all account/plugin discovery during resolution — SQL is for recreating data issues *after* scope is set, not for finding accounts or plugins.
+
+| Situation | MCP call | DB hits |
+|-----------|----------|---------|
+| `account_id` known | `{ "account_id": "<id>" }` (plugins command) | One account |
+| Find accounts by prefix/parent/tags/name | `{ "command": "search", "prefixes": ["…"], … }` | None (config only) |
+| Find accounts that have a plugin | `{ "command": "search", "prefixes": ["…"], "plugins": ["…"] }` | Server probes filtered candidates only |
+
+**When the id is unknown**, resolve candidates with **one** `account` search call — combine filters freely:
 
 ```json
 {
@@ -87,9 +97,23 @@ This stage looks at **interfaces and data** only to recreate the issue.
 }
 ```
 
-  Other useful filters on the same call: `parents`, `recursive`, `ids`, `name`, `type`, `tags`. Do **not** call `user` and then fan out many `account` plugin loads for the same discovery.
-- If the account id is already known, confirm via MCP `user`, `/e9a <account_id>`, or ask the developer.
-- Pick **one** matching account as the primary recreation target; set scope (`account_id`) before SQL/search/analyze. Keep the full candidate list for Step 2.
+Other useful search filters: `parents`, `recursive`, `ids`, `name`, `type`, `tags`, `include_plugins`. Narrow with `prefixes` / `parents` first when using `plugins` (server caps candidate probes via `max_scan`).
+
+**When the id is known**, one call loads plugins for that account:
+
+```json
+{ "account_id": "authentic_foo" }
+```
+
+→ `{ ok: true, command: "plugins", plugins: [...] }` — cache this list; do not re-query on every subsequent tool call.
+
+**Do not during account resolution:**
+
+- Run `sql` (or `SHOW TABLES`, plugin-table SELECTs, etc.) across many accounts to find installs
+- Call `user` and then fan out many per-account `account` plugin loads
+- Probe every accessible account when config filters (`prefixes`, `parents`, `tags`, …) would narrow the set
+
+Confirm access via MCP `user` or ask the developer if needed. Pick **one** matching account as the primary recreation target; set scope (`account_id`) before SQL/search/analyze. Keep the full candidate list for Step 2.
 
 ### B) Isolate the broad category
 
@@ -116,7 +140,9 @@ Record the URL in the bug summary. Do not dive into frontend source in Step 1.
 
 #### C-2) Data issues
 
-For data issues, **SQL is the primary way** to analyze the problem. Use the information provided and the e9 `sql` endpoint to compose queries to recreate the issue.
+For data issues, **SQL is the primary way** to analyze the problem — but **only after** a primary `account_id` is set in Step 1A. Do not use SQL for account or plugin discovery.
+
+Use the information provided and the e9 `sql` endpoint to compose queries to recreate the issue.
 
 - **Do not** immediately look at code.
 - **Do** use describe/show tables (and related schema tools via MCP — e.g. `sql` with `command: "describe"` / `"tables"` / `"indexes"`, or `analyze`) to understand the SQL layout.
@@ -146,7 +172,8 @@ Produce a handoff-ready summary another agent or human can use without redoing d
 ## Target account
 - account_id: …
 - Other mentioned accounts: …
-- Account search (if used): filters + candidate ids from `account` command search …
+- Account resolution: MCP `account` search filters + candidate ids (not SQL fan-out) …
+- Plugins loaded: from `account` plugins command (count / key paths) …
 
 ## Category
 [People | Transactions | Messaging | Timeline | Segments | …]
@@ -176,7 +203,7 @@ Do **not** proceed to code until Steps 2–3 are addressed (or explicitly skippe
 
 Once the issue is seen on one account, figure out if it affects other accounts.
 
-- Reuse the Step 1A `account` **search** candidate list when the issue was framed as multi-account (prefix/parent/plugin). Do not rediscover by scanning every accessible account.
+- Reuse the Step 1A `account` **search** candidate list when the issue was framed as multi-account (prefix/parent/plugin). Do not rediscover by scanning every accessible account or by SQL/plugin-table probes across databases.
 - **Ask the user** whether other accounts are affected when the candidate set is unclear.
 - They may often not know — offer light checks only when feasible:
   - Same query shape on a second account from the search results, or
@@ -194,7 +221,7 @@ While remote systems are often involved, the **first and easiest evaluation** is
 
 1. SQL tables related to the plugin/input/timeline/transaction path
 2. Files or artifacts reachable via MCP/task (when applicable)
-3. Input/plugin metadata from MCP `account` (installed plugins, paths) — still not application source code
+3. Installed plugins and paths from the Step 1A `account` result (or one `{ "account_id": "…" }` call if not yet loaded) — still not application source code; do not re-discover via SQL
 
 Ask: does bad/missing data already exist in-account, or does the break appear only after an external sync/input?
 

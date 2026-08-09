@@ -93,7 +93,7 @@ Local code is an **unreliable** source for MCP work because:
 |------|--------|
 | Available MCP tools and parameters | MCP tool schemas (client tool descriptors for the connected server) |
 | Installed plugins, submodules, methods | MCP `account` → `plugins[].metadata` |
-| Schema / tables / indexes / raw SQL | MCP `sql` (`command`: query, describe, indexes, tables, info, histo, transform_eql) |
+| Schema / tables / indexes / raw SQL | MCP `sql` (`command`: query, describe, indexes, tables, info, histo, compile_eql) |
 | Schedule or check async work | MCP `task` (after resolving path/method from `account`) |
 | Analyze / summarize / profile table contents | MCP `analyze` (uses `tables` then `analyze`) |
 | Date histogram on indexed datetime column | MCP `sql` with `command: "histo"` |
@@ -215,7 +215,9 @@ Runs a SELECT built from an EQL object and returns generated SQL plus query rows
 
 - Required: `account_id`, `eql` (query object with `table`, `columns`, `conditions`, etc.)
 
-For EQL **expression fragments** (not a full query), use `sql` with `command: "transform_eql"` instead.
+For EQL **expression fragments** (not a full query), use `sql` with `command: "compile_eql"` instead.
+
+Full EQL syntax, query-object shape, and samples: [e9-eql](../e9-eql/SKILL.md).
 
 ### `sql`
 
@@ -229,7 +231,7 @@ Realtime SQL and schema introspection via `SQLWorker` (replaces the former `work
 | `tables` (default when `sql` omitted) | List/filter table names (`filter`, `includeTemp`, …) |
 | `info` | Driver/dialect info |
 | `histo` | Date histogram on an indexed datetime column |
-| `transform_eql` | EQL expression → SQL fragment (`eql` + `table`) |
+| `compile_eql` | EQL expression → SQL fragment (`eql` + `table`) |
 
 Examples:
 
