@@ -28,7 +28,7 @@ Prefer **`eql`** over raw SQL when the user is describing a structured query (ta
 ## MCP workflow (primary)
 
 1. **Log in** — `mcp_auth` → user completes prompt → `ok` / `user` ([e9-mcp Step 0](../e9-mcp/SKILL.md#step-0--log-in-always-first)).
-2. **Know `account_id`** — from `/e9a`, session scope, or `account` search. Do not guess.
+2. **Know `account_id`** — from `/e9a`, this chat’s session scope, or `account` search. Do not guess; do not read leftover CLI files (`.e9_parameters`, etc.) for scope — ask or suggest `/e9a` instead.
 3. **Optional discovery** — `sql` `tables` / `describe` / `analyze` to learn table and column names before writing EQL.
 4. **Call `eql`**:
 

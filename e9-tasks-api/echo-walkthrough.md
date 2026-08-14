@@ -107,14 +107,14 @@ echo "TASK_RUN_ID=$TASK_RUN_ID"
 
 ## Step 3: Check status
 
-Prefer MCP-parity check:
+Prefer MCP-parity listTasks:
 
 ```bash
 curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d "{\"flow_run_id\": \"$FLOW_RUN_ID\"}" \
-  "$BASE_URL/tasks/check" | jq .
+  "$BASE_URL/tasks/listTasks" | jq .
 ```
 
 Or GET:

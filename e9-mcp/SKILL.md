@@ -195,7 +195,7 @@ Example build by definition path:
 {
   "command": "build",
   "account_id": "test",
-  "definition_path": "local$@engine9/interfaces/channels/email:segments:email_openers_30d"
+  "definition_path": "@engine9/interfaces/channels/email:segments:email_openers_30d"
 }
 ```
 
@@ -283,7 +283,7 @@ Store and replay account-scoped conversations.
 
 When the user's request does not map cleanly to a native tool:
 
-1. **Ensure account scope** — `account_id` must be known (from session `engine9.account_id`, `account` search, or ask the user / suggest `/e9a`). If you only know org/prefix/plugin constraints, call `account` with `command: "search"` first, then pick one `account_id`.
+1. **Ensure account scope** — `account_id` must be known from **this chat session** (`engine9.account_id` after `/e9a`), an explicit user statement, or MCP `account` search when the user asked you to find matching accounts. If missing, **ask the user** or suggest `/e9a <account_id>` and stop — do not read leftover CLI files (`.e9_parameters`, `.e9_config.json5`, etc.) for scope. If you only know org/prefix/plugin constraints and the user wants discovery, call `account` with `command: "search"` first, then confirm which `account_id` to use.
 2. **Call `account`** immediately with `{ "account_id": "<account_id>" }` (plugins command). If this fails, **stop** — do not call `task`.
 3. **Scan the returned plugins** for a matching path/method combination:
    - Each plugin has a `path` (e.g. `@frakture-com/channelbots/RENxtBot`) and `metadata.submodules` with method lists.
@@ -321,11 +321,46 @@ User: "List custom fields on RENxt people for account bfred_lambda_legal"
 }
 ```
 
-5. To poll status, call `task` again with `action: "check"` and `flow_run_id` / `task_run_ids` from the schedule response.
+5. To poll status, call `task` again with `action: "listTasks"` and `flow_run_id` / `task_run_ids` from the schedule response.
 
 ## Account-scoped calls
 
-All tools except `ok`, `plugin_id`, and `input_id` require authentication. Account-scoped tools require an `account_id` the signed-in user can access. Do not guess account ids.
+All tools except `ok`, `plugin_id`, and `input_id` require authentication. Account-scoped tools require an `account_id` the signed-in user can access. Do not guess account ids. Do not infer them from leftover local CLI state (`.e9_parameters` and similar) — that is for the `e9` / `e9a` bin scripts only; for MCP, ask for scope or require `/e9a`.
+
+### Parent / all scope — do not fan out DB access
+
+When the user asks for **all accounts**, **parent** children, or other multi-account remote flow-run views (e.g. list errored remote runs via MCP `task` `action: "list"` → `TaskWorker.listRemoteFlowRuns` / Frakture `POST /flow_runs/filter`):
+
+- Do **not** call `account` plugins (or any account-DB worker) once per child to “check access”.
+- Do **not** use the first id in a parent/all list as a required DB-connected `account_id` before the remote list.
+- Drive the request with remote multi-account filters (`parent_account_id`, `account_ids`, etc.) and status filters. Prefer Prefect `state_type` values (`FAILED`, `RUNNING`, `COMPLETED`). Legacy Mongo statuses are accepted and mapped (see below). Account database connectivity is not a prerequisite for Frakture flow-run list reads.
+- The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `search`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
+
+### `task` action `list` — remote flow runs
+
+MCP `task` with `action: "list"` calls `TaskWorker.listRemoteFlowRuns` (`POST /flow_runs/filter` on the Frakture Task API). Returns **flow runs only** — nested `task_runs` are not included.
+
+MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listTasks` → `listRemoteTasks` (`POST /tasks/listTasks`) for a specific `flow_run_id` / `task_run_ids`.
+
+| Mongo status | Prefect `state_type` |
+|--------------|----------------------|
+| `complete` | `COMPLETED` |
+| `error` | `FAILED` |
+| `in_progress` (or missing) | `RUNNING` |
+
+Prefer Prefect values in `status` (e.g. `["FAILED"]`). Mongo values are mapped before the request is sent.
+
+Example — errored flow runs under a parent:
+
+```json
+{
+  "action": "list",
+  "account_id": "frakture_master",
+  "parent_account_id": "frakture_master",
+  "status": ["FAILED"],
+  "limit": 300
+}
+```
 
 ## Quick validation flow
 
@@ -334,3 +369,4 @@ After [Step 0 — Log in](#step-0--log-in-always-first):
 1. Call `user` to confirm signed-in identity and account access.
 2. If account id is unknown, call `account` with `command: "search"` and the known filters (prefix/parent/plugin). Otherwise set scope via `/e9a <account_id>` or call `account` plugins to cache methods.
 3. Call `search` with a known email to validate account-scoped data access.
+4. For parent/all **remote flow-run** requests, skip step 2–3 per-child probes — use multi-account remote filters only.

@@ -121,7 +121,9 @@ Primary command forms:
 
 Examples: `/e9a test`, `/e9a engine9`, `/e9a parent frakture_master`, `/e9a all`
 
-The CLI bin script (`server/bin/e9a`) writes `.e9_parameters` for subsequent `e9` worker runs. For `parent` and `all`, it resolves account ids from server account config and writes `-a id1,id2,...`. For a single lookup it writes `-a <lookup>` as before.
+The CLI bin script (`server/bin/e9a`) writes `.e9_parameters` for subsequent **local `e9` worker CLI runs only**. For `parent` and `all`, it resolves account ids from server account config and writes `-a id1,id2,...`. For a single lookup it writes `-a <lookup>` as before.
+
+**Do not use leftover CLI files for MCP / Cursor session scope.** Never read `.e9_parameters`, `.e9_config.json5`, or similar local CLI state to infer `account_id` for `/e9` or MCP tools. Those files are often stale from an unrelated terminal session and will silently scope the wrong account. If chat session `engine9.account_id` is unset, **ask the user** (or suggest `/e9a <account_id>`) — do not invent scope from disk.
 
 **Discovering accounts (MCP):** when the user asks which accounts match a prefix, parent, type, tags, or installed plugin, call MCP `account` with `command: "search"` in **one** request — do not use `/e9a all` plus per-account plugin loads. Example: `{ "command": "search", "prefixes": ["authentic"], "plugins": ["acoustic"] }`. Use `/e9a <id>` afterward to pin a single primary account and cache its plugins.
 
@@ -140,8 +142,9 @@ The CLI bin script (`server/bin/e9a`) writes `.e9_parameters` for subsequent `e9
 **`/e9a parent <parent_id>` or `/e9a all`:**
 
 1. Resolve account ids from server account config (active = `disabled` not true; parent mode matches `parent_ids`).
-2. Set `engine9.account_ids` to the full list; set `engine9.account_id` to the first id.
-3. Do not load plugins for every account; report the resolved ids and count.
+2. Set `engine9.account_ids` to the full list; set `engine9.account_id` to the first id (label only — not a DB probe target).
+3. Do **not** load plugins for every account (or for the first id). Do **not** call MCP `account` / open account databases to “check access” across children. Report the resolved ids and count.
+4. For **remote task listing** and other Frakture job-list ops under parent/all scope, see [Multi-account remote tasks](#multi-account-remote-tasks-parent--all) — those calls must not fan out per-child DB access.
 
 ### Session persistence
 
@@ -176,10 +179,21 @@ Account/domain create and secrets: use **e9-account** (`cloud-services/e9-accoun
 
 ### Session and account requirements
 
-- Every MCP call that is account-scoped MUST include `account_id`.
-- If `account_id` is already known in session context, reuse it.
-- If `account_id` is not known, request it from the user after `/e9` before running account-scoped tools, or direct them to `/e9a <account_id>`.
-- Do not guess `account_id`; require explicit user/session context.
+- Every MCP call that is account-scoped MUST include `account_id` **when the op is single-account** (search, sql, eql, plugin schedule, etc.).
+- If `account_id` is already known in **this chat session** (`engine9.account_id` from `/e9a` or an explicit user statement), reuse it.
+- If scope is missing, **ask the user** (single id, `/e9a parent …`, or `/e9a all`) before running scoped tools. Stop and wait — do not proceed with a guessed id.
+- Do not guess `account_id`. Do **not** treat `.e9_parameters`, `.e9_cli_history`, or other leftover local CLI files as session scope.
+
+### Multi-account remote flow runs (parent / all)
+
+Use this for requests like “list current errored tasks”, cross-account job status, or anything backed by MCP `task` `action: "list"` → `TaskWorker.listRemoteFlowRuns` / Frakture `POST /flow_runs/filter` when the user wants **parent** or **all** scope. To list tasks inside one flow run, use `action: "listTasks"` → `TaskWorker.listTasks` / Frakture `POST /tasks/listTasks`.
+
+- Prefer remote multi-account filters: `parent_account_id` for parent scope, or the remote API’s multi-account / auth-scoped listing for all — **not** a loop of per-account MCP calls.
+- Prefer Prefect `state_type` filters (`FAILED`, `RUNNING`, `COMPLETED`, …). Legacy Mongo statuses are mapped: `complete`→`COMPLETED`, `error`→`FAILED`, `in_progress`/missing→`RUNNING`.
+- Do **not** call MCP `account` (plugins) for each child, and do **not** pick `engine9.account_id` (the first resolved id) and probe that account’s database as a gate.
+- Do **not** treat account-DB failures (`Cannot connect to the … database`) as blocking for these ops — remote flow-run listing does not need account DBs.
+- Do **not** require `engine9.plugins` for remote flow-run listing; plugin cache is for single-account plugin method scheduling.
+- Single-account rules (load plugins via `/e9a <id>`, hard-stop on DB connect for `account`/`task` schedule path resolution) still apply when scheduling a plugin method on one account.
 
 ### Recommended `/e9` bootstrap flow
 
@@ -274,4 +288,4 @@ Account: `bfred_lambda_legal` (from `/e9a`)
 }
 ```
 
-Use `action: "check"` with `flow_run_id` and optional `task_run_ids` from the schedule response to poll status.
+Use `action: "listTasks"` with `flow_run_id` and optional `task_run_ids` from the schedule response to poll status.

@@ -9,7 +9,7 @@ Guides for developers and integrators who **call the Engine9 Task API** over HTT
 1. [concepts.md](./concepts.md) — flows, runs, IDs, states, async execution
 2. [authentication.md](./authentication.md) — **API keys (`e9key_…`) and scopes** (`tasks:read` / `tasks:schedule`)
 3. [getting-started.md](./getting-started.md) — environment variables and first calls
-4. [echo-walkthrough.md](./echo-walkthrough.md) — schedule → check Echo walkthrough
+4. [echo-walkthrough.md](./echo-walkthrough.md) — schedule → listTasks Echo walkthrough
 5. [endpoints.md](./endpoints.md) — per-route reference with multiple examples
 6. [errors.md](./errors.md) — HTTP status codes (Prefect links for error semantics only)
 
@@ -34,11 +34,11 @@ Routes live at the **API origin root** — not under `/api/task`:
 ```
 GET  /flows
 POST /tasks/schedule
-POST /tasks/check
+POST /tasks/listTasks
 POST /flow_runs/
 GET  /flow_runs/:id
 GET  /task_runs/:id
 ...
 ```
 
-Primary integration path matches MCP `task`: **schedule** then **check**. `POST /flow_runs/` schedules a published flow slug through the same `scheduleTasks` entry point. Prefect-shaped filter/set_state helpers remain for orchestration tooling.
+Primary integration path matches MCP `task`: **schedule** then **listTasks**. `POST /flow_runs/` schedules a published flow slug through the same `scheduleTasks` entry point. Prefect-shaped filter/set_state helpers remain for orchestration tooling.

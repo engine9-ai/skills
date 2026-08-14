@@ -2,13 +2,13 @@
 
 All routes are on the **API origin root**. Every request requires an **`e9key_` API key** and `X-ENGINE9-ACCOUNT-ID`. See [authentication.md](./authentication.md) for keys and scopes.
 
-Unless noted, responses are JSON. Successful reads return **200**; schedule/check return **200** with the result object.
+Unless noted, responses are JSON. Successful reads return **200**; schedule/listTasks return **200** with the result object.
 
 ---
 
-## Schedule and check (MCP parity)
+## Schedule and listTasks (MCP parity)
 
-These routes mirror the MCP `task` tool and call `TaskWorker.scheduleTasks` / `checkTasks`.
+These routes mirror the MCP `task` tool and call `TaskWorker.scheduleTasks` / `listTasks`.
 
 ### `POST /tasks/schedule`
 
@@ -40,7 +40,7 @@ curl $CURL_TLS -sS -X POST \
 
 ---
 
-### `POST /tasks/check`
+### `POST /tasks/listTasks`
 
 **Scope:** `tasks:read`
 
@@ -49,7 +49,7 @@ curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d '{"flow_run_id": "<id from schedule>"}' \
-  "$BASE_URL/tasks/check"
+  "$BASE_URL/tasks/listTasks"
 ```
 
 | Field | Required | Description |
@@ -186,14 +186,14 @@ curl $CURL_TLS -sS -X POST \
 
 ### `GET /flow_runs/:id`
 
-**Scope:** `tasks:read` — polls via `checkTasks` (default `remote=true`; pass `?remote=false` for local).
+**Scope:** `tasks:read` — polls via `listTasks` (default `remote=true`; pass `?remote=false` for local).
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
   "$BASE_URL/flow_runs/$FLOW_RUN_ID"
 ```
 
-Prefer `POST /tasks/check` for MCP-shaped clients.
+Prefer `POST /tasks/listTasks` for MCP-shaped clients.
 
 ---
 

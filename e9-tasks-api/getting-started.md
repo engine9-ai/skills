@@ -73,7 +73,7 @@ curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d "{\"flow_run_id\": \"$FLOW_RUN_ID\"}" \
-  "$BASE_URL/tasks/check" | jq .
+  "$BASE_URL/tasks/listTasks" | jq .
 ```
 
 Repeat until the run reaches a terminal state. See [concepts — scheduling vs execution](./concepts.md#scheduling-vs-execution).

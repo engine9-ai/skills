@@ -33,7 +33,7 @@ Engine9 API keys require a **non-empty scopes list** at creation. A request is a
 | `people:write` | Core `POST /people` | Inbound people pipeline |
 | `tables:write` | Core `POST /upsert/:table` | Allowlisted table upserts |
 | `data:read` | Core `GET /read/:name` | Configured reads |
-| `tasks:read` | Task API | List/read flows; check run status (`GET /flows*`, `POST /tasks/check`, `GET /flow_runs/:id`, `GET /task_runs/:id`, filters) |
+| `tasks:read` | Task API | List/read flows; check run status (`GET /flows*`, `POST /tasks/listTasks`, `GET /flow_runs/:id`, `GET /task_runs/:id`, filters) |
 | `tasks:schedule` | Task API | Schedule work (`POST /tasks/schedule`, `POST /flow_runs/`, `*/set_state`) |
 | `admin` | Any | All scopes (use this instead of the old `*` wildcard) |
 | `public` | Inbound | Public forms / e9-inbound (`e9publickey_` prefix; same `api_key` table) |
@@ -47,7 +47,7 @@ Prefixes: `e9key_…` for normal scopes; `e9publickey_…` when the key includes
 | Route | Scope |
 |-------|--------|
 | `GET /flows`, `GET /flows/:id`, `POST /flows/filter`, `GET /flows_dir` | `tasks:read` |
-| `POST /tasks/check` | `tasks:read` |
+| `POST /tasks/listTasks` | `tasks:read` |
 | `GET /flow_runs/:id`, `POST /flow_runs/filter` | `tasks:read` |
 | `GET /task_runs/:id`, `POST /task_runs/filter` | `tasks:read` |
 | `POST /tasks/schedule` | `tasks:schedule` |
@@ -140,7 +140,7 @@ curl $CURL_TLS -sS -X POST \
   -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d '{"flow_run_id":"<id from schedule>"}' \
-  "$BASE_URL/tasks/check"
+  "$BASE_URL/tasks/listTasks"
 ```
 
 ### JavaScript (fetch)

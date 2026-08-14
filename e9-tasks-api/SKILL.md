@@ -1,7 +1,7 @@
 ---
 name: e9-tasks-api
 description: >-
-  Use the Engine9 Task API (flows, schedule/check, flow runs) over HTTP with
+  Use the Engine9 Task API (flows, schedule/listTasks, flow runs) over HTTP with
   e9k API keys and task scopes. Scheduling uses the same scheduleTasks path as
   MCP task. MCP itself stays on Firebase OAuth — do not mix credentials.
 ---
@@ -21,26 +21,26 @@ For designing and building flow JSON5 files (developers only), see [e9-dev-tasks
 | [concepts.md](./concepts.md) | Terminology: flows, runs, IDs, async execution |
 | [authentication.md](./authentication.md) | **API keys (`e9key_…`), scopes (`tasks:read` / `tasks:schedule`), account header** |
 | [getting-started.md](./getting-started.md) | First requests in five minutes |
-| [echo-walkthrough.md](./echo-walkthrough.md) | Full Echo schedule → check walkthrough |
+| [echo-walkthrough.md](./echo-walkthrough.md) | Full Echo schedule → listTasks walkthrough |
 | [endpoints.md](./endpoints.md) | Every route with curl examples |
 | [errors.md](./errors.md) | HTTP status codes |
 
 ## Quick reference
 
 - **Base URL:** `https://data.engine9.ai` (production default)
-- Routes at API origin root (`/flows`, `/tasks/schedule`, `/tasks/check`, `/flow_runs/`, … — not under `/api/task`)
+- Routes at API origin root (`/flows`, `/tasks/schedule`, `/tasks/listTasks`, `/flow_runs/`, … — not under `/api/task`)
 - Auth: `Authorization: Bearer e9key_…` (or `X-API-Key`) + `X-ENGINE9-ACCOUNT-ID`
-- Scopes: `tasks:read` (discover/check), `tasks:schedule` (schedule) — see [authentication.md](./authentication.md)
-- Prefer **`POST /tasks/schedule`** and **`POST /tasks/check`** (same as MCP `task`)
+- Scopes: `tasks:read` (discover/listTasks), `tasks:schedule` (schedule) — see [authentication.md](./authentication.md)
+- Prefer **`POST /tasks/schedule`** and **`POST /tasks/listTasks`** (same as MCP `task`)
 - `POST /flow_runs/` with `flow_id` also calls `scheduleTasks` for a published flow slug
-- Does not block until execution finishes — poll check until terminal
+- Does not block until execution finishes — poll listTasks until terminal
 
 ## Typical workflow
 
 1. `GET /flows` — confirm published flow slugs (needs `tasks:read`)
 2. `POST /tasks/schedule` — `{ "path", "method", "options" }` or `{ "flow_path" }` → save `flow_run_id` / `task_run_ids`
    - or `POST /flow_runs/` with `{ "flow_id": "<slug>" }`
-3. `POST /tasks/check` — `{ "flow_run_id": "…" }` until complete
+3. `POST /tasks/listTasks` — `{ "flow_run_id": "…" }` until complete
 4. Retrieve output using your administrator's documented method
 
 Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
@@ -52,7 +52,7 @@ Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
 | GET | `/flows`, `/flows/:id` | `tasks:read` |
 | POST | `/flows/filter` | `tasks:read` |
 | POST | `/tasks/schedule` | `tasks:schedule` |
-| POST | `/tasks/check` | `tasks:read` |
+| POST | `/tasks/listTasks` | `tasks:read` |
 | POST | `/flow_runs/` | `tasks:schedule` |
 | GET | `/flow_runs/:id` | `tasks:read` |
 | POST | `/flow_runs/filter`, `/flow_runs/:id/set_state` | read / schedule |

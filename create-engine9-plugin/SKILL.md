@@ -10,11 +10,17 @@ description: >-
 
 # Create an Engine9 plugin or interface
 
-Engine9 splits shared data contracts (**interfaces**) from deployable integrations (**native plugins**). Both are Node ESM modules resolved at runtime via `local$@engine9/interfaces/...` or `local$@engine9/plugins/...` (see [reference.md](reference.md)).
+Engine9 splits shared data contracts (**interfaces**) from deployable integrations (**native plugins**). Both are Node ESM modules identified by package path (`@engine9/interfaces/...` or `@engine9/plugins/...`). The server resolver loads from node_modules, a monorepo sibling checkout, or an optional install `source` — never via a `local$` path prefix (see [reference.md](reference.md)).
 
 ## Interface package (`@engine9/interfaces/<name>`)
 
-**Deploy once:** The server treats every `@engine9/interfaces/*` path as **unique** (one `plugin` row per account). You cannot turn that off from interface metadata. Native plugins may still allow multiple instances per path unless their metadata sets `unique: true`.
+**Install uniqueness:** `SchemaWorker.install` decides whether a path may have more than one `plugin` row:
+
+1. `metadata.unique` if set — native plugins typically `true`; **`person_custom` is `false`**.
+2. Else packages under `@engine9/interfaces/*` default to **unique** (one row per account).
+3. Else `options.unique` (default `false`) — third-party plugins can be installed multiple times.
+
+When unique, a second install reuses the existing row (or errors if duplicate rows already exist). When not unique, each install without an `id` creates a new row; `person_custom` gets a new `person_custom_<n>_` table prefix.
 
 **Exports:** Only expose the standard feature modules below (and the default aggregate object). Do **not** export non-standard helpers meant only for the server (for example custom `resolveSegmentPluginId`–style functions). If an interface needs special install behavior, it belongs in server code keyed by `plugin.path`, not in the published interface API.
 
@@ -35,6 +41,16 @@ const metadata = {
   schemas: ["schema.js"], // optional hint when schema file name is nonstandard
 };
 ```
+
+### Stacks (`@engine9/interfaces/stacks/<name>`)
+
+A **stack** is a metadata-only interface: `name`, `description`, `include`, `exclude`. Core **PluginWorker** (not SchemaWorker) installs stacks: it deploys the plugin table, records the stack as a plugin row, walks `include`, and refuses any path that an already-installed plugin's `metadata.exclude` forbids. SchemaWorker only installs one plugin's schema/row.
+
+`installStandard({ path })` is a convenience whose default `path` is `defaultStackPath` (typically `@engine9/interfaces/stacks/standard`). Pass a different stack (for example `@engine9/interfaces/stacks/limited-pii`) instead of baking stack names into SchemaWorker. Installing limited-pii and then the standard stack without Server must throw.
+
+Server `accounts.d` `defaultStack` / `stacks[]` are options fed into PluginWorker; they do not live in core.
+
+Reference: `stacks/standard/index.js`, `stacks/limited-pii/index.js`.
 
 ### 1. Schema — tables, columns, indexes, views
 
@@ -158,7 +174,7 @@ Reference: `segment/search.js` (`segment` handler).
 
 ### 9. Segments — saved audience presets
 
-Export keyed definitions: `name`, optional **`universe`** (array of MySQL EQL objects whose rows yield `input_id` values), optional `search` tree (`and` / paths / table+columns). Paths use `local$@engine9/interfaces/...:search:<handler>`.
+Export keyed definitions: `name`, optional **`universe`** (array of MySQL EQL objects whose rows yield `input_id` values), optional `search` tree (`and` / paths / table+columns). Paths use `@engine9/interfaces/...:search:<handler>`.
 
 The deployed `segment.plugin_id` identifies the **owning** package (often the interface). It does not have to match every plugin that supplies data: the **universe** narrows which inputs (possibly across plugins) feed timeline files for the build. Optional empty `pluginId` in search options keeps handlers universe-scoped; set it only when the search handler should filter by a specific data plugin.
 
@@ -253,10 +269,10 @@ Reference: `e9stub/index.js`, `e9workers/index.js`, `e9console/index.js`.
 
 ## Referencing capabilities from config
 
-- **Transform path:** `local$@engine9/interfaces/<pkg>:transforms:<name>` (colon-separated triple).
-- **Search path:** `local$@engine9/interfaces/<pkg>:search:<handler>` (used inside segment JSON).
+- **Transform path:** `@engine9/interfaces/<pkg>:transforms:<name>` (colon-separated triple).
+- **Search path:** `@engine9/interfaces/<pkg>:search:<handler>` (used inside segment JSON).
 
-Server resolution maps `local$@engine9/...` to the checked-out `interfaces/` or `plugins/` tree and loads the module with `createRequire`.
+Server resolution loads `@engine9/...` via `resolvePluginModule` (node_modules → monorepo sibling → optional `source`). Legacy `local$` prefixes are stripped.
 
 ---
 
