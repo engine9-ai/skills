@@ -1,16 +1,16 @@
 ---
 name: timeline
-description: Describes Engine9 timeline file formats (Timeline ID vs Timeline Raw) and how to construct them using only the utilities exported by @engine9/input-tools. Use when creating or transforming timeline-shaped data in plugins or ingestion code.
+description: Describes engine9 timeline file formats (Timeline ID vs Timeline Raw) and how to construct them using only the utilities exported by @engine9/input-tools. Use when creating or transforming timeline-shaped data in plugins or ingestion code.
 ---
 
-## Timeline files in Engine9
+## Timeline files in engine9
 
 Use this skill whenever you are:
 
 - **Designing timeline outputs** from plugins or ingestion code.
-- **Producing files** that will eventually land in an Engine9 `timeline`-style table (for example via server workers).
+- **Producing files** that will eventually land in an engine9 `timeline`-style table (for example via server workers).
 
-Engine9 models person-level activity as **timeline entries**. A timeline entry is a single fact about a person at a point in time (email send, open, click, transaction, signup, etc.), identified by:
+engine9 models person-level activity as **timeline entries**. A timeline entry is a single fact about a person at a point in time (email send, open, click, transaction, signup, etc.), identified by:
 
 - **`ts`**: timestamp of the event.
 - **`entry_type_id`**: numeric type from `TIMELINE_ENTRY_TYPES` (`input-tools/timelineTypes.js`).
@@ -83,7 +83,7 @@ Timeline Raw files:
 
 - **Must not contain** `person_id` (by definition for this skill).
 - **May or may not contain** `id`.
-  - If they do contain an `id`, it is usually an external event ID or `remote_entry_uuid`, not necessarily the final Engine9 `id`.
+  - If they do contain an `id`, it is usually an external event ID or `remote_entry_uuid`, not necessarily the final engine9 `id`.
 - **Should contain enough information** to derive:
   - A timestamp: **`ts`** (or a field that is mapped to `ts`).
   - An entry type: **`entry_type`** (string) or **`entry_type_id`** (numeric).

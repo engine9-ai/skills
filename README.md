@@ -9,7 +9,7 @@ Skills for working with engine9 deployments.
 | Create plugin / interface | [create-engine9-plugin/SKILL.md](./create-engine9-plugin/SKILL.md) | Implement `@engine9/interfaces/*` packages and `@engine9/plugins/*` native plugins |
 | CLI / `/e9`, `/e9a` | [e9-cli/SKILL.md](./e9-cli/SKILL.md) | Connect Cursor to engine9 MCP, account scope, search, task scheduling |
 | MCP tools | [e9-mcp/SKILL.md](./e9-mcp/SKILL.md) | Native MCP tool selection, account discovery, task fallback |
-| EQL | [e9-eql/SKILL.md](./e9-eql/SKILL.md) | Engine9 Query Language — expressions, query objects, MCP `eql` |
+| EQL | [e9-eql/SKILL.md](./e9-eql/SKILL.md) | engine9 Query Language — expressions, query objects, MCP `eql` |
 | DEBUG | [e9-debug/SKILL.md](./e9-debug/SKILL.md) | Interactive issue recreation, scoping, remote isolation, then optional code debug |
 | Task API (REST) | [e9-tasks-api/SKILL.md](./e9-tasks-api/SKILL.md) | Execute flows via REST — list, create runs, poll state |
 | Dev tasks (flows) | [e9-dev-tasks/SKILL.md](./e9-dev-tasks/SKILL.md) | Design/build JSON5 flows, TaskWorker, SQLTaskManager *(developers only)* |

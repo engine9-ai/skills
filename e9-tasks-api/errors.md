@@ -121,6 +121,15 @@ Prefect task run state updates: [Set Task Run State](https://docs.prefect.io/v3/
 
 These mutate existing job lists (GraphQL `job_list_archive` / `job_list_retry`). Ids that cannot be retried (no error or complete job) are omitted from the 200 body.
 
+### `POST /task_runs/filter`
+
+| Status | Cause |
+|--------|-------|
+| 200 with `task_runs: []` | No matches (unknown ids do **not** 404) |
+| 503 | API not fully configured |
+
+Deprecated `POST /tasks/listTasks` still **422**s without `flow_run_id` or `task_run_ids`.
+
 ### `GET /flows` / `POST /flows/filter`
 
 | Status | Cause |

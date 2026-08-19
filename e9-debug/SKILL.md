@@ -1,15 +1,15 @@
 ---
 name: e9-debug
 description: >-
-  Interactive Engine9 debugging with an agent, a developer, and the e9 MCP
+  Interactive engine9 debugging with an agent, a developer, and the e9 MCP
   server(s). Connect MCP first, then categorize and recreate issues from
   interfaces and data (never code first), scope across accounts, isolate
   remote/source systems, then optionally inspect code. Use when the user says
-  DEBUG, /debug, or asks to debug, isolate, or recreate an Engine9 account,
+  DEBUG, /debug, or asks to debug, isolate, or recreate an engine9 account,
   data, UI, MCP, source-code, or attribution issue.
 ---
 
-# Engine9 DEBUG
+# engine9 DEBUG
 
 Interactive debugging across **agent**, **developer**, and **e9 MCP server(s)**. Stages can overlap or repeat. Prefer evidence from MCP (SQL, analyze, search, files) over speculation.
 
@@ -128,7 +128,7 @@ Treat it as source coding / attribution when any of these are in play:
 
 - Attributed revenue / attributed transactions missing, zero, or “wrong” on a message, source code, or report
 - A transaction has a source code but is not credited to an email / SMS / ad
-- A message’s payment link was coded, but Engine9 is not showing that code or that revenue
+- A message’s payment link was coded, but engine9 is not showing that code or that revenue
 - Last-click vs origin numbers, `recommended_message_id`, `source_code_dictionary`, `message_source_code`, `transaction_summary`, or `global_message_summary`
 - Two platforms: messaging (A) vs payments (B), joined only by a shared source-code string
 

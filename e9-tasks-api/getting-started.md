@@ -80,13 +80,17 @@ echo "flow_run=$FLOW_RUN_ID"
 
 ## 5. Poll status
 
+Prefer Prefect `POST /task_runs/filter` (lists the run's tasks; includes `flow_run` when a single `flow_run_id` is sent):
+
 ```bash
 curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d "{\"flow_run_id\": \"$FLOW_RUN_ID\"}" \
-  "$BASE_URL/tasks/listTasks" | jq .
+  "$BASE_URL/task_runs/filter" | jq .
 ```
+
+Deprecated `POST /tasks/listTasks` still accepts the same `flow_run_id` body (it calls the same Frakture `POST /task_runs/filter` surface).
 
 Repeat until the run reaches a terminal state. See [concepts — scheduling vs execution](./concepts.md#scheduling-vs-execution).
 

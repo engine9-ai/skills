@@ -3,7 +3,7 @@ name: e9-mcp
 description: Use the engine9 MCP server — log in first via mcp_auth, MCP-only discovery (never local code), prefer native tools over task, discover plugin methods via account when no native match exists, and invoke task as the catch-all for worker execution.
 ---
 
-# Engine9 MCP
+# engine9 MCP
 
 Use this skill when calling engine9 MCP tools from Cursor or another MCP client. For `/e9` and `/e9a` slash commands and client setup, see [e9-cli](../e9-cli/SKILL.md). For the Prefect-compatible REST Task API, see [e9-tasks-api](../e9-tasks-api/SKILL.md).
 
@@ -31,7 +31,7 @@ After login, if MCP tools still fail, see [e9-cli — troubleshooting](../e9-cli
 
 ## MCP tool errors — stop immediately
 
-Engine9 MCP tools return failures with **`isError: true`** (MCP standard) plus optional **`structuredContent`**:
+engine9 MCP tools return failures with **`isError: true`** (MCP standard) plus optional **`structuredContent`**:
 
 | Field | Meaning |
 |-------|---------|
@@ -50,6 +50,7 @@ When **any** of these is true, **stop the current workflow immediately** and rep
    - `Cannot connect to the <account_id> database`
    - `Not authorized for account`
    - `Authentication required`
+   - `getPluginMetadata` (e.g. `worker.getPluginMetadata is not a function`)
 3. MCP **`account`** did not return parseable `{ ok: true, plugins: [...] }`
 4. **`structuredContent.safeToRetryAutomatically`** is `false`
 
@@ -59,6 +60,7 @@ When **any** of these is true, **stop the current workflow immediately** and rep
 2. Do **not** retry automatically or call downstream tools as a workaround.
 3. Do **not** guess plugin paths or methods when `account` failed — plugin discovery did not succeed.
 4. For **`Cannot connect to the <account_id> database`**: the account database is unreachable; every account-scoped operation will fail the same way until connectivity is restored.
+5. For **`getPluginMetadata`**: plugin metadata loading is broken on this server. **Abort.** That must be fixed before continuing — do not schedule via local `TaskWorker`, SQL `plugin` / `bot_metadata` lookups, guessed `bot_id/submodule` paths, or the REST Task API as a workaround. `account` plugins and `task` schedule both depend on it.
 
 ### Examples
 
@@ -74,7 +76,13 @@ Unauthorized account (`status: unauthorized`):
 Not authorized for account liftoff_hassan
 ```
 
-In both cases: stop. Do not call `task` or other account tools afterward.
+Plugin metadata missing (`account` plugins or `task` schedule):
+
+```
+worker.getPluginMetadata is not a function
+```
+
+In all cases: stop. Do not call `task` or other account tools afterward. For `getPluginMetadata`, tell the user it must be fixed before any plugin discovery or scheduling can continue.
 
 ## MCP-only discovery — do not use local code
 
@@ -285,7 +293,7 @@ Store and replay account-scoped conversations.
 When the user's request does not map cleanly to a native tool:
 
 1. **Ensure account scope** — `account_id` must be known from **this chat session** (`engine9.account_id` after `/e9a`), an explicit user statement, or MCP `account` search when the user asked you to find matching accounts. If missing, **ask the user** or suggest `/e9a <account_id>` and stop — do not read leftover CLI files (`.e9_parameters`, `.e9_config.json5`, etc.) for scope. If you only know org/prefix/plugin constraints and the user wants discovery, call `account` with `command: "search"` first, then confirm which `account_id` to use.
-2. **Call `account`** immediately with `{ "account_id": "<account_id>" }` (plugins command). If this fails, **stop** — do not call `task`.
+2. **Call `account`** immediately with `{ "account_id": "<account_id>" }` (plugins command). If this fails (including `getPluginMetadata`), **stop** — do not call `task`. That metadata load must be fixed before scheduling can continue.
 3. **Scan the returned plugins** for a matching path/method combination:
    - Each plugin has a `path` (e.g. `@frakture-com/channelbots/RENxtBot`) and `metadata.submodules` with method lists.
    - Match user intent to a plugin path + submodule + method name.
@@ -341,7 +349,7 @@ When the user asks for **all accounts**, **parent** children, or other multi-acc
 
 MCP `task` with `action: "list"` calls `TaskWorker.listRemoteFlowRuns` (`POST /flow_runs/filter` on the Frakture Task API). Returns **flow runs only** — nested `task_runs` are not included. Each flow run includes `account_id`, `parent_account_id` (first id in that account's `parent_ids`, or `null`), and `parent_ids`.
 
-MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listTasks` → `listRemoteTasks` (`POST /tasks/listTasks` or Frakture `POST /tasks/check`) for a specific `flow_run_id` / `task_run_ids`. The `flow_run` / `task_run` in that result includes the same `account_id` / `parent_account_id` / `parent_ids` fields.
+MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listRemoteTaskRuns` (`POST /task_runs/filter` on the Frakture Task API) for a specific `flow_run_id` / `task_run_ids`. The MCP action name is unchanged. The result is `{ task_runs: [ … ], flow_run? }` — the same shape as REST `POST /task_runs/filter`. Pass `remote: false` to list local runs via `TaskWorker.listTasks`. Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`.
 
 MCP `task` with `action: "archive"` or `"retry"` bulk-archives or retries remote flow runs / job lists (`TaskWorker.archiveRemoteFlowRuns` / `retryRemoteFlowRuns` → Frakture `POST /flow_runs/archive` and `/flow_runs/retry`). Same Firebase / MCP session and account header as `action: "list"` — **`user_id` is not required** (listing never required it; archive/retry must not either). Do **not** send `e9key_` Task API credentials from Conductor or Cursor MCP. Do **not** ask the user for a Frakture `user_id`.
 

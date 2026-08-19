@@ -1,15 +1,15 @@
 ---
 name: e9-eql
 description: >-
-  Write and run Engine9 Query Language (EQL) — expression fragments and SELECT
+  Write and run engine9 Query Language (EQL) — expression fragments and SELECT
   query objects — primarily via the MCP `eql` tool (and `sql` compile_eql).
   Use when the user mentions EQL, buildSqlFromEQLObject, query objects with
   table/columns/conditions, or asks how to query account data through MCP.
 ---
 
-# Engine9 EQL
+# engine9 EQL
 
-EQL is Engine9’s SQL-like expression language plus a JSON **query object** that compiles to a SELECT. The primary way to submit EQL from Cursor is the engine9 MCP **`eql`** tool.
+EQL is engine9’s SQL-like expression language plus a JSON **query object** that compiles to a SELECT. The primary way to submit EQL from Cursor is the engine9 MCP **`eql`** tool.
 
 For MCP login, account scope, and tool-error handling, follow [e9-mcp](../e9-mcp/SKILL.md). For `/e9` / `/e9a`, see [e9-cli](../e9-cli/SKILL.md).
 

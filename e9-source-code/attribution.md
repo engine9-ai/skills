@@ -36,17 +36,17 @@ Cons:
 
 - Messages and links must actually be coded.
 - Codes must be **unique** and documented. Reusing one code on ten sends makes per-send performance unknowable.
-- Message performance (impressions, clicks, spend) must be joined to conversions afterward — Engine9 calls that join **attribution**.
+- Message performance (impressions, clicks, spend) must be joined to conversions afterward — engine9 calls that join **attribution**.
 
-Engine9 automates generation, parse of legacy codes, attribution, and cross-channel reporting. Native and tag/pixel stats may still be ingested; source-code attribution is the system of record.
+engine9 automates generation, parse of legacy codes, attribution, and cross-channel reporting. Native and tag/pixel stats may still be ingested; source-code attribution is the system of record.
 
 ## Attribution models
 
-Online-ad attribution (Google, Meta) sees opens/clicks **inside one platform**. Engine9 spans platforms and offline, using conversion source codes. Both views can be useful.
+Online-ad attribution (Google, Meta) sees opens/clicks **inside one platform**. engine9 spans platforms and offline, using conversion source codes. Both views can be useful.
 
 Credit assignment is not unique; there is no single right model. Most models try to **span all transactions once**. Crediting a $100 transaction 100% to last click **and** 100% to origin double-counts $200. Fractional models split the amount so totals still equal real revenue.
 
-Engine9 ships **100% last click** and **100% origin**. Use extra models only when they still span each transaction exactly once. Pick the model that matches the question (immediate impact, lifetime value, recurring activation, etc.).
+engine9 ships **100% last click** and **100% origin**. Use extra models only when they still span each transaction exactly once. Pick the model that matches the question (immediate impact, lifetime value, recurring activation, etc.).
 
 ### Worked example
 
@@ -71,7 +71,7 @@ By source code:
 | `EM_CAN_456` | $0 | $0 | $0 |
 | `BAN_456` | $0 | $0 | $0 |
 
-Last click gives Facebook all credit. Origin gives the acquisition email all credit. 50% split shares those two and still ignores the middle clicks. Engine9 does not ship a path-based or time-decay model out of the box.
+Last click gives Facebook all credit. Origin gives the acquisition email all credit. 50% split shares those two and still ignores the middle clicks. engine9 does not ship a path-based or time-decay model out of the box.
 
 ### Last-click slices
 

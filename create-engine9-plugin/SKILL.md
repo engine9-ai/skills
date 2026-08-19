@@ -1,16 +1,16 @@
 ---
 name: create-engine9-plugin
 description: >-
-  Describes how to implement Engine9 interface packages (@engine9/interfaces/*)
+  Describes how to implement engine9 interface packages (@engine9/interfaces/*)
   and native plugins (@engine9/plugins/*): metadata, schemas, transforms with
   bindings, search, segments, metrics, reports, optional ui.console.json5, and worker
   classes. Use when adding or extending plugins, interfaces, transforms, EQL
-  search, or Engine9 deployment schemas.
+  search, or engine9 deployment schemas.
 ---
 
-# Create an Engine9 plugin or interface
+# Create an engine9 plugin or interface
 
-Engine9 splits shared data contracts (**interfaces**) from deployable integrations (**native plugins**). Both are Node ESM modules identified by package path (`@engine9/interfaces/...` or `@engine9/plugins/...`). The server resolver loads from node_modules, a monorepo sibling checkout, or an optional install `source` — never via a `local$` path prefix (see [reference.md](reference.md)).
+engine9 splits shared data contracts (**interfaces**) from deployable integrations (**native plugins**). Both are Node ESM modules identified by package path (`@engine9/interfaces/...` or `@engine9/plugins/...`). The server resolver loads from node_modules, a monorepo sibling checkout, or an optional install `source` — never via a `local$` path prefix (see [reference.md](reference.md)).
 
 ## Interface package (`@engine9/interfaces/<name>`)
 

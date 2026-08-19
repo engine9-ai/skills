@@ -1,8 +1,8 @@
 # Authentication and scopes
 
-The Task API authenticates with **Engine9 API keys** (`e9key_…`) — the same layer-1 keys used by `@engine9/core` site APIs. Keys are stored (hashed) in the **account database** and scoped to that account.
+The Task API authenticates with **engine9 API keys** (`e9key_…`) — the same layer-1 keys used by `@engine9/core` site APIs. Keys are stored (hashed) in the **account database** and scoped to that account.
 
-MCP (`POST /mcp`) continues to use Firebase / Engine9 OAuth / `localdev`. Do **not** send Firebase ID tokens to the Task API.
+MCP (`POST /mcp`) continues to use Firebase / engine9 OAuth / `localdev`. Do **not** send Firebase ID tokens to the Task API.
 
 ## Required headers
 
@@ -26,14 +26,14 @@ X-ENGINE9-ACCOUNT-ID: acme
 
 ## Authentication and scopes (canonical)
 
-Engine9 API keys require a **non-empty scopes list** at creation. A request is allowed when the key includes that route’s scope, or includes `admin`. Empty scopes deny access (they do **not** mean “all access”).
+engine9 API keys require a **non-empty scopes list** at creation. A request is allowed when the key includes that route’s scope, or includes `admin`. Empty scopes deny access (they do **not** mean “all access”).
 
 | Scope | Used by | Allows |
 |-------|---------|--------|
 | `people:write` | Core `POST /people` | Inbound people pipeline |
 | `tables:write` | Core `POST /upsert/:table` | Allowlisted table upserts |
 | `data:read` | Core `GET /read/:name` | Configured reads |
-| `tasks:read` | Task API | List/read flows; check run status (`GET /flows*`, `POST /tasks/listTasks`, `GET /flow_runs/:id`, `GET /task_runs/:id`, filters) |
+| `tasks:read` | Task API | List/read flows; check run status (`GET /flows*`, `POST /task_runs/filter`, `GET /flow_runs/:id`, `GET /task_runs/:id`; deprecated `POST /tasks/listTasks`) |
 | `tasks:schedule` | Task API | Schedule work (`POST /tasks/schedule`, `POST /flow_runs/`, `*/set_state`) |
 | `admin` | Any | All scopes (use this instead of the old `*` wildcard) |
 | `public` | Inbound | Public forms / e9-inbound (`e9publickey_` prefix; same `api_key` table) |
@@ -47,7 +47,7 @@ Prefixes: `e9key_…` for normal scopes; `e9publickey_…` when the key includes
 | Route | Scope |
 |-------|--------|
 | `GET /flows`, `GET /flows/:id`, `POST /flows/filter`, `GET /flows_dir` | `tasks:read` |
-| `POST /tasks/listTasks` | `tasks:read` |
+| `POST /tasks/listTasks` (deprecated) | `tasks:read` |
 | `GET /flow_runs/:id`, `POST /flow_runs/filter` | `tasks:read` |
 | `POST /flow_runs/archive`, `POST /flow_runs/retry` | `tasks:schedule` |
 | `GET /task_runs/:id`, `POST /task_runs/filter` | `tasks:read` |
@@ -67,7 +67,7 @@ tasks:read,tasks:schedule
 
 Your administrator creates a key against the account database (plaintext shown once).
 
-**Engine9 server (preferred):** `SQLWorker.createApiKey` deploys `api_key` if missing, then inserts the hashed key. Account id comes from `accounts.d` (same as `e9 sqlworker ok`):
+**engine9 server (preferred):** `SQLWorker.createApiKey` deploys `api_key` if missing, then inserts the hashed key. Account id comes from `accounts.d` (same as `e9 sqlworker ok`):
 
 ```bash
 e9 sqlworker createApiKey -a <account_id> \
@@ -103,7 +103,7 @@ curl -sS -H "Authorization: Bearer $ENGINE9_API_KEY" \
   https://data.engine9.ai/flow_runs/filter
 ```
 
-Pass `"remote": false` for local runs. `POST /tasks/listTasks` needs a `flow_run_id` from schedule.
+Pass `"remote": false` for local runs. `POST /task_runs/filter` with `{ "flow_run_id": "…" }` lists that run's tasks (deprecated `POST /tasks/listTasks` still requires a `flow_run_id`).
 
 ## curl variables
 
@@ -173,13 +173,15 @@ curl $CURL_TLS -sS -X POST \
 
 ### Check status
 
+Prefer Prefect `POST /task_runs/filter`. Deprecated `POST /tasks/listTasks` still accepts the same `flow_run_id` body.
+
 ```bash
 curl $CURL_TLS -sS -X POST \
   -H "$AUTH" \
   -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d '{"flow_run_id":"<id from schedule>"}' \
-  "$BASE_URL/tasks/listTasks"
+  "$BASE_URL/task_runs/filter"
 ```
 
 ### JavaScript (fetch)
@@ -233,5 +235,5 @@ Send `Content-Type: application/json` on all `POST` requests with a body.
 
 ## Related
 
-- Canonical three-layer auth map and key stores: `@engine9/core` README (`Engine9 auth map`)
+- Canonical three-layer auth map and key stores: `@engine9/core` README (`engine9 auth map`)
 - Administrator Task API setup: `server/api/task/docs/admin/authentication.md`

@@ -107,17 +107,17 @@ echo "TASK_RUN_ID=$TASK_RUN_ID"
 
 ## Step 3: Check status
 
-Prefer MCP-parity listTasks:
+Prefer Prefect `POST /task_runs/filter` (lists tasks for the run):
 
 ```bash
 curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d "{\"flow_run_id\": \"$FLOW_RUN_ID\"}" \
-  "$BASE_URL/tasks/listTasks" | jq .
+  "$BASE_URL/task_runs/filter" | jq .
 ```
 
-Or GET:
+Deprecated `POST /tasks/listTasks` still works with the same body (same Frakture `POST /task_runs/filter` surface). Or GET the flow run:
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
@@ -154,7 +154,7 @@ curl $CURL_TLS -sS -X POST \
     \"task_runs\": { \"flow_run_id\": { \"eq_\": \"$FLOW_RUN_ID\" } },
     \"limit\": 10
   }" \
-  "$BASE_URL/task_runs/filter" | jq '[.[] | {id, task_key, state_type}]'
+  "$BASE_URL/task_runs/filter" | jq '[.task_runs[] | {id, task_key, state_type}]'
 ```
 
 ### Read one task run

@@ -1,6 +1,6 @@
 # Task API — end-user documentation
 
-Guides for developers and integrators who **call the Engine9 Task API** over HTTP. The default production base URL is **`https://data.engine9.ai`**; your administrator may provide a different host for staging or local use.
+Guides for developers and integrators who **call the engine9 Task API** over HTTP. The default production base URL is **`https://data.engine9.ai`**; your administrator may provide a different host for staging or local use.
 
 **Cursor agents:** start with [SKILL.md](./SKILL.md).
 
@@ -9,7 +9,7 @@ Guides for developers and integrators who **call the Engine9 Task API** over HTT
 1. [concepts.md](./concepts.md) — flows, runs, IDs, states, async execution
 2. [authentication.md](./authentication.md) — **API keys (`e9key_…`) and scopes** (`tasks:read` / `tasks:schedule`)
 3. [getting-started.md](./getting-started.md) — environment variables and first calls
-4. [echo-walkthrough.md](./echo-walkthrough.md) — schedule → listTasks Echo walkthrough
+4. [echo-walkthrough.md](./echo-walkthrough.md) — schedule → task_runs/filter Echo walkthrough
 5. [endpoints.md](./endpoints.md) — per-route reference with multiple examples
 6. [errors.md](./errors.md) — HTTP status codes (Prefect links for error semantics only)
 
@@ -34,11 +34,12 @@ Routes live at the **API origin root** — not under `/api/task`:
 ```
 GET  /flows
 POST /tasks/schedule
-POST /tasks/listTasks
+POST /task_runs/filter
+POST /tasks/listTasks   (deprecated)
 POST /flow_runs/
 GET  /flow_runs/:id
 GET  /task_runs/:id
 ...
 ```
 
-Primary integration path matches MCP `task`: **schedule** then **listTasks**. `POST /flow_runs/` schedules a published flow slug through the same `scheduleTasks` entry point. Prefect-shaped filter/set_state helpers remain for orchestration tooling.
+Primary integration path: **schedule** (`POST /tasks/schedule` or `POST /flow_runs/`) then **list** via Prefect `POST /task_runs/filter`. `POST /tasks/listTasks` remains as a deprecated HTTP poll alias. MCP `task` `action: "listTasks"` uses the same Frakture `POST /task_runs/filter` surface.

@@ -1,13 +1,13 @@
 ---
 name: e9-dev-tasks
 description: >-
-  Design and build Engine9 flow definitions (JSON5), TaskWorker lifecycle, and
+  Design and build engine9 flow definitions (JSON5), TaskWorker lifecycle, and
   SQLTaskManager execution. For engine9 developers only — do not use when calling
   the Task API as an integrator or end user.
 disable-model-invocation: true
 ---
 
-# Engine9 Dev Tasks (flow authoring)
+# engine9 Dev Tasks (flow authoring)
 
 **Developer skill only.** Do not load this skill unless you are in a development context — authoring JSON5 flows, working in `engine9/server`, debugging TaskWorker/SQLTaskManager, or extending the task execution pipeline.
 

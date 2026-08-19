@@ -9,9 +9,9 @@ Use this skill whenever you are:
 
 - **Writing or modifying jobs** that call `InputWorker.id`, `InputWorker.idFiles`, `InputWorker.idAllFiles`, `InputWorker.loadTimeline`, `InputWorker.loadTimelineTables`, `InputWorker.loadTimelineFile`, or `InputWorker.loadTimelineDetails`.
 - **Debugging how timeline data flows** from raw input files into the `timeline` and plugin-specific detail tables.
-- **Designing new plugins or pipelines** that should produce Engine9-compatible timeline files.
+- **Designing new plugins or pipelines** that should produce engine9-compatible timeline files.
 
-Engine9 server workers treat timeline data in two main stages:
+engine9 server workers treat timeline data in two main stages:
 
 - **Raw input → Timeline ID files** (with `person_id` and `id`) – handled primarily by `InputWorker.id` and `PersonWorker.loadPeople`.
 - **Timeline ID files → database tables** – handled by `InputWorker.loadTimeline`, `loadTimelineTables`, `loadTimelineFile`, and `loadTimelineDetails`, often with help from `SQLiteWorker` and `ClickHouseWorker`.

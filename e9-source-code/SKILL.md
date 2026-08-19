@@ -1,7 +1,7 @@
 ---
 name: e9-source-code
 description: >-
-  Explains Engine9 source codes: the dictionary, auto-parsing and labels,
+  Explains engine9 source codes: the dictionary, auto-parsing and labels,
   last-click vs origin attribution, overrides, and source-code conversion
   tracking. Walks the last-click pipeline (outbound link → payment platform →
   message load → transaction load → attribution → global_message_summary). Use
@@ -11,9 +11,9 @@ description: >-
   issue.
 ---
 
-# Engine9 source codes
+# engine9 source codes
 
-Engine9 indexes source codes from messages (email, ads, SMS, mail), transactions, and CRM person origins into a single **Source Code Dictionary**. Performance metrics, parsed elements, and attribution all hang off that hub.
+engine9 indexes source codes from messages (email, ads, SMS, mail), transactions, and CRM person origins into a single **Source Code Dictionary**. Performance metrics, parsed elements, and attribution all hang off that hub.
 
 Assume each source code is unique to a single message. In reporting, **source code** and **message** are interchangeable when that uniqueness holds.
 
@@ -37,7 +37,7 @@ Attributed transaction counts and revenue appear on both `global_message_summary
 
 ## Last-click vs origin
 
-Engine9 reports both models out of the box. They answer different questions; do not mix them into one “value” number.
+engine9 reports both models out of the box. They answer different questions; do not mix them into one “value” number.
 
 **Last click** (immediate message): the source code on the transaction, usually carried through the payment form URL. Match that string to a message’s outbound-link source codes. Those matches are **attributed transactions** / **attributed revenue**.
 
@@ -79,7 +79,7 @@ No other link parameter is treated as a source code.
 
 ## Auto-parsing
 
-Formats extract elements from the full source-code string. Multiple formats per account are normal (legacy vs new, mail vs digital). During parse, Engine9 tries formats in order; the matching format and extracted elements land on the dictionary. Humans can override any non-revenue element afterward.
+Formats extract elements from the full source-code string. Multiple formats per account are normal (legacy vs new, mail vs digital). During parse, engine9 tries formats in order; the matching format and extracted elements land on the dictionary. Humans can override any non-revenue element afterward.
 
 Robot-friendly codes have at least one of:
 
@@ -96,7 +96,7 @@ Optional human names for parsed values (`EM` → `Email`). Configured in Source 
 
 - Exposed as `{element}_label` (e.g. `source_code_channel_label`).
 - Unmapped values pass through (`XY` → `XY`).
-- Hierarchical: Engine9 defaults, then agency, then account. A more specific entry wins. Built-in example: `FB` → `Facebook`.
+- Hierarchical: engine9 defaults, then agency, then account. A more specific entry wins. Built-in example: `FB` → `Facebook`.
 
 Same tokens with different spellings (`FB`, `ADS`, `Facebook`, `12`) should share a label so reports roll up as one channel.
 
@@ -111,7 +111,7 @@ Revenue (bot-calculated from attribution; may differ from a message system’s n
 | Origin people / origin revenue | First-touch people and their lifetime transactions |
 | Refunds | Not netted from revenue unless marked |
 
-Cost (Engine9 does not auto-compute ROI; the reporting environment does):
+Cost (engine9 does not auto-compute ROI; the reporting environment does):
 
 | Field | Meaning |
 |-------|---------|
@@ -145,7 +145,7 @@ Details and method comparison: [attribution.md](attribution.md).
 
 ## Last-click pipeline debug (A–F)
 
-Use this when [e9-debug](../e9-debug/SKILL.md) classifies a **Source coding / attribution** issue (wrong/zero attributed revenue, message not credited, source code missing in Engine9). Do **not** inspect application code until DEBUG Step 4 is approved.
+Use this when [e9-debug](../e9-debug/SKILL.md) classifies a **Source coding / attribution** issue (wrong/zero attributed revenue, message not credited, source code missing in engine9). Do **not** inspect application code until DEBUG Step 4 is approved.
 
 The usual last-click path is two platforms joined by one string. Walk **A → F in order**. Stop at the first gap; later steps are meaningless until that gap is explained. `DESCRIBE` tables first if column names differ. Filter to **one** example source code (here `SC_EG_123`) and LIMIT probes.
 
@@ -165,7 +165,7 @@ Exact string match matters (`SC_EG_123` ≠ `sc_eg_123` ≠ `SC_EG_123 `). Recog
 
 A message (email / SMS / online ad) goes out with a payment URL whose query string includes `SC_EG_123` on a recognized param (`src`, `refcode`, `source`, …).
 
-**Check:** the live link, message content, or ad URL — not Engine9 SQL. If the send never included a recognized param, Engine9 cannot attribute later.
+**Check:** the live link, message content, or ad URL — not engine9 SQL. If the send never included a recognized param, engine9 cannot attribute later.
 
 **Gap:** coding on the messaging platform (wrong/missing param, truncated code, reused code). Remote issue.
 
@@ -173,13 +173,13 @@ A message (email / SMS / online ad) goes out with a payment URL whose query stri
 
 The person completes a transaction on a **separate** payment platform. That platform’s transaction record stores source code `SC_EG_123`.
 
-**Check:** the payment processor / CRM transaction (source / tracking / UTM field). Engine9 can only load what that system stored.
+**Check:** the payment processor / CRM transaction (source / tracking / UTM field). engine9 can only load what that system stored.
 
 **Gap:** code dropped or rewritten between click and payment (form default, different param name, landing-page strip). Remote issue.
 
 ### C) Message load → dictionary and `message_source_code`
 
-Engine9 loads messages from platform A. `SC_EG_123` is inserted into `source_code_dictionary` **and** `message_source_code`.
+engine9 loads messages from platform A. `SC_EG_123` is inserted into `source_code_dictionary` **and** `message_source_code`.
 
 ```sql
 SELECT source_code_id, source_code
@@ -199,7 +199,7 @@ LIMIT 20;
 
 ### D) Transaction load → `transaction_summary`
 
-Engine9 loads transactions from platform B. `SC_EG_123` appears on that row in `transaction_summary`.
+engine9 loads transactions from platform B. `SC_EG_123` appears on that row in `transaction_summary`.
 
 **Note:** On `transaction_summary`, the last-click code is `transaction_source_code` — not a column named `source_code`. That value can be overridden per transaction via `transaction_source_code_override` (which then becomes the live `transaction_source_code`). Filter and join on `transaction_source_code`; if a row’s code looks wrong, check the override before blaming the payment-platform mapping.
 

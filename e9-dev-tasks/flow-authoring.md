@@ -14,7 +14,7 @@ Flow run JSON is written under `TASK_API_RUNS_DIR` (default: OS temp `task-api-r
 
 ## Naming (Prefect-style)
 
-Prefect uses **snake_case** for variables, parameters, and task names in Python (PEP 8), and Prefect **Variables** names are restricted to lowercase letters, digits, and underscores. Engine9 flow JSON follows the same style: `task_key`, `worker_path`, `worker_method`, `flow_run_id`, etc. Use snake_case in flow files and in `options` keys unless a specific worker method documents otherwise.
+Prefect uses **snake_case** for variables, parameters, and task names in Python (PEP 8), and Prefect **Variables** names are restricted to lowercase letters, digits, and underscores. engine9 flow JSON follows the same style: `task_key`, `worker_path`, `worker_method`, `flow_run_id`, etc. Use snake_case in flow files and in `options` keys unless a specific worker method documents otherwise.
 
 ## Flow file format (JSON5)
 

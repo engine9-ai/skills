@@ -54,9 +54,11 @@ A **flow run** is one execution of a flow. Created with `POST /flow_runs/`.
 
 One flow run typically creates **one task run per task** in the flow definition.
 
+List those task runs with **`POST /task_runs/filter`** (`{ "flow_run_id": "…" }` or Prefect `task_runs.flow_run_id.eq_`). That is the Prefect listing surface.
+
 ### Account parent
 
-`parent_account_id` and `parent_ids` are looked up from the **account** document (`account.parent_ids`), not stored on the job list / job. They are included on `POST /tasks/check`, `POST /tasks/listTasks`, `GET /flow_runs/:id`, `GET /task_runs/:id`, `POST /flow_runs/filter`, and `POST /task_runs/filter`.
+`parent_account_id` and `parent_ids` are looked up from the **account** document (`account.parent_ids`), not stored on the job list / job. They are included on `GET /flow_runs/:id`, `GET /task_runs/:id`, `POST /flow_runs/filter`, and `POST /task_runs/filter`.
 
 | Field | Meaning |
 |-------|---------|

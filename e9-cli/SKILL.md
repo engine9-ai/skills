@@ -3,7 +3,7 @@ name: e9-cli
 description: Connect Cursor to engine9 MCP — log in first via mcp_auth, set account scope with /e9a, and handle /e9 command-style interactions including person search and task scheduling.
 ---
 
-# Engine9 CLI
+# engine9 CLI
 
 Use this skill when setting up or troubleshooting an MCP connection to an engine9 server from Cursor (or another MCP client), and when handling `/e9` and `/e9a` command-style requests.
 
@@ -50,7 +50,7 @@ When handling `/e9` or `/e9a` requests, **do not read local workspace code** to 
 
 ## Server endpoint and startup
 
-Engine9 MCP is exposed at `POST /mcp` (with `GET /mcp/health` for health checks).
+engine9 MCP is exposed at `POST /mcp` (with `GET /mcp/health` for health checks).
 
 **Production default:** `https://data.engine9.ai/mcp` (same host as the Task API and `/data` routes).
 
@@ -186,7 +186,7 @@ Account/domain create and secrets: use **e9-account** (`cloud-services/e9-accoun
 
 ### Multi-account remote flow runs (parent / all)
 
-Use this for requests like “list current errored tasks”, cross-account job status, or anything backed by MCP `task` `action: "list"` → `TaskWorker.listRemoteFlowRuns` / Frakture `POST /flow_runs/filter` when the user wants **parent** or **all** scope. To list tasks inside one flow run, use `action: "listTasks"` → `TaskWorker.listTasks` / Frakture `POST /tasks/listTasks`.
+Use this for requests like “list current errored tasks”, cross-account job status, or anything backed by MCP `task` `action: "list"` → `TaskWorker.listRemoteFlowRuns` / Frakture `POST /flow_runs/filter` when the user wants **parent** or **all** scope. To list tasks inside one flow run, use MCP `action: "listTasks"` → `TaskWorker.listRemoteTaskRuns` / Frakture `POST /task_runs/filter` (or REST `POST /task_runs/filter`).
 
 - Prefer remote multi-account filters: `parent_account_id` for parent scope, or the remote API’s multi-account / auth-scoped listing for all — **not** a loop of per-account MCP calls.
 - Prefer Prefect `state_type` filters (`FAILED`, `RUNNING`, `COMPLETED`, …). Legacy Mongo statuses are mapped: `complete`→`COMPLETED`, `error`→`FAILED`, `in_progress`/missing→`RUNNING`.
@@ -288,4 +288,4 @@ Account: `bfred_lambda_legal` (from `/e9a`)
 }
 ```
 
-Use `action: "listTasks"` with `flow_run_id` and optional `task_run_ids` from the schedule response to poll status.
+Use `action: "listTasks"` with `flow_run_id` and optional `task_run_ids` from the schedule response to poll status. That MCP action calls Frakture `POST /task_runs/filter`.

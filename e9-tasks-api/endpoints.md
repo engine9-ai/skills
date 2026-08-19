@@ -2,13 +2,13 @@
 
 All routes are on the **API origin root**. Every request requires an **`e9key_` API key** and `X-ENGINE9-ACCOUNT-ID`. See [authentication.md](./authentication.md) for keys and scopes.
 
-Unless noted, responses are JSON. Successful reads return **200**; schedule/listTasks return **200** with the result object.
+Unless noted, responses are JSON. Successful reads return **200**; schedule returns **200** with the result object. `POST /task_runs/filter` returns `{ ok: true, task_runs: [ … ] }`.
 
 ---
 
-## Schedule and listTasks (MCP parity)
+## Schedule (MCP parity)
 
-These routes mirror the MCP `task` tool and call `TaskWorker.scheduleTasks` / `listTasks`.
+`POST /tasks/schedule` mirrors the MCP `task` tool and calls `TaskWorker.scheduleTasks`. Listing belongs on Prefect `POST /task_runs/filter`. Engine9 still accepts deprecated `POST /tasks/listTasks` as an alias that calls the same Frakture `POST /task_runs/filter` surface.
 
 ### `POST /tasks/schedule`
 
@@ -37,31 +37,6 @@ curl $CURL_TLS -sS -X POST \
 | `remote` | No | Default `true` (remote job-list); `false` for local workers |
 
 **Response:** `{ ok: true, action: "schedule", result: { flow_run_id, task_run_ids, … } }`
-
----
-
-### `POST /tasks/listTasks`
-
-**Scope:** `tasks:read`
-
-```bash
-curl $CURL_TLS -sS -X POST \
-  -H "$AUTH" -H "$ACCOUNT" \
-  -H "Content-Type: application/json" \
-  -d '{"flow_run_id": "<id from schedule>"}' \
-  "$BASE_URL/tasks/listTasks"
-```
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `flow_run_id` | One of | From schedule response |
-| `task_run_ids` | One of | Optional with `flow_run_id` |
-| `remote` | No | Default `true` |
-| `flow_path` | No | Routing hint when `remote` is false |
-
-Frakture also accepts this body on `POST /tasks/check` (same handler).
-
-Each `flow_run` / `task_run` in the result includes `account_id`, `parent_account_id` (first id in the account's `parent_ids`, or `null`), and `parent_ids`. Same fields as `POST /flow_runs/filter`. See [concepts.md](./concepts.md#flow-run-instance).
 
 ---
 
@@ -197,7 +172,7 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
   "$BASE_URL/flow_runs/$FLOW_RUN_ID"
 ```
 
-Prefer `POST /tasks/listTasks` for MCP-shaped clients. The `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids` (see [concepts.md](./concepts.md#flow-run-instance)).
+Prefer `POST /task_runs/filter` with `{ "flow_run_id": "…" }` to list that run's tasks (Prefect).
 
 ---
 
@@ -233,7 +208,7 @@ curl $CURL_TLS -sS -X POST \
   "$BASE_URL/flow_runs/filter"
 ```
 
-`POST /tasks/listTasks` lists tasks inside one run and needs a `flow_run_id` (`remote` also defaults to `true` there). This filter lists runs for the account.
+`POST /task_runs/filter` lists task runs (optionally scoped to a `flow_run_id`). `POST /flow_runs/filter` lists flow runs for the account.
 
 **Recent runs for a flow:**
 
@@ -484,7 +459,23 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
 
 ### `POST /task_runs/filter`
 
-**All task runs for a flow run:**
+Prefect **Read Task Runs**. Primary way to list or poll task runs. Returns `{ ok: true, task_runs: [ … ] }`. When a **single** `flow_run_id` is supplied, also includes `flow_run` (extension so one call can poll the parent run).
+
+**Default `remote: true`** — lists Frakture / remote jobs via `TaskWorker.listRemoteTaskRuns`. Pass `"remote": false` (or `?remote=false`) for local SQL task runs.
+
+Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`.
+
+**All task runs for a flow run** (listTasks replacement):
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d "{\"flow_run_id\": \"$FLOW_RUN_ID\"}" \
+  "$BASE_URL/task_runs/filter"
+```
+
+Prefect-shaped equivalent:
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -492,13 +483,28 @@ curl $CURL_TLS -sS -X POST \
   -H "Content-Type: application/json" \
   -d "{
     \"task_runs\": { \"flow_run_id\": { \"eq_\": \"$FLOW_RUN_ID\" } },
-    \"limit\": 20,
-    \"offset\": 0
+    \"sort\": \"ID_DESC\"
   }" \
   "$BASE_URL/task_runs/filter"
 ```
 
-**Paginate:**
+**Filter by ids or state:**
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task_runs": {
+      "id": { "any_": ["job-id-1"] },
+      "state": { "type": { "any_": ["FAILED"] } }
+    },
+    "limit": 50
+  }' \
+  "$BASE_URL/task_runs/filter"
+```
+
+**Paginate** (no flow-run scope — recent task runs for the account):
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -508,7 +514,18 @@ curl $CURL_TLS -sS -X POST \
   "$BASE_URL/task_runs/filter"
 ```
 
-Without `flow_run_id` filter, returns recent task runs for your account (up to `limit`).
+| Field | Description |
+|-------|-------------|
+| `flow_run_id` / `task_runs.flow_run_id.eq_` / `flow_runs.id.eq_` | Scope to one flow run (also sets `flow_run` on the response) |
+| `task_run_ids` / `task_run_id` / `task_runs.id.any_` | Restrict to those task run ids |
+| `status` / `task_runs.state.type.any_` | Prefect state types (`FAILED`, `RUNNING`, `COMPLETED`, …) |
+| `account_ids` / `parent_account_id` | Same multi-account filters as flow-run listing |
+| `limit` | Default **500** when scoped to a flow/task run id, otherwise **20** (max 500) |
+| `offset` | Default 0 |
+| `sort` | `ID_DESC` (default) or `ID_ASC` |
+| `remote` | Default `true` (Frakture). Pass `false` for local SQL task runs |
+
+Does **not** 404 when ids are missing — unmatched filters return `task_runs: []` (`flow_run: null` if a single unknown `flow_run_id` was sent).
 
 ---
 
@@ -552,8 +569,9 @@ curl ... "$BASE_URL/flows"
 # 2. Create
 curl -X POST ... -d '{"flow_id":"echo-flow"}' "$BASE_URL/flow_runs/"
 
-# 3. Poll
-curl ... "$BASE_URL/task_runs/$TASK_RUN_ID"
+# 3. Poll (lists tasks for the run; includes flow_run)
+curl -X POST ... -d '{"flow_run_id":"'"$FLOW_RUN_ID"'"}' \
+  "$BASE_URL/task_runs/filter"
 
 # 4. Optional: list history
 curl -X POST ... -d '{"flow_runs":{"flow_id":{"eq_":"echo-flow"}},"limit":10}' \
