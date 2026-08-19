@@ -32,6 +32,18 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows" | jq .
 
 **Success:** HTTP 200, JSON array (may be `[]` if no flows published yet).
 
+List recent **remote** runs for the account (`tasks:read`; `remote` defaults to `true`; no `flow_run_id`):
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{"limit":20}' \
+  "$BASE_URL/flow_runs/filter"
+```
+
+Pass `"remote": false` to list local runs instead.
+
 **401/403?** Check key, account header, and scopes — [authentication.md](./authentication.md).
 
 ## 4. Schedule work (MCP-parity)

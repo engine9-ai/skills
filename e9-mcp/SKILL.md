@@ -120,6 +120,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Compute plugin or input UUIDs | `plugin_id`, `input_id` |
 | Chat / conversation history | `chat` |
 | Run a plugin worker method | `task` (after discovery via `account` plugins) |
+| Archive or retry flow runs / job lists | `task` with `action: "archive"` or `"retry"` |
 
 `task` is the **catch-all** for behaviors that do not have a native MCP call. Do not reach for `task` when a native tool already covers the request with equal or better fidelity.
 
@@ -338,9 +339,11 @@ When the user asks for **all accounts**, **parent** children, or other multi-acc
 
 ### `task` action `list` — remote flow runs
 
-MCP `task` with `action: "list"` calls `TaskWorker.listRemoteFlowRuns` (`POST /flow_runs/filter` on the Frakture Task API). Returns **flow runs only** — nested `task_runs` are not included.
+MCP `task` with `action: "list"` calls `TaskWorker.listRemoteFlowRuns` (`POST /flow_runs/filter` on the Frakture Task API). Returns **flow runs only** — nested `task_runs` are not included. Each flow run includes `account_id`, `parent_account_id` (first id in that account's `parent_ids`, or `null`), and `parent_ids`.
 
-MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listTasks` → `listRemoteTasks` (`POST /tasks/listTasks`) for a specific `flow_run_id` / `task_run_ids`.
+MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listTasks` → `listRemoteTasks` (`POST /tasks/listTasks` or Frakture `POST /tasks/check`) for a specific `flow_run_id` / `task_run_ids`. The `flow_run` / `task_run` in that result includes the same `account_id` / `parent_account_id` / `parent_ids` fields.
+
+MCP `task` with `action: "archive"` or `"retry"` bulk-archives or retries remote flow runs / job lists (`TaskWorker.archiveRemoteFlowRuns` / `retryRemoteFlowRuns` → Frakture `POST /flow_runs/archive` and `/flow_runs/retry`). Same Firebase / MCP session and account header as `action: "list"` — **`user_id` is not required** (listing never required it; archive/retry must not either). Do **not** send `e9key_` Task API credentials from Conductor or Cursor MCP. Do **not** ask the user for a Frakture `user_id`.
 
 | Mongo status | Prefect `state_type` |
 |--------------|----------------------|

@@ -14,7 +14,7 @@ Engine9 splits shared data contracts (**interfaces**) from deployable integratio
 
 ## Interface package (`@engine9/interfaces/<name>`)
 
-**Install uniqueness:** `SchemaWorker.install` decides whether a path may have more than one `plugin` row:
+**Install uniqueness:** `PluginWorker.install` decides whether a path may have more than one `plugin` row:
 
 1. `metadata.unique` if set — native plugins typically `true`; **`person_custom` is `false`**.
 2. Else packages under `@engine9/interfaces/*` default to **unique** (one row per account).

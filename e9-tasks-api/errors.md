@@ -112,6 +112,15 @@ curl $CURL_TLS -sS -X POST \
 
 Prefect task run state updates: [Set Task Run State](https://docs.prefect.io/v3/api-ref/rest-api/server/task-runs/set-task-run-state/).
 
+### `POST /flow_runs/archive` / `POST /flow_runs/retry`
+
+| Status | Cause |
+|--------|-------|
+| 422 | Body missing `flow_run_ids`, `_ids`, `job_list_ids`, or `flow_runs.id` |
+| 503 | Archive/retry not configured on the server |
+
+These mutate existing job lists (GraphQL `job_list_archive` / `job_list_retry`). Ids that cannot be retried (no error or complete job) are omitted from the 200 body.
+
 ### `GET /flows` / `POST /flows/filter`
 
 | Status | Cause |

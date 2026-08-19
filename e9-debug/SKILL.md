@@ -6,7 +6,7 @@ description: >-
   interfaces and data (never code first), scope across accounts, isolate
   remote/source systems, then optionally inspect code. Use when the user says
   DEBUG, /debug, or asks to debug, isolate, or recreate an Engine9 account,
-  data, UI, or MCP issue.
+  data, UI, MCP, source-code, or attribution issue.
 ---
 
 # Engine9 DEBUG
@@ -34,6 +34,7 @@ DEBUG Progress:
 - [ ] Step 0: e9 MCP connected and authenticated
 - [ ] Step 1: Categorize and recreate (no code)
 - [ ] Step 1 output: Bug summary handed off / confirmed
+- [ ] Source-code / attribution A–F (if that category)
 - [ ] Step 2: Multi-account scoping
 - [ ] Step 3: Remote / source system isolation
 - [ ] Step 4: Code debugging (user-approved)
@@ -117,9 +118,21 @@ Confirm access via MCP `user` or ask the developer if needed. Pick **one** match
 
 ### B) Isolate the broad category
 
-Examples: People, Transactions, Messaging, Timeline, Segments, Auth, Plugins/Inputs, UI/Console, Other.
+Examples: People, Transactions, Messaging, **Source coding / attribution**, Timeline, Segments, Auth, Plugins/Inputs, UI/Console, Other.
 
 Ask or infer from the report; state the category explicitly in the bug summary.
+
+**Source coding and attribution are a common class.** If the report matches the signals below, set category to **Source coding / attribution** and follow [e9-source-code last-click pipeline debug](../e9-source-code/SKILL.md#last-click-pipeline-debug-af) before generic SQL recreation. Do not inspect application code for this path until Step 4.
+
+Treat it as source coding / attribution when any of these are in play:
+
+- Attributed revenue / attributed transactions missing, zero, or “wrong” on a message, source code, or report
+- A transaction has a source code but is not credited to an email / SMS / ad
+- A message’s payment link was coded, but Engine9 is not showing that code or that revenue
+- Last-click vs origin numbers, `recommended_message_id`, `source_code_dictionary`, `message_source_code`, `transaction_summary`, or `global_message_summary`
+- Two platforms: messaging (A) vs payments (B), joined only by a shared source-code string
+
+If it is that category: pick one example source code (and one transaction / message if known), then walk A→F in [e9-source-code](../e9-source-code/SKILL.md) and **stop at the first gap**. Record that gap in the bug summary. Steps 2–3 still apply (other accounts; messaging platform vs payment platform as two remotes).
 
 ### C) UI bug vs data issue
 
@@ -151,6 +164,8 @@ Use the information provided and the e9 `sql` endpoint to compose queries to rec
 
 Prefer: filtered SELECTs with LIMIT, time-bounded windows, `analyze` for profiles, then targeted aggregates.
 
+If Step 1B classified **Source coding / attribution**, the recreation SQL is the A–F probes in [e9-source-code](../e9-source-code/SKILL.md#last-click-pipeline-debug-af) — not a generic table dump.
+
 ### Step 1 output — Bug summary
 
 Produce a handoff-ready summary another agent or human can use without redoing discovery:
@@ -176,7 +191,12 @@ Produce a handoff-ready summary another agent or human can use without redoing d
 - Plugins loaded: from `account` plugins command (count / key paths) …
 
 ## Category
-[People | Transactions | Messaging | Timeline | Segments | …]
+[People | Transactions | Messaging | Source coding / attribution | Timeline | Segments | …]
+
+## Source-code pipeline (if Source coding / attribution)
+- source_code: …
+- Pipeline gap: [A outbound link | B payment platform | C message load | D transaction load | E attribution | F summary stats | none / N/A]
+- Evidence: …
 
 ## Kind
 [UI | Data | Both / unclear]
@@ -224,6 +244,8 @@ While remote systems are often involved, the **first and easiest evaluation** is
 3. Installed plugins and paths from the Step 1A `account` result (or one `{ "account_id": "…" }` call if not yet loaded) — still not application source code; do not re-discover via SQL
 
 Ask: does bad/missing data already exist in-account, or does the break appear only after an external sync/input?
+
+For **Source coding / attribution**, there are usually **two** remotes: the messaging platform that sent the payment link (pipeline A/C) and the payment platform that recorded the transaction (pipeline B/D). A gap at A or B is remote; C–F are in-account. See [e9-source-code A–F](../e9-source-code/SKILL.md#last-click-pipeline-debug-af).
 
 Record: in-account data issue / likely remote-source / inconclusive — with evidence.
 

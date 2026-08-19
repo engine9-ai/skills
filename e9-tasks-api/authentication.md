@@ -49,10 +49,13 @@ Prefixes: `e9key_…` for normal scopes; `e9publickey_…` when the key includes
 | `GET /flows`, `GET /flows/:id`, `POST /flows/filter`, `GET /flows_dir` | `tasks:read` |
 | `POST /tasks/listTasks` | `tasks:read` |
 | `GET /flow_runs/:id`, `POST /flow_runs/filter` | `tasks:read` |
+| `POST /flow_runs/archive`, `POST /flow_runs/retry` | `tasks:schedule` |
 | `GET /task_runs/:id`, `POST /task_runs/filter` | `tasks:read` |
 | `POST /tasks/schedule` | `tasks:schedule` |
 | `POST /flow_runs/` | `tasks:schedule` |
 | `POST /flow_runs/:id/set_state`, `POST /task_runs/:id/set_state` | `tasks:schedule` |
+
+`POST /flow_runs/archive` and `POST /flow_runs/retry` use the **same identity as listing** (`POST /flow_runs/filter`). A Frakture `user_id` is **not** a request field and is **not** required — MCP/server-token callers that can list can archive/retry.
 
 For a partner that discovers flows and schedules jobs, issue a key with both:
 
@@ -62,7 +65,18 @@ tasks:read,tasks:schedule
 
 ## Obtaining a key
 
-Your administrator creates a key against the account database (plaintext shown once):
+Your administrator creates a key against the account database (plaintext shown once).
+
+**Engine9 server (preferred):** `SQLWorker.createApiKey` deploys `api_key` if missing, then inserts the hashed key. Account id comes from `accounts.d` (same as `e9 sqlworker ok`):
+
+```bash
+e9 sqlworker createApiKey -a <account_id> \
+  --name partner-tasks --scopes tasks:read,tasks:schedule
+```
+
+Do not schedule this method via MCP `task` — the plaintext key must not land in task run output.
+
+**Core-only / D1 sites** (no `e9` CLI):
 
 ```bash
 npx e9core create-api-key \
@@ -78,6 +92,18 @@ npx e9core create-api-key --print-sql --name "partner-tasks" --scopes tasks:read
 ```
 
 Keys are SHA-256 hashed at rest (`api_key` table). Rotate with `SqlApiKeyStore.rotate({ id })` (or recreate + revoke).
+
+After creating a key, list recent **remote** runs for that account (`tasks:read`; `remote` defaults to `true`; no `flow_run_id` required):
+
+```bash
+curl -sS -H "Authorization: Bearer $ENGINE9_API_KEY" \
+  -H "X-ENGINE9-ACCOUNT-ID: <account_id>" \
+  -H "Content-Type: application/json" \
+  -d '{"limit":20}' \
+  https://data.engine9.ai/flow_runs/filter
+```
+
+Pass `"remote": false` for local runs. `POST /tasks/listTasks` needs a `flow_run_id` from schedule.
 
 ## curl variables
 
@@ -103,6 +129,19 @@ curl $CURL_TLS -sS \
   -H "$AUTH" \
   -H "$ACCOUNT" \
   "$BASE_URL/flows"
+```
+
+### List recent runs
+
+Defaults to **remote** Frakture jobs (`TaskWorker.listRemoteFlowRuns`). Pass `"remote": false` for local runs.
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" \
+  -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{"limit":20}' \
+  "$BASE_URL/flow_runs/filter"
 ```
 
 ### Schedule (MCP-parity)
@@ -178,7 +217,7 @@ print(flows.json())
 
 ## Verifying credentials
 
-A successful `GET /flows` returns **200** with a JSON array (possibly empty).
+A successful `GET /flows` returns **200** with a JSON array (possibly empty). A successful `POST /flow_runs/filter` with `{"limit":20}` returns **200** with recent runs for the account in `X-ENGINE9-ACCOUNT-ID`.
 
 | Status | Likely cause |
 |--------|----------------|

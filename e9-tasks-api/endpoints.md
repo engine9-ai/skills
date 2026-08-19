@@ -59,6 +59,10 @@ curl $CURL_TLS -sS -X POST \
 | `remote` | No | Default `true` |
 | `flow_path` | No | Routing hint when `remote` is false |
 
+Frakture also accepts this body on `POST /tasks/check` (same handler).
+
+Each `flow_run` / `task_run` in the result includes `account_id`, `parent_account_id` (first id in the account's `parent_ids`, or `null`), and `parent_ids`. Same fields as `POST /flow_runs/filter`. See [concepts.md](./concepts.md#flow-run-instance).
+
 ---
 
 ## Flows
@@ -193,11 +197,43 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
   "$BASE_URL/flow_runs/$FLOW_RUN_ID"
 ```
 
-Prefer `POST /tasks/listTasks` for MCP-shaped clients.
+Prefer `POST /tasks/listTasks` for MCP-shaped clients. The `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids` (see [concepts.md](./concepts.md#flow-run-instance)).
 
 ---
 
 ### `POST /flow_runs/filter`
+
+**Scope:** `tasks:read`
+
+**Default `remote: true`** — lists Frakture / remote job-list runs via `TaskWorker.listRemoteFlowRuns` (same as MCP `task` `action: "list"`). Pass `"remote": false` (or `?remote=false`) for local SQL/file runs.
+
+**List recent remote runs for this account** (after creating a key; no `flow_run_id` required):
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{"limit":20}' \
+  "$BASE_URL/flow_runs/filter"
+```
+
+One-liner:
+
+```bash
+curl -sS -H "Authorization: Bearer $ENGINE9_API_KEY" -H "X-ENGINE9-ACCOUNT-ID: <account_id>" -H "Content-Type: application/json" -d '{"limit":20}' https://data.engine9.ai/flow_runs/filter
+```
+
+Local listing:
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{"limit":20,"remote":false}' \
+  "$BASE_URL/flow_runs/filter"
+```
+
+`POST /tasks/listTasks` lists tasks inside one run and needs a `flow_run_id` (`remote` also defaults to `true` there). This filter lists runs for the account.
 
 **Recent runs for a flow:**
 
@@ -230,6 +266,148 @@ curl $CURL_TLS -sS -X POST \
 ```
 
 `flow_id.eq_` matches slug **or** flow UUID.
+
+**Filter by parent account:**
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parent_account_id": "frakture_master",
+    "status": ["FAILED"],
+    "limit": 50
+  }' \
+  "$BASE_URL/flow_runs/filter"
+```
+
+Use `"parent_account_id": "none"` for accounts with no parent. Prefect-shaped alias: `"flow_runs": { "parent_account_id": { "eq_": "frakture_master" } }`.
+
+**Filter by `completed_since`:**
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "completed_since": true,
+    "limit": 50
+  }' \
+  "$BASE_URL/flow_runs/filter"
+```
+
+Prefect-shaped alias: `"flow_runs": { "completed_since": { "eq_": true } }`.
+
+Each flow run in the response includes `account_id`, **`parent_account_id`**, **`parent_ids`**, `completed_since`, `last_completed`, and `dataflow_last_completed`.
+
+- `parent_account_id` is the first id in the owning account's `parent_ids` (`null` if the account has no parent).
+- `parent_ids` is the full array from the account document (an account can have more than one parent).
+- The `parent_account_id` **filter** matches accounts that contain that id anywhere in `parent_ids` (or `'none'` for accounts with no parent). It is the same field name as the response, but the filter is "has this parent" rather than "this is the first parent".
+
+Computation: `completed_since` is `true` when `dataflow_last_completed` exists and `last_completed` is missing or **≤** `dataflow_last_completed` (equal counts as true). See [concepts.md](./concepts.md#completed-since).
+
+---
+
+### `POST /flow_runs/archive`
+
+**Scope:** `tasks:schedule`
+
+**Auth (same as listing):** `user_id` is **not** required. MCP / server-token callers that can `POST /flow_runs/filter` can archive with the same credentials (`X-ENGINE9-ACCOUNT-ID` or `X-Account-Id` + bearer / `X-E9-Server-Token`).
+
+Bulk-archive flow runs (job lists). Same operation as the GraphQL mutation `job_list_archive(_ids: [ID]!)`.
+
+Ids may be sent as Prefect `flow_run_ids`, GraphQL `_ids`, or `flow_runs.id.any_`.
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flow_run_ids": ["6a82fed56813e4e2a0a0144e"]
+  }' \
+  "$BASE_URL/flow_runs/archive"
+```
+
+**GraphQL-shaped body** (same ids the UI sends to `job_list_archive`):
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "_ids": ["6a82fed56813e4e2a0a0144e"]
+  }' \
+  "$BASE_URL/flow_runs/archive"
+```
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "action": "archive",
+  "flow_run_ids": ["6a82fed56813e4e2a0a0144e"],
+  "_ids": ["6a82fed56813e4e2a0a0144e"]
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `flow_run_ids` | One of | Array of flow run / job list ids |
+| `_ids` | One of | GraphQL alias for the same ids |
+| `job_list_ids` | One of | Legacy job-list alias |
+| `flow_runs.id.any_` / `eq_` | One of | Prefect-style filter shape |
+
+**422** — none of those id fields provided. **503** — archive is not configured on the server.
+
+---
+
+### `POST /flow_runs/retry`
+
+**Scope:** `tasks:schedule`
+
+**Auth (same as listing):** `user_id` is **not** required.
+
+Bulk-retry flow runs (job lists). Same operation as the GraphQL mutation `job_list_retry(_ids: [ID]!)`.
+
+For each id, the server retries the job in `error` status, or the last `complete` job if there is no error job. Ids that cannot be retried are omitted from the response.
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flow_run_ids": ["6a82fed56813e4e2a0a0144e"]
+  }' \
+  "$BASE_URL/flow_runs/retry"
+```
+
+**GraphQL-shaped body** (same ids the UI sends to `job_list_retry`):
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "_ids": ["6a82fed56813e4e2a0a0144e"]
+  }' \
+  "$BASE_URL/flow_runs/retry"
+```
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "action": "retry",
+  "flow_run_ids": ["6a82fed56813e4e2a0a0144e"],
+  "_ids": ["6a82fed56813e4e2a0a0144e"]
+}
+```
+
+Body fields match `POST /flow_runs/archive`.
+
+**422** — none of those id fields provided. **503** — retry is not configured on the server.
 
 ---
 
@@ -380,6 +558,14 @@ curl ... "$BASE_URL/task_runs/$TASK_RUN_ID"
 # 4. Optional: list history
 curl -X POST ... -d '{"flow_runs":{"flow_id":{"eq_":"echo-flow"}},"limit":10}' \
   "$BASE_URL/flow_runs/filter"
+
+# 5. Optional: retry failed runs (GraphQL job_list_retry)
+curl -X POST ... -d '{"flow_run_ids":["'"$FLOW_RUN_ID"'"]}' \
+  "$BASE_URL/flow_runs/retry"
+
+# 6. Optional: archive finished runs (GraphQL job_list_archive)
+curl -X POST ... -d '{"_ids":["'"$FLOW_RUN_ID"'"]}' \
+  "$BASE_URL/flow_runs/archive"
 ```
 
 Full narrative: [echo-walkthrough.md](./echo-walkthrough.md).

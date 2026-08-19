@@ -16,3 +16,4 @@ Skills for working with engine9 deployments.
 | Timeline (server) | [e9-timeline/SKILL.md](./e9-timeline/SKILL.md) | InputWorker timeline ID/raw files and database loading |
 | Timeline (input-tools) | [inputs/timeline/SKILL.md](./inputs/timeline/SKILL.md) | Timeline ID vs Raw file shapes and `@engine9/input-tools` helpers |
 | Transaction mapping | [inputs/transaction-mapping/SKILL.md](./inputs/transaction-mapping/SKILL.md) | Map 3rd-party payment data into the Transaction schema |
+| Source codes | [e9-source-code/SKILL.md](./e9-source-code/SKILL.md) | Dictionary, parsing, labels, last-click vs origin attribution, overrides |

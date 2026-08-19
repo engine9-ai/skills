@@ -41,12 +41,47 @@ A **flow run** is one execution of a flow. Created with `POST /flow_runs/`.
 | Field | Meaning |
 |-------|---------|
 | `id` | UUID for this run — save it immediately |
+| `account_id` | Account that owns this run |
+| `parent_account_id` | First id in that account's `parent_ids` (`null` if the account has no parent) |
+| `parent_ids` | Full `parent_ids` array from the account document |
 | `flow_slug` | Which flow template (e.g. `echo-flow`) |
 | `flow_id` | UUID associated with the slug |
 | `state_type` | Overall run state (`SCHEDULED`, `RUNNING`, `COMPLETED`, `FAILED`, …) |
+| `last_completed` | When this flow run (job list) last finished |
+| `dataflow_last_completed` | When any run of the same dataflow last finished |
+| `completed_since` | See [Completed since](#completed-since) |
 | `task_runs` | Array of task runs created with this flow run (on create response) |
 
 One flow run typically creates **one task run per task** in the flow definition.
+
+### Account parent
+
+`parent_account_id` and `parent_ids` are looked up from the **account** document (`account.parent_ids`), not stored on the job list / job. They are included on `POST /tasks/check`, `POST /tasks/listTasks`, `GET /flow_runs/:id`, `GET /task_runs/:id`, `POST /flow_runs/filter`, and `POST /task_runs/filter`.
+
+| Field | Meaning |
+|-------|---------|
+| `parent_account_id` | First id in `account.parent_ids`, or `null` if the account has no parent |
+| `parent_ids` | Full `parent_ids` array (an account can have more than one parent) |
+
+`POST /flow_runs/filter` also accepts `parent_account_id` as a **filter** (default **remote** listing via Frakture): it selects runs whose account contains that id anywhere in `parent_ids` (`"none"` = accounts with no parent). That filter is "has this parent", which is not always the same as "this is the first parent" on the response. Pass `"remote": false` to list local runs instead.
+
+### Completed since
+
+`completed_since` is **computed from timestamps**, not from the stored Mongo flag `dataflow_completed_since_last_update`.
+
+It is `true` when `dataflow_last_completed` exists and this flow run either never completed, or completed **at or before** that dataflow completion:
+
+| Condition | `completed_since` |
+|-----------|-------------------|
+| No `dataflow_last_completed` | `false` |
+| This run never completed (`last_completed` missing) and the dataflow has completed | `true` |
+| `last_completed` **equals** `dataflow_last_completed` (this is the current completion) | **`true`** |
+| `last_completed` **before** `dataflow_last_completed` (a later run finished) | `true` |
+| `last_completed` **after** `dataflow_last_completed` | `false` |
+
+Use it on `GET /flow_runs/:id` / `POST /tasks/check` responses, or as a filter on `POST /flow_runs/filter` (`{ "completed_since": true }`). Same field as GraphQL `JobListQuery.completed_since`.
+
+Do **not** treat a stored `dataflow_completed_since_last_update` value as the source of truth.
 
 ## Task (step within a flow)
 
@@ -64,6 +99,9 @@ A **task run** is one execution of one task within a flow run.
 |-------|---------|
 | `id` | UUID — use in `GET /task_runs/:id` |
 | `flow_run_id` | Parent flow run UUID |
+| `account_id` | Account that owns this run |
+| `parent_account_id` | First id in that account's `parent_ids` (`null` if none) |
+| `parent_ids` | Full `parent_ids` array from the account document |
 | `task_key` | Which step in the flow |
 | `state_type` | `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, … |
 | `task_inputs` | Inputs for this run (including `options` passed to the step) |
