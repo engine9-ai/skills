@@ -6,7 +6,8 @@ description: >-
   interfaces and data (never code first), scope across accounts, isolate
   remote/source systems, then optionally inspect code. Use when the user says
   DEBUG, /debug, or asks to debug, isolate, or recreate an engine9 account,
-  data, UI, MCP, source-code, attribution, person_id, or identity issue.
+  data, UI, MCP, source-code, attribution, person_id, identity, timeline,
+  or engagement issue.
 ---
 
 # engine9 DEBUG
@@ -36,6 +37,7 @@ DEBUG Progress:
 - [ ] Step 1 output: Bug summary handed off / confirmed
 - [ ] Source-code / attribution A–F (if that category)
 - [ ] Person identity lookup (if People / duplicates)
+- [ ] Timeline missing-event A–F (if Timeline / engagement)
 - [ ] Step 2: Multi-account scoping
 - [ ] Step 3: Remote / source system isolation
 - [ ] Step 4: Code debugging (user-approved)
@@ -147,6 +149,18 @@ Treat it as person identity when any of these are in play:
 
 If it is that category: pick **one** example email, phone, or `remote_person_id` and use the debug SQL in [e9-person-id](../e9-person-id/SKILL.md#debugging-identity). Do not inspect application code until Step 4.
 
+**Timeline / missing activity is a common class.** If the report is a blank or wrong person Timeline tab, missing send/open/click, or an engagement segment that should include someone, set category to **Timeline** and follow [e9-timeline missing-event debug](../e9-timeline/SKILL.md#missing-event-debug-af). Do not inspect application code for this path until Step 4.
+
+Treat it as timeline when any of these are in play:
+
+- Person Timeline tab empty, incomplete, or showing the wrong events
+- Expected `EMAIL_OPEN` / `EMAIL_CLICK` / `EMAIL_SEND` / `SMS_*` / form event missing in engine9
+- Engagement audience (openers/clickers) missing a person who should qualify
+- `timeline`, `input`, `person_entry_summary`, or plugin `*_timeline_detail` / `*_summary`
+- Event exists in the ESP/CRM but not in engine9 (or the reverse)
+
+If it is that category: pick **one** person and **one** expected event (type + message/input if known), then walk A→F in [e9-timeline](../e9-timeline/SKILL.md) and **stop at the first gap**. Wrong `person_id` (duplicates, unmatched email) is People, not Timeline — switch to [e9-person-id](../e9-person-id/SKILL.md). Revenue on the wrong message is Source coding / attribution.
+
 ### C) UI bug vs data issue
 
 Determine whether the bug is:
@@ -178,6 +192,8 @@ Use the information provided and the e9 `sql` endpoint to compose queries to rec
 Prefer: filtered SELECTs with LIMIT, time-bounded windows, `analyze` for profiles, then targeted aggregates.
 
 If Step 1B classified **Source coding / attribution**, the recreation SQL is the A–F probes in [e9-source-code](../e9-source-code/SKILL.md#last-click-pipeline-debug-af) — not a generic table dump.
+
+If Step 1B classified **Timeline**, the recreation SQL is the A–F probes in [e9-timeline](../e9-timeline/SKILL.md#missing-event-debug-af) — not a generic `timeline` dump.
 
 ### Step 1 output — Bug summary
 
@@ -215,6 +231,13 @@ Produce a handoff-ready summary another agent or human can use without redoing d
 - example key: [email | phone | remote_person_id] …
 - identifier_store_kind: [compact | person_identifier / legacy | unknown]
 - person_id(s) found: …
+- Evidence: …
+
+## Timeline (if Timeline / missing events)
+- example person_id / email: …
+- expected entry_type: …
+- expected input / message: …
+- Pipeline gap: [A person | B input | C timeline row | D entry type | E input join | F detail/segment | none / N/A]
 - Evidence: …
 
 ## Kind
@@ -265,6 +288,8 @@ While remote systems are often involved, the **first and easiest evaluation** is
 Ask: does bad/missing data already exist in-account, or does the break appear only after an external sync/input?
 
 For **Source coding / attribution**, there are usually **two** remotes: the messaging platform that sent the payment link (pipeline A/C) and the payment platform that recorded the transaction (pipeline B/D). A gap at A or B is remote; C–F are in-account. See [e9-source-code A–F](../e9-source-code/SKILL.md#last-click-pipeline-debug-af).
+
+For **Timeline**, the remote is usually the ESP / SMS / CRM / form platform that recorded the event. A gap at C when the vendor also lacks the event is remote; person missing is People ([e9-person-id](../e9-person-id/SKILL.md)); input never loaded is Plugins/Inputs. See [e9-timeline A–F](../e9-timeline/SKILL.md#missing-event-debug-af).
 
 Record: in-account data issue / likely remote-source / inconclusive — with evidence.
 

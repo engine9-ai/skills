@@ -13,8 +13,9 @@ Skills for working with engine9 deployments.
 | DEBUG | [e9-debug/SKILL.md](./e9-debug/SKILL.md) | Interactive issue recreation, scoping, remote isolation, then optional code debug |
 | Task API (REST) | [e9-tasks-api/SKILL.md](./e9-tasks-api/SKILL.md) | Execute flows via REST — list, create runs, poll state |
 | Dev tasks (flows) | [e9-dev-tasks/SKILL.md](./e9-dev-tasks/SKILL.md) | Design/build JSON5 flows, TaskWorker, SQLTaskManager *(developers only)* |
-| Timeline (server) | [e9-timeline/SKILL.md](./e9-timeline/SKILL.md) | InputWorker timeline ID/raw files and database loading |
-| Timeline (input-tools) | [inputs/timeline/SKILL.md](./inputs/timeline/SKILL.md) | Timeline ID vs Raw file shapes and `@engine9/input-tools` helpers |
+| Timeline | [e9-timeline/SKILL.md](./e9-timeline/SKILL.md) | Person activity log, entry types, querying, missing-event debug |
+| Timeline loading *(developers)* | [e9-timeline/loading.md](./e9-timeline/loading.md) | InputWorker ID files → `timeline` / detail tables |
+| Timeline files *(plugins)* | [inputs/timeline/SKILL.md](./inputs/timeline/SKILL.md) | Timeline ID vs Raw file shapes and `@engine9/input-tools` helpers |
 | Transaction mapping | [inputs/transaction-mapping/SKILL.md](./inputs/transaction-mapping/SKILL.md) | Map 3rd-party payment data into the Transaction schema |
 | Source codes | [e9-source-code/SKILL.md](./e9-source-code/SKILL.md) | Dictionary, parsing, labels, last-click vs origin attribution, overrides |
 | Person identity (`person_id`) | [e9-person-id/SKILL.md](./e9-person-id/SKILL.md) | How a quality `person_id` is chosen from email, phone, `remote_person_id`; `person_id_*` vs `person_identifier`; old `person_metadata` / `person_id_int` model |

@@ -10,6 +10,8 @@ Use this skill whenever you are:
 - **Designing timeline outputs** from plugins or ingestion code.
 - **Producing files** that will eventually land in an engine9 `timeline`-style table (for example via server workers).
 
+Product model, entry types, querying, and missing-event debug: [e9-timeline](../../e9-timeline/SKILL.md). Server load jobs: [e9-timeline/loading.md](../../e9-timeline/loading.md).
+
 engine9 models person-level activity as **timeline entries**. A timeline entry is a single fact about a person at a point in time (email send, open, click, transaction, signup, etc.), identified by:
 
 - **`ts`**: timestamp of the event.

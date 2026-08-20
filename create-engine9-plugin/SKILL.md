@@ -26,6 +26,7 @@ When unique, a second install reuses the existing row (or errors if duplicate ro
 
 Typical layout:
 
+- `README.md` — **required** human-readable documentation for the package (see [Document with README.md](#document-with-readmemd)).
 - `index.js` — exports `metadata`, optional `schema`, `transforms`, `search`, `segments`, `metrics`, `reports`, default aggregate object.
 - `schema.js` — `export default { tables: [...] }`.
 - `transforms/inbound/…`, `transforms/outbound/…` — pipeline steps.
@@ -41,6 +42,36 @@ const metadata = {
   schemas: ["schema.js"], // optional hint when schema file name is nonstandard
 };
 ```
+
+### Document with README.md
+
+`README.md` in the package root is the standard way to document an interface or native plugin. Do not rely on `segments.js` comments, `metadata.description`, or skill files as the audience-facing contract.
+
+Use this outline and omit sections that do not apply:
+
+```markdown
+# Human Name Interface
+
+One-paragraph purpose. Name the package path and `metadata.dependencies`.
+
+## Data Model
+## Inbound Behavior
+## Outbound Behavior
+## Search
+## Segments
+## Metrics
+## Reports and UI
+```
+
+**Segments (required when `segments.js` exists).** Document every predefined audience in prose a person who does not read the code can use:
+
+- Display **name** and export **key**
+- **Definition path** (`@engine9/interfaces/<pkg>:segments:<key>`)
+- **Who is included** and **who is excluded**
+- **How it is built** (search handler or table condition)
+- **Universe**, if any (which inputs/messages the build may see). Write `None` when membership is current table state.
+
+Reference: `person_email/README.md`, `person_phone/README.md`, `transaction/core/README.md`, `channels/email/README.md`.
 
 ### Stacks (`@engine9/interfaces/stacks/<name>`)
 
@@ -174,9 +205,11 @@ Reference: `segment/search.js` (`segment` handler).
 
 ### 9. Segments — saved audience presets
 
-Export keyed definitions: `name`, optional **`universe`** (array of MySQL EQL objects whose rows yield `input_id` values), optional `search` tree (`and` / paths / table+columns). Paths use `@engine9/interfaces/...:search:<handler>`.
+Export **keyed** definitions (an object map, not an array): `name`, optional **`universe`** (array of MySQL EQL objects whose rows yield `input_id` values), optional `search` tree (`and` / paths / table+columns). Paths use `@engine9/interfaces/...:search:<handler>`. The export key is the last segment of `definition_path` (`<package>:segments:<key>`).
 
 The deployed `segment.plugin_id` identifies the **owning** package (often the interface). It does not have to match every plugin that supplies data: the **universe** narrows which inputs (possibly across plugins) feed timeline files for the build. Optional empty `pluginId` in search options keeps handlers universe-scoped; set it only when the search handler should filter by a specific data plugin.
+
+Document each key in the package `README.md` (who is in, who is out, search, universe). Do not leave membership rules only in `segments.js`.
 
 Reference: `person_email/segments.js`, `transaction/core/segments.js`, `channels/email/segments.js` (`universe` + engagement search).
 
@@ -222,6 +255,8 @@ Reference: `person_email/index.js` (full feature set), `segment/index.js`, `time
 ---
 
 ## Native plugin (`@engine9/plugins/<prefix>`)
+
+Native plugins use the same `README.md` convention as interfaces (purpose, install, schema, workers, and any predefined segments).
 
 Implements integration behavior and optional account setup. Convention:
 
@@ -278,12 +313,14 @@ Server resolution loads `@engine9/...` via `resolvePluginModule` (node_modules �
 
 ## Checklist
 
+- [ ] Package `README.md` documents purpose, data model, behavior, and every predefined segment in prose.
 - [ ] Interface `index.js` exposes only the standard exports (no server-only hooks or extra named APIs).
 - [ ] `metadata.name` matches package scope (`@engine9/interfaces/...` or display name for native).
 - [ ] `dependencies` declare other interfaces/schemas required at deploy time.
 - [ ] `schema.js` indexes cover join/filter columns; primary keys set where needed.
 - [ ] Transforms that mutate SQL state use correct `bindings.path` (`sql.tables.upsert` / `sql.query`).
 - [ ] Search handlers return both human `text` and valid `eql`.
+- [ ] Segment exports are a keyed object; each key is listed in the README with definition path, membership, and universe.
 - [ ] New interface is registered for deploy if using `deployAllSchemas` / `getActivePluginPaths` (see [reference.md](reference.md)).
 
 For deeper path rules and registration, read [reference.md](reference.md).

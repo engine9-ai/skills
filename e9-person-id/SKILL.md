@@ -18,7 +18,7 @@ description: >-
 
 The overarching goal of the person identity framework is to identify a quality **`person_id`** from many inbound inputs. A row may arrive with an email, a phone, a CRM `remote_person_id`, a delegate unid, an existing `person_id`, hashes only, or several of those at once. engine9 extracts match keys, looks them up, and stamps one integer `person_id` on the row. Downstream tables (`timeline`, `transaction`, segments) never invent identity — they consume that `person_id`.
 
-This skill is **exclusively about `person_id`**. It is not about `source_code_id`, message ids, timeline entry ids, or other identifiers. For source codes see [e9-source-code](../e9-source-code/SKILL.md). For timeline files that already have `person_id`, see [e9-timeline](../e9-timeline/SKILL.md).
+This skill is **exclusively about `person_id`**. It is not about `source_code_id`, message ids, timeline entry ids, or other identifiers. For source codes see [e9-source-code](../e9-source-code/SKILL.md). For the person activity log that consumes `person_id`, see [e9-timeline](../e9-timeline/SKILL.md).
 
 Worked email / phone / `remote_person_id` examples: [examples.md](examples.md).
 
@@ -209,5 +209,5 @@ Duplicate-people symptoms: same email on two `person_id`s (lookup first-wins; at
 ## Additional resources
 
 - Worked dedupe examples: [examples.md](examples.md)
-- Timeline files after identity: [e9-timeline](../e9-timeline/SKILL.md)
+- Person activity log: [e9-timeline](../e9-timeline/SKILL.md)
 - DEBUG People issues: [e9-debug](../e9-debug/SKILL.md)

@@ -1,210 +1,255 @@
 ---
 name: e9-timeline
-description: Describes how engine9 server workers, especially InputWorker, read and write timeline files (Timeline ID vs Timeline Raw), and how those files move into the timeline and timeline detail tables.
+description: >-
+  Explains the engine9 person activity timeline: one event per row (send, open,
+  click, transaction, signup), entry types, warehouse tables (timeline, input,
+  detail, summary), how plugins load events, the console Timeline tab,
+  querying, segments, and missing-event debug. Use when working with timeline,
+  entry_type_id, EMAIL_OPEN, EMAIL_CLICK, EMAIL_SEND, person's activity,
+  person_entry_summary, timeline_detail, missing opens/clicks, or when DEBUG
+  classifies a Timeline issue.
 ---
 
-# Timeline files in the server (InputWorker and friends)
+# engine9 timeline
 
-Use this skill whenever you are:
+The **timeline** is each person’s activity log. One row is one fact about one person at one time: an email send, open, or click; an SMS; a transaction; a signup; a form submit; a segment add.
 
-- **Writing or modifying jobs** that call `InputWorker.id`, `InputWorker.idFiles`, `InputWorker.idAllFiles`, `InputWorker.loadTimeline`, `InputWorker.loadTimelineTables`, `InputWorker.loadTimelineFile`, or `InputWorker.loadTimelineDetails`.
-- **Debugging how timeline data flows** from raw input files into the `timeline` and plugin-specific detail tables.
-- **Designing new plugins or pipelines** that should produce engine9-compatible timeline files.
+engine9 does not invent timeline rows from reports. Plugins load activity from the systems that already recorded it (ESP, SMS, CRM, payments, forms). Identity is stamped first (`person_id`); the event then lands on `timeline`. How that `person_id` is chosen is [e9-person-id](../e9-person-id/SKILL.md). Source codes on events are [e9-source-code](../e9-source-code/SKILL.md).
 
-engine9 server workers treat timeline data in two main stages:
+Say **transaction**, never donation. A payment can appear both as a `transaction` row and as a timeline `TRANSACTION_*` event; revenue questions use the transaction tables, not this log.
 
-- **Raw input → Timeline ID files** (with `person_id` and `id`) – handled primarily by `InputWorker.id` and `PersonWorker.loadPeople`.
-- **Timeline ID files → database tables** – handled by `InputWorker.loadTimeline`, `loadTimelineTables`, `loadTimelineFile`, and `loadTimelineDetails`, often with help from `SQLiteWorker` and `ClickHouseWorker`.
+For a missing open/click/send on a person, walk [missing-event debug A–F](#missing-event-debug-af) in order. Do not inspect application code until DEBUG Step 4 is approved. Plugin file shapes: [inputs/timeline](../inputs/timeline/SKILL.md). Load jobs: [loading.md](loading.md).
 
-For library-level timeline file formats and `@engine9/input-tools` helpers, see [inputs/timeline/SKILL.md](../inputs/timeline/SKILL.md).
+## Warehouse tables
 
-## Timeline ID files in InputWorker
+| Table / view | Role |
+|--------------|------|
+| `timeline` | Canonical events. One row per event: `id`, `ts`, `person_id`, `entry_type_id`, `input_id` |
+| `input` | The stream that produced the events (a message, form, CRM extract, …). Owns `plugin_id`, `remote_input_name`, `min_timeline_ts` / `max_timeline_ts` |
+| `plugin` | Which integration owns the input |
+| `source_code_dictionary` | Optional source code on the event (`timeline.source_code_id`) |
+| plugin **detail** tables | Extra columns (URL, amount, user agent, …) keyed by the same event `id` |
+| `<detail>_summary` | View: timeline + input + plugin + source code + detail extras, with a string `entry_type` |
+| `person_entry_summary` | Per `(person_id, entry_type_id)`: `first_ts`, `last_ts`, `entry_count` |
 
-### What a Timeline ID file looks like
+`timeline` is the hub. Detail tables and summaries hang off `timeline.id`. Segments and the person Timeline tab read `timeline`, often joined to `input`.
 
-A **Timeline ID file** is typically a parquet file whose name ends with `.idv1.parquet`. It contains rows that already have:
+Detail table names vary by plugin (`…_timeline_detail`, `timeline_detail_email_open`, …). `DESCRIBE` / list tables; do not guess.
 
-- **`id`**: UUID for the timeline entry (generated via `getTimelineEntryUUID`).
-- **`ts`**: event timestamp (string/number convertible to `Date`).
-- **`person_id`**: internal numeric person id.
-- **`entry_type_id`**: integer from `TIMELINE_ENTRY_TYPES`.
-- **Optional**: `source_code_id`, `email_domain`, plus arbitrary additional columns for plugin-specific detail.
+## Anatomy of an event
 
-This matches what `SQLiteWorker.ensureTimelineSchema` enforces for the `timeline` table:
+Every `timeline` row has:
 
-- `id TEXT PRIMARY KEY`
-- `ts INTEGER not null`
-- `entry_type_id INTEGER not null`
-- `person_id INTEGER not null`
-- `source_code_id INTEGER null`
-- `email_domain TEXT` (optional)
+| Field | Meaning |
+|-------|---------|
+| `id` | Stable UUID for this event. Reloading the same event **upserts** (no duplicate). |
+| `ts` | When it happened (not when engine9 loaded it). |
+| `person_id` | Canonical person. Events never invent identity. |
+| `entry_type_id` | What kind of event (integer; names below). |
+| `input_id` | Which input (message / form / extract) it came from. Required. |
+| `source_code_id` | Optional. Last-click / origin code on this event. |
+| `email_domain` | Optional. Lowercased domain, often derived from `email`. Used for domain rollups. |
+| `created_at` | When engine9 stored the row. |
 
-The **key idea**: once a file is in this shape, it can be loaded into the `timeline` table without further identity resolution. How `loadPeople` chooses `person_id` from email / phone / `remote_person_id` is [e9-person-id](../e9-person-id/SKILL.md).
+The console **Person → Timeline** tab is `timeline` filtered to that `person_id`.
 
-### How `InputWorker.id` produces Timeline ID files
+Prefer a `*_summary` view when you want plugin name, input name, source code string, and `entry_type` (the name, not the integer). Fall back to joining `timeline` → `input` → `plugin` yourself.
 
-`InputWorker.id` takes a raw input file (CSV, JSONL, parquet, etc.) and produces a `.idv1.parquet` file with timeline-ready rows:
+## Entry types
 
-1. **Determine output file**:
-   - Constructs an `.idv1.parquet` filename, either beside the input or in a target directory.
-   - Skips work if an existing ID file is present and `overwriteIdFile` is false.
-2. **Resolve `inputId` and `pluginId`**:
-   - `inputId` is typically a UUID specific to this input stream (via `getInputId` / `getInputUUID`).
-   - `pluginId` is resolved from the `input` table or the directory structure.
-3. **Analyze the source file**:
-   - Uses `FileWorker.analyze` to inspect fields and infer types.
-   - Builds an initial parquet schema including:
-     - `id`, `ts`, `entry_type_id`, `person_id`, `source_code_id`.
-     - Derived `email_domain` when an `email` column exists.
-     - Additional fields from the input (excluding known metadata like `remote_entry_uuid`, `input_id`, `entry_type`, etc.).
-4. **Load people and attach `person_id`**:
-   - For each batch, calls `PersonWorker.loadPeople` with:
-     - The batch stream.
-     - `pluginId`, `inputId`, `defaultSourceCode`, `defaultEntryType`, and any `extraTransforms`.
-   - This ensures that:
+`timeline` stores **`entry_type_id` (integer)**. Summary views add the string `entry_type`. Filter SQL on the integer; talk to people in the names.
 
-     - `person` records exist or are updated.
-     - Each row in the batch now has a valid `person_id`.
+| Group | Name | Id | Typical meaning |
+|-------|------|----|-----------------|
+| Origin | `CRM_ORIGIN` | 1 | Person’s origin in the CRM |
+| Origin | `ACQUISITION` | 2 | Acquisition event |
+| Signup | `SIGNUP` / `SIGNUP_INITIAL` / `SIGNUP_SUBSEQUENT` | 3 / 4 / 5 | List / form signup |
+| Signup | `UNSUBSCRIBE` | 6 | Channel-agnostic unsubscribe |
+| Signup | `DATA_APPEND` | 7 | Appended attributes (often source-code related) |
+| Money | `TRANSACTION` | 10 | Generic payment; prefer a specific type |
+| Money | `TRANSACTION_ONE_TIME` | 11 | One-time payment |
+| Money | `TRANSACTION_INITIAL` / `TRANSACTION_SUBSEQUENT` / `TRANSACTION_RECURRING` | 12 / 13 / 14 | Recurring series |
+| Money | `TRANSACTION_REFUND` | 15 | Refund |
+| Segment | `SEGMENT_PERSON_ADD` / `REMOVE` / `IN_SEGMENT` | 16 / 17 / 18 | Audience membership |
+| Message | `MESSAGE_CONVERSION` / `_ADVOCACY` / `_TRANSACTION` | 20 / 21 / 22 | Conversion credited to a message |
+| Message | `MESSAGE_DELIVERY_FAILURE_SHOULD_RETRY` / `_SHOULD_NOT_RETRY` | 25 / 26 | Delivery failure |
+| SMS | `SMS_SEND` / `SMS_DELIVERED` / `SMS_CLICK` | 30 / 31 / 33 | SMS lifecycle |
+| SMS | `SMS_UNSUBSCRIBE` / `SMS_BOUNCE` / `SMS_SPAM` / `SMS_REPLY` | 34 / 37 / 38 / 39 | SMS negative / reply |
+| Email | `EMAIL_SEND` / `EMAIL_DELIVERED` | 40 / 41 | Send / delivery |
+| Email | `EMAIL_OPEN` / `EMAIL_CLICK` | 42 / 43 | Engagement |
+| Email | `EMAIL_UNSUBSCRIBE` / `EMAIL_SOFT_BOUNCE` / `EMAIL_HARD_BOUNCE` / `EMAIL_BOUNCE` / `EMAIL_SPAM` / `EMAIL_REPLY` | 44 / 45 / 46 / 47 / 48 / 49 | Email negative / reply |
+| Phone | `PHONE_CALL_ATTEMPT` / `SUCCESS` / `FAIL` | 50 / 51 / 52 | Calls |
+| Forms | `FORM_SUBMIT` / `FORM_PETITION` / `FORM_ADVOCACY` / `FORM_SURVEY` | 60 / 61 / 66 / 67 | Actions |
+| Other | `FILE_IMPORT`, `EXPORT*` | 70, 80–82 | Loads and pushes |
+| Other | `INFERRED_*` | 91–93 | Modeled, not observed |
 
-5. **Append timeline IDs**:
-   - Calls `appendTimelineId` (from `ServerBaseWorker`) with:
-     - `inputId` for the batch.
-     - The batch array.
-     - Options like `defaultTimestamp` and `timelineIdField: 'id'`.
-   - `appendTimelineId`:
-     - First calls `appendEntryTypeId` to ensure `entry_type_id` is set from `entry_type` or a default.
-     - For each row without an `id`:
-       - Ensures a `ts` exists (or uses `defaultTimestamp`).
-       - Uses `remote_entry_id` / `remote_transaction_id` or the composite (`ts`, `person_id`, `entry_type_id`, `source_code_id`) plus `pluginId` to generate `id` via `getTimelineEntryUUID`.
-6. **Write parquet**:
-   - Turns each batch row into a parquet row using the schema and `parquetMap` functions.
-   - Writes rows to a temp `.idv1.parquet` file, then renames into place.
-   - For S3-based inputs, may move the local parquet file back to S3 as `<original>.idv1.parquet`.
+`SOURCE_CODE_OVERRIDE` (0) is a dictionary override marker, not a person action.
 
-The result is a **Timeline ID file** ready for loading by `loadTimeline` or `loadTimelineFile`.
+Openers and clickers are **independent**. A click is not automatically an open.
 
-### `InputWorker.idFiles` and `InputWorker.idAllFiles`
+## How events get onto the timeline
 
-- **`idFiles`**:
-  - Takes an array of file descriptors or a single `filename`.
-  - For each file:
-    - Ensures `inputId` and `pluginId` are resolved (via the database and/or metadata).
-    - Calls `id` to generate the `.idv1.parquet` file.
-    - Upserts `input` records and updates `min_timeline_ts` / `max_timeline_ts`.
-  - Returns a summary JSON pointing to the created ID files.
+1. A **plugin** extracts activity from a remote system (ESP events, CRM actions, payment rows, form posts, …).
+2. Each extract is an **input** — usually one message, one form, or one named stream (`input.remote_input_name`).
+3. engine9 matches each row to a **person** (email / phone / `remote_person_id`). Unknown people are created; known keys reuse the existing `person_id`.
+4. Each row gets a **stable `id`**. Same person + type + time + plugin (or a vendor event id) → same UUID → upsert.
+5. Core fields go to **`timeline`**. Extra fields go to the plugin **detail** table. A **summary** view is refreshed so reports can join names without repeating that SQL.
 
-- **`idAllFiles`**:
-  - Orchestrates `idFiles` across many accounts in sequence (using `p-limit` to avoid DB deadlocks).
-  - When `loadTimeline` is true, immediately runs `loadTimelineTables` on the resulting ID files.
+Until step 3 succeeds, the row is not on `timeline`. A file that only has an email is not a timeline event yet.
 
-Use these helpers when you need to bulk-convert many raw input files into Timeline ID files and optionally load them.
+## Related models (do not mix)
 
-## Loading Timeline ID files into the database
+| Question | Where to look |
+|----------|----------------|
+| Who is this person? Duplicate people? | [e9-person-id](../e9-person-id/SKILL.md) — not `timeline.id` |
+| Why is revenue on the wrong email? | [e9-source-code](../e9-source-code/SKILL.md) — `transaction_summary`, not timeline engagement |
+| Did this person open / click / get sent a message? | `timeline` (`EMAIL_*`, `SMS_*`) |
+| Did this person transact? Amount, recurring, refund? | `transaction` / `transaction_summary` (also mirrored as `TRANSACTION_*` timeline rows) |
+| Is this person in an engagement audience? | Segment build: universe (which inputs) + search (which `entry_type_id` / window) |
 
-Once you have Timeline ID files, there are three main ways to move them into engine tables.
+**Email engagement segments** (30/60/90-day openers and clickers) read `timeline` joined to `input`. The **universe** chooses which sends can contribute (typically email messages published in the last 90 days). The **search** chooses people with `EMAIL_OPEN` or `EMAIL_CLICK` in the rolling window. An open on a message outside that universe does not count, even if the open itself is recent.
 
-### `InputWorker.loadTimelineFile`
+## Querying
 
-This method is the **lowest-level loader** that assumes the file is already timeline-shaped:
+`DESCRIBE` first if column names differ. Filter to **one** person (and one entry type when known). LIMIT.
 
-- Expects columns: `id`, `ts`, `person_id`, `entry_type_id`, `source_code_id`.
-- Validates:
-  - `id` is a UUID.
-  - All required fields (`id`, `ts`, `person_id`, `entry_type_id`) are present in each row.
-- Calls `insertFromStream` to **upsert** rows into the canonical `timeline` table, setting `input_id` from `inputId` when provided (omitted if unset; DB must allow missing `input_id` if you skip it).
+```sql
+-- Person → events (use the integer type, or join a summary for the name)
+SELECT id, ts, entry_type_id, input_id, source_code_id
+FROM timeline
+WHERE person_id = 12345
+ORDER BY ts DESC
+LIMIT 50;
 
-Use `loadTimelineFile` when:
+-- Opens on that person
+SELECT id, ts, input_id
+FROM timeline
+WHERE person_id = 12345
+  AND entry_type_id = 42  -- EMAIL_OPEN
+ORDER BY ts DESC
+LIMIT 20;
 
-- You have a single well-formed Timeline ID file, and
-- You want to put it directly into `timeline` without extra statistics or detail table work.
+-- Event → which message / plugin
+SELECT
+  t.id,
+  t.ts,
+  t.entry_type_id,
+  i.remote_input_name,
+  i.input_type,
+  p.name AS plugin_name,
+  p.path AS plugin_path
+FROM timeline t
+JOIN input i ON i.id = t.input_id
+JOIN plugin p ON p.id = i.plugin_id
+WHERE t.person_id = 12345
+ORDER BY t.ts DESC
+LIMIT 50;
 
-### `InputWorker.loadTimeline`
+-- Ever / last activity of a type (if the rollup exists)
+SELECT person_id, entry_type_id, first_ts, last_ts, entry_count
+FROM person_entry_summary
+WHERE person_id = 12345
+LIMIT 50;
+```
 
-`loadTimeline` is a higher-level entry point that:
+Resolve email → `person_id` via `person_email` ([e9-person-id](../e9-person-id/SKILL.md#debugging-identity)), then query `timeline`. Do not treat `timeline.id` as a person key.
 
-- Accepts:
-  - A single file via `filename`, or
-  - A `directory`, in which case it:
-    - Lists files with `FileWorker.list`.
-    - Filters for `.idv1.parquet` and `.timeline.parquet` (legacy).
-    - Optionally filters/moves files using `useProcessedPostfix`.
-- Chooses a **stats worker** based on `options.engine`:
-  - `clickhouse` → `ClickHouseWorker`.
-  - `sqlite` → `SQLiteWorker`.
-  - Otherwise uses `this` (the `InputWorker`) as the worker.
-- For each file:
-  - Calls the worker's `loadTimelineFile` (for SQLite/ClickHouse this is the implementation on `SQLiteWorker`).
-  - Optionally moves files to a `.processed` variant when `useProcessedPostfix` is set.
-- Returns:
-  - A `sources` array summarizing each loaded file.
-  - The `inputTable` name used for statistics (e.g. `input_<uuid>`).
-  - The backing `sqliteFile` when using SQLite.
+## Missing-event debug (A–F)
 
-Use `loadTimeline` when:
+Use this when [e9-debug](../e9-debug/SKILL.md) classifies a **Timeline** issue (person Timeline tab empty/wrong, missing open/click/send, engagement segment empty, “we sent this but engine9 has no event”). Do **not** inspect application code until DEBUG Step 4 is approved.
 
-- You have one or many ID files and want them:
-  - Loaded into a database suitable for statistics and exploration.
-  - Optionally tracked via a temporary `input_<uuid>` table.
+Walk **A → F in order**. Stop at the first gap. Pick **one** person and **one** expected event (type + message/input if known).
 
-### `InputWorker.loadTimelineTables`
+```
+Timeline pipeline:
+- [ ] A: Person exists (person_id from email / phone / remote id)
+- [ ] B: Input exists for that message / form / stream
+- [ ] C: timeline row for that person_id
+- [ ] D: entry_type_id is the expected type
+- [ ] E: input_id joins to the expected input / plugin
+- [ ] F: Detail, summary, or segment universe (complaint is extras or an audience, not the raw event)
+```
 
-`loadTimelineTables` orchestrates **both** timeline and detail table loading:
+### A) Person exists
 
-- Accepts:
-  - A `fileArray` of items with `idFilename` (and optionally `inputId`), or
-  - `idFilename` / `filenames`, or
-  - `inputId` / `directory` from which it derives ID filenames via `getIdFilenames`.
-- For each ID file:
-  - Ensures a valid `inputId` (from options or inferred from the directory).
-  - Calls `loadTimeline` to populate the engine-specific timeline table.
-  - Optionally calls `loadTimelineDetails` when `loadTimelineDetail` is true and `timelineDetailTable` is provided.
-- After all files are processed:
-  - If a `timelineDetailTable` is provided, calls `ensureTimelineSummary` to build/refresh a view that joins `timeline`, `input`, `plugin`, `source_code_dictionary`, and the detail table.
+The event cannot land without a `person_id`.
 
-Use `loadTimelineTables` when you have:
+```sql
+SELECT person_id, email FROM person_email
+WHERE LOWER(email) = 'alice@example.com'
+LIMIT 20;
+```
 
-- A set of `.idv1.parquet` files, and
-- A plugin-specific detail table that should be synchronized with the main `timeline` table.
+**Gap:** no person → identity / load of the people file, not timeline. Switch to [e9-person-id](../e9-person-id/SKILL.md). **Gap:** several `person_id`s for one email → you may be looking at the wrong person; the event can sit on the other id.
 
-## Timeline Raw files and server-side processing
+### B) Input exists
 
-While the **InputWorker** focuses on ID'd, person-resolved files, other workers (such as email timeline plugins) often start from **Timeline Raw**-like data:
+Every timeline row points at an `input` (the message, form, or extract).
 
-- E.g. SES/SendGrid event streams that include:
-  - `ts` (or equivalent),
-  - `entry_type` (e.g. `'EMAIL_OPEN'`, `'EMAIL_CLICK'`),
-  - `email`, `email_domain`,
-  - `account_id`, `plugin_id`,
-  - sometimes `person_id` (or an external person identifier).
+```sql
+SELECT i.id, i.remote_input_name, i.input_type, i.min_timeline_ts, i.max_timeline_ts, p.name, p.path
+FROM input i
+JOIN plugin p ON p.id = i.plugin_id
+WHERE i.remote_input_name LIKE '%Appeal%'
+LIMIT 20;
+```
 
-These workers usually:
+**Pass:** the expected message/form is an `input` row, with a plugin you recognize. **Gap:** no input → that stream was never loaded (remote extract or plugin install). Not a timeline query bug.
 
-1. Map raw vendor events to a timeline-shaped object using:
-   - `getEntryTypeId` and `TIMELINE_ENTRY_TYPES` from `@engine9/input-tools`.
-   - `getTimelineEntryUUID` to generate `id` using the stable `plugin_id` as UUID namespace.
-2. Write out either:
-   - A **Timeline Raw** file that still needs `person_id` resolution, or
-   - A **Timeline ID** file if they can set `person_id` directly.
-3. Hand those files off to `InputWorker.loadTimeline` / `loadTimelineTables` or a downstream pipeline.
+### C) A timeline row for that person
 
-When designing new server-side timeline producers:
+```sql
+SELECT id, ts, entry_type_id, input_id
+FROM timeline
+WHERE person_id = ?
+ORDER BY ts DESC
+LIMIT 50;
+```
 
-- **Prefer Timeline ID files** when:
-  - You can reliably obtain `person_id`, `input_id`, and `entry_type_id`.
-  - You want to rely on `InputWorker.loadTimeline` / `loadTimelineFile` directly.
-- **Use Timeline Raw** when:
-  - You only have partial identity (e.g., just an `email` or external person id).
-  - You plan a separate person-resolution step (often in `PersonWorker`) before emitting final ID files.
+**Pass:** any rows in the window you care about. **Gap:** person and input exist but this person has no rows → the vendor file had no event for them, identity did not match this person, or the load did not run. Check `input.min_timeline_ts` / `max_timeline_ts` and `input.records`. Remote vs in-account: if the ESP/CRM also lacks the event, it is remote.
 
-## Summary: when to use which method
+### D) Correct entry type
 
-- **`InputWorker.id`**: Convert a single raw input file into a `.idv1.parquet` Timeline ID file; resolves `person_id` and `id`.
-- **`InputWorker.idFiles` / `idAllFiles`**: Bulk version of `id` across many files and/or accounts.
-- **`InputWorker.loadTimelineFile`**: Lowest-level loader; load a single Timeline ID file straight into the `timeline` table.
-- **`InputWorker.loadTimeline`**: Load one or many Timeline ID files into an engine-specific table (SQLite/ClickHouse/native) with statistics support.
-- **`InputWorker.loadTimelineTables`**: End-to-end loader for both `timeline` and plugin-specific detail tables, plus optional summary views.
+```sql
+SELECT entry_type_id, COUNT(*) AS n
+FROM timeline
+WHERE person_id = ?
+GROUP BY entry_type_id
+LIMIT 50;
+```
 
-When in doubt:
+**Pass:** the expected id is present (`42` open, `43` click, `40` send, …). **Gap:** sends exist but no opens → often real (they were sent, they did not open), or the ESP engagement file was not loaded. **Gap:** you filtered the UI/segment on `EMAIL_OPEN` while the row is `EMAIL_CLICK` (or the reverse). They are not interchangeable.
 
-- Use **`InputWorker.id` → `InputWorker.loadTimelineTables`** for classic "input → ID file → timeline + detail table" flows.
-- Keep raw plugin outputs as close to the **input-tools timeline schema** as possible so they can be easily transformed into Timeline ID files.
+### E) Right input / plugin
+
+```sql
+SELECT t.id, t.ts, t.entry_type_id, i.remote_input_name, p.name AS plugin_name
+FROM timeline t
+JOIN input i ON i.id = t.input_id
+JOIN plugin p ON p.id = i.plugin_id
+WHERE t.person_id = ?
+  AND t.entry_type_id = 42
+ORDER BY t.ts DESC
+LIMIT 20;
+```
+
+**Pass:** the row is attached to the message/plugin you expected. **Gap:** events exist but on a different input (wrong message, another ESP, a test plugin). The person Timeline tab shows all inputs; a segment universe may hide this one.
+
+### F) Detail, summary, or segment — not the raw event
+
+The `timeline` row is present and correctly typed/joined, but the complaint is a blank extra field, a summary view, or an audience.
+
+- **Detail missing:** the core event loaded; the plugin detail table did not. The Timeline tab can still show the event.
+- **Summary stale:** `*_summary` / `person_entry_summary` disagree with `timeline` → the summary job has not run. Trust `timeline`.
+- **Segment empty:** check universe (message `publish_date` / channel) **and** search window. A recent open on a message published more than 90 days ago does not qualify for the shipped email-opener segments.
+- **UI disagrees after F matches:** report/UI issue, not this pipeline.
+
+Record the first failing step in the DEBUG bug summary and continue DEBUG Steps 2–3 (other accounts; ESP/CRM/payment remotes).
+
+## Additional resources
+
+- Load path (ID files → tables): [loading.md](loading.md)
+- File shapes for plugins: [inputs/timeline](../inputs/timeline/SKILL.md)
+- Person identity: [e9-person-id](../e9-person-id/SKILL.md)
+- Source codes / attribution: [e9-source-code](../e9-source-code/SKILL.md)
+- DEBUG: [e9-debug](../e9-debug/SKILL.md)
