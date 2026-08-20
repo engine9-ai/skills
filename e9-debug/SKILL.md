@@ -6,7 +6,7 @@ description: >-
   interfaces and data (never code first), scope across accounts, isolate
   remote/source systems, then optionally inspect code. Use when the user says
   DEBUG, /debug, or asks to debug, isolate, or recreate an engine9 account,
-  data, UI, MCP, source-code, or attribution issue.
+  data, UI, MCP, source-code, attribution, person_id, or identity issue.
 ---
 
 # engine9 DEBUG
@@ -35,6 +35,7 @@ DEBUG Progress:
 - [ ] Step 1: Categorize and recreate (no code)
 - [ ] Step 1 output: Bug summary handed off / confirmed
 - [ ] Source-code / attribution A–F (if that category)
+- [ ] Person identity lookup (if People / duplicates)
 - [ ] Step 2: Multi-account scoping
 - [ ] Step 3: Remote / source system isolation
 - [ ] Step 4: Code debugging (user-approved)
@@ -134,6 +135,18 @@ Treat it as source coding / attribution when any of these are in play:
 
 If it is that category: pick one example source code (and one transaction / message if known), then walk A→F in [e9-source-code](../e9-source-code/SKILL.md) and **stop at the first gap**. Record that gap in the bug summary. Steps 2–3 still apply (other accounts; messaging platform vs payment platform as two remotes).
 
+**People / identity / duplicates are a common class.** If the report is about the wrong person, duplicate people, missing `person_id`, or email/phone/remote matching, set category to **People** and follow [e9-person-id](../e9-person-id/SKILL.md) (tables, lookup vs attributes, first-wins, [examples](../e9-person-id/examples.md)). This is **`person_id` only** — not `source_code_id`.
+
+Treat it as person identity when any of these are in play:
+
+- Duplicate people, or one constituent split across several `person_id`s
+- Same email / phone / `remote_person_id` resolving to the wrong person (or not resolving)
+- `person_identifier` vs `person_id_email_hash_v1` / `person_id_phone_hash_v1` / `person_id_remote_person_id`
+- `loadPeople` / `processPeople` / `assignPersonIds` not attaching `person_id`
+- Legacy `person_metadata`, `person_id_int`, `timeline_v3`, or `transaction_metadata` mixed with current `person` / `person_email`
+
+If it is that category: pick **one** example email, phone, or `remote_person_id` and use the debug SQL in [e9-person-id](../e9-person-id/SKILL.md#debugging-identity). Do not inspect application code until Step 4.
+
 ### C) UI bug vs data issue
 
 Determine whether the bug is:
@@ -196,6 +209,12 @@ Produce a handoff-ready summary another agent or human can use without redoing d
 ## Source-code pipeline (if Source coding / attribution)
 - source_code: …
 - Pipeline gap: [A outbound link | B payment platform | C message load | D transaction load | E attribution | F summary stats | none / N/A]
+- Evidence: …
+
+## Person identity (if People / duplicates)
+- example key: [email | phone | remote_person_id] …
+- identifier_store_kind: [compact | person_identifier / legacy | unknown]
+- person_id(s) found: …
 - Evidence: …
 
 ## Kind

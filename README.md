@@ -17,3 +17,4 @@ Skills for working with engine9 deployments.
 | Timeline (input-tools) | [inputs/timeline/SKILL.md](./inputs/timeline/SKILL.md) | Timeline ID vs Raw file shapes and `@engine9/input-tools` helpers |
 | Transaction mapping | [inputs/transaction-mapping/SKILL.md](./inputs/transaction-mapping/SKILL.md) | Map 3rd-party payment data into the Transaction schema |
 | Source codes | [e9-source-code/SKILL.md](./e9-source-code/SKILL.md) | Dictionary, parsing, labels, last-click vs origin attribution, overrides |
+| Person identity (`person_id`) | [e9-person-id/SKILL.md](./e9-person-id/SKILL.md) | How a quality `person_id` is chosen from email, phone, `remote_person_id`; `person_id_*` vs `person_identifier`; old `person_metadata` / `person_id_int` model |

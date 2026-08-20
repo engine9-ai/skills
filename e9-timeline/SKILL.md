@@ -39,7 +39,7 @@ This matches what `SQLiteWorker.ensureTimelineSchema` enforces for the `timeline
 - `source_code_id INTEGER null`
 - `email_domain TEXT` (optional)
 
-The **key idea**: once a file is in this shape, it can be loaded into the `timeline` table without further identity resolution.
+The **key idea**: once a file is in this shape, it can be loaded into the `timeline` table without further identity resolution. How `loadPeople` chooses `person_id` from email / phone / `remote_person_id` is [e9-person-id](../e9-person-id/SKILL.md).
 
 ### How `InputWorker.id` produces Timeline ID files
 
