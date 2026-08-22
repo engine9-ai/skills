@@ -6,8 +6,8 @@ description: >-
   detail, summary), how plugins load events, the console Timeline tab,
   querying, segments, and missing-event debug. Use when working with timeline,
   entry_type_id, EMAIL_OPEN, EMAIL_CLICK, EMAIL_SEND, person's activity,
-  person_entry_summary, timeline_detail, missing opens/clicks, or when DEBUG
-  classifies a Timeline issue.
+  person_entry_summary, timeline_detail, missing opens/clicks, or when a
+  Troubleshoot session classifies a Timeline issue.
 ---
 
 # engine9 timeline
@@ -18,7 +18,7 @@ engine9 does not invent timeline rows from reports. Plugins load activity from t
 
 Say **transaction**, never donation. A payment can appear both as a `transaction` row and as a timeline `TRANSACTION_*` event; revenue questions use the transaction tables, not this log.
 
-For a missing open/click/send on a person, walk [missing-event debug A–F](#missing-event-debug-af) in order. Do not inspect application code until DEBUG Step 4 is approved. Plugin file shapes: [inputs/timeline](../inputs/timeline/SKILL.md). Load jobs: [loading.md](loading.md).
+For a missing open/click/send on a person, walk [missing-event debug A–F](#missing-event-debug-af) in order. Product surfaces first; do not inspect application code. Plugin file shapes: [inputs/timeline](../inputs/timeline/SKILL.md). Load jobs: [loading.md](loading.md).
 
 ## Warehouse tables
 
@@ -156,7 +156,7 @@ Resolve email → `person_id` via `person_email` ([e9-person-id](../e9-person-id
 
 ## Missing-event debug (A–F)
 
-Use this when [e9-debug](../e9-debug/SKILL.md) classifies a **Timeline** issue (person Timeline tab empty/wrong, missing open/click/send, engagement segment empty, “we sent this but engine9 has no event”). Do **not** inspect application code until DEBUG Step 4 is approved.
+Use this when [e9-troubleshoot](../e9-troubleshoot/SKILL.md) classifies a **Timeline** issue (person Timeline tab empty/wrong, missing open/click/send, engagement segment empty, “we sent this but engine9 has no event”). Find the person and input from the product first; SQL confirms one named event. Do **not** inspect application code.
 
 Walk **A → F in order**. Stop at the first gap. Pick **one** person and **one** expected event (type + message/input if known).
 
@@ -244,7 +244,7 @@ The `timeline` row is present and correctly typed/joined, but the complaint is a
 - **Segment empty:** check universe (message `publish_date` / channel) **and** search window. A recent open on a message published more than 90 days ago does not qualify for the shipped email-opener segments.
 - **UI disagrees after F matches:** report/UI issue, not this pipeline.
 
-Record the first failing step in the DEBUG bug summary and continue DEBUG Steps 2–3 (other accounts; ESP/CRM/payment remotes).
+Record the first failing step in the Troubleshoot ticket notes (other accounts; ESP/CRM/payment remotes).
 
 ## Additional resources
 
@@ -252,4 +252,4 @@ Record the first failing step in the DEBUG bug summary and continue DEBUG Steps 
 - File shapes for plugins: [inputs/timeline](../inputs/timeline/SKILL.md)
 - Person identity: [e9-person-id](../e9-person-id/SKILL.md)
 - Source codes / attribution: [e9-source-code](../e9-source-code/SKILL.md)
-- DEBUG: [e9-debug](../e9-debug/SKILL.md)
+- Troubleshoot (support tickets): [e9-troubleshoot](../e9-troubleshoot/SKILL.md)
