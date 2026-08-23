@@ -2,13 +2,14 @@
 name: e9-source-code
 description: >-
   Explains engine9 source codes: the dictionary, auto-parsing and labels,
-  last-click vs origin attribution, overrides, and source-code conversion
-  tracking. Walks the last-click pipeline (outbound link → payment platform →
-  message load → transaction load → attribution → global_message_summary). Use
-  when working with source_code, source_code_dictionary, message_source_code,
-  transaction_summary, attributed revenue, last click, origin people/revenue,
-  recommended_message_id, or when a Troubleshoot session classifies a
-  source-code attribution issue.
+  last-click attribution (transaction to message), overrides, and source-code
+  conversion tracking. Walks the last-click pipeline (outbound link → payment
+  platform → message load → transaction load → attribution →
+  global_message_summary). Use when working with source_code,
+  source_code_dictionary, message_source_code, transaction_summary, attributed
+  revenue, last click, recommended_message_id, or when a Troubleshoot session
+  classifies a source-code attribution issue. Current timeline models are
+  e9-model (`{prefix}_*` tables). `source_code_summary.origin_*` is legacy.
 ---
 
 # engine9 source codes
@@ -19,7 +20,7 @@ Assume each source code is unique to a single message. In reporting, **source co
 
 Say **transaction**, never donation. Last-click debug uses `transaction_summary`; the base table is `transaction`.
 
-For the element catalog, see [elements.md](elements.md). For attribution models and conversion-tracking methods, see [attribution.md](attribution.md). For a broken last-click number, walk [pipeline debug A–F](#last-click-pipeline-debug-af) in order.
+For the element catalog, see [elements.md](elements.md). For conversion-tracking methods and how **attribution** joins a transaction to a message, see [attribution.md](attribution.md). Timeline long-term value is a [model](../e9-model/SKILL.md) (`{prefix}_*` tables — not `source_code_summary.origin_*`). For a broken last-click number, walk [pipeline debug A–F](#last-click-pipeline-debug-af) in order.
 
 ## Warehouse tables
 
@@ -27,7 +28,7 @@ For the element catalog, see [elements.md](elements.md). For attribution models 
 |--------------|------|
 | `source_code_dictionary` | One row per unique source code; parsed elements, format match, last used |
 | `message_source_code` | Source codes extracted from loaded messages (links / primary code), with `publish_date` |
-| `source_code_summary` | Per-code rollups: attributed transactions/revenue, origin people/revenue, spend |
+| `source_code_summary` | Per-code rollups: last-click attributed transactions/revenue (attribution), spend. Also **legacy** `origin_*` (old identity) — current models are `{prefix}_*` ([e9-model](../e9-model/SKILL.md)) |
 | `global_message_summary` | Per-message rollups including `attributed_revenue` and `attributed_transactions` |
 | `transaction_summary` | Loaded transactions with `transaction_source_code`, `ts`, `amount`, `recommended_message_id` |
 | `transaction` | Base conversion rows; `source_code_id`, overrides, `recommended_message_id` / `final_message_id` |
@@ -35,20 +36,20 @@ For the element catalog, see [elements.md](elements.md). For attribution models 
 
 Attributed transaction counts and revenue appear on both `global_message_summary` (per message) and `source_code_summary` (per source).
 
-## Last-click vs origin
+## Last-click attribution vs origin model
 
-engine9 reports both models out of the box. They answer different questions; do not mix them into one “value” number.
+Last-click **attribution** rolls up on `source_code_summary`. Current origin (and other timeline models) roll up on `{prefix}_person_stats` / `{prefix}_transaction_stats`. They answer different questions; do not mix them into one “value” number.
 
-**Last click** (immediate message): the source code on the transaction, usually carried through the payment form URL. Match that string to a message’s outbound-link source codes. Those matches are **attributed transactions** / **attributed revenue**.
+**Last click** is **attribution**: it connects a transaction to a message. The source code on the transaction, usually carried through the payment form URL, is matched to a message’s outbound-link source codes. Those matches are **attributed transactions** / **attributed revenue**.
 
 - **Initial revenue** — one-time transactions plus only the *first* installment of a recurring series. Closest to an integrated CRM’s native email revenue when email and payments share a platform.
 - **Revenue** (last click) — initial revenue plus *subsequent* recurring installments traced to the same source code. Grows over time as pledges continue.
 - Initial + subsequent = last-click transactions.
 
-**Origin** (first engagement): the source code of the person’s earliest appearance — new constituents recruited by a message (transaction, signup, or action form). Tracked independently of last click.
+**Origin** is a **model**: it connects a person (and that person’s lifetime transactions) to an item in their [timeline](../e9-timeline/SKILL.md) history — not to the message last-click would credit. Usually the CRM origin source (treat as immutable); some systems pick the earliest timeline action instead.
 
-- **Origin people** — person records whose first appearance traces to the code. Usually taken from the CRM origin source (treat as immutable). Some systems pick the earliest timeline action instead. Field lives on `source_code_summary`.
-- **Origin revenue** — lifetime transaction total for those people, including later transactions under different last-click codes. Used for acquisition ROI.
+- **Current** (new identity): `model_crm_origin_*`, `model_first_touch_*`, and other `{prefix}_*` tables — [e9-model](../e9-model/SKILL.md). `person_id` is bigint; `transaction_id` is UUID.
+- **Legacy:** `source_code_summary.origin_people` / `origin_revenue` (and other `origin_*` there). Computed against the old identity (`person_metadata` / `person_id_int`). Do not use these for current model work.
 
 Some codes are origin-only (list acquisition). Some are last-click-only (an appeal email). Some accrue both.
 
@@ -102,14 +103,19 @@ Same tokens with different spellings (`FB`, `ADS`, `Facebook`, `12`) should shar
 
 ## Dictionary columns (common)
 
-Revenue (bot-calculated from attribution; may differ from a message system’s native revenue):
+Revenue from last-click **attribution** (may differ from a message system’s native revenue):
 
 | Field | Meaning |
 |-------|---------|
 | Initial revenue | One-time + first recurring installment |
 | Revenue | Last-click total, including later recurring installments |
-| Origin people / origin revenue | First-touch people and their lifetime transactions |
 | Refunds | Not netted from revenue unless marked |
+
+Legacy origin **model** on this table (old identity — do not use for current model work). Current origin/LTV is `{prefix}_*` — [e9-model](../e9-model/SKILL.md).
+
+| Field | Meaning |
+|-------|---------|
+| Origin people / origin revenue | Legacy first-engagement people and their lifetime transactions |
 
 Cost (engine9 does not auto-compute ROI; the reporting environment does):
 

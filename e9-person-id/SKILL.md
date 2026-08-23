@@ -164,6 +164,8 @@ In that model the person key was a single integer `person_id_int`, and `person_m
 
 When you see `person_id_int` or `person_metadata.person_id` as an email, you are in the old model. Do not join it to current `person_email` as if it were `person.id`. Resolve through the current lookup (`person_id_*` / `person_identifier`) and attribute tables instead.
 
+Legacy `source_code_summary.origin_*` rollups were computed in that old identity world. Current models write `{prefix}_*` tables with bigint `person_id` — [e9-model](../e9-model/SKILL.md).
+
 ## Debugging identity
 
 Prefer attribute tables (plaintext) over compact BLOBs. `DESCRIBE` first; filter to one example; LIMIT.

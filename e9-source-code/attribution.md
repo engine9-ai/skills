@@ -1,6 +1,6 @@
 # Attribution and conversion tracking
 
-Read [SKILL.md](SKILL.md) first for last-click vs origin fields, link parameters, and warehouse tables.
+Read [SKILL.md](SKILL.md) first for last-click attribution vs the origin model, link parameters, and warehouse tables.
 
 ## Conversion methods
 
@@ -40,17 +40,21 @@ Cons:
 
 engine9 automates generation, parse of legacy codes, attribution, and cross-channel reporting. Native and tag/pixel stats may still be ingested; source-code attribution is the system of record.
 
-## Attribution models
+## Attribution vs models
 
-Online-ad attribution (Google, Meta) sees opens/clicks **inside one platform**. engine9 spans platforms and offline, using conversion source codes. Both views can be useful.
+**Attribution** connects a **transaction** to a **message**. In engine9 that is last-click: match `transaction_summary.transaction_source_code` to `message_source_code.source_code` when `ts` is after `publish_date`, write `recommended_message_id`, then roll `attributed_revenue` / `attributed_transactions` onto `global_message_summary`. Pipeline: [A–F](SKILL.md#last-click-pipeline-debug-af).
 
-Credit assignment is not unique; there is no single right model. Most models try to **span all transactions once**. Crediting a $100 transaction 100% to last click **and** 100% to origin double-counts $200. Fractional models split the amount so totals still equal real revenue.
+A **model** connects a person or transaction to an item in their [timeline](../e9-timeline/SKILL.md) history — not to a message. Current output is `{prefix}_*` tables (`model_crm_origin_person`, `model_first_touch_transaction_stats`, …) with the new identity. First touch, last acquisition, CRM origin, and other identified LTV rules are models. Say **model** only in that sense. Last-click is attribution, not a “last-click model.”
 
-engine9 ships **100% last click** and **100% origin**. Use extra models only when they still span each transaction exactly once. Pick the model that matches the question (immediate impact, lifetime value, recurring activation, etc.).
+`source_code_summary.origin_people` / `origin_revenue` are the **legacy** origin implementation (old identity). Do not use them as the current origin model.
+
+Ad platforms (Google, Meta) see opens/clicks inside one platform. engine9 attribution spans platforms and offline via conversion source codes.
+
+Last-click attribution (`source_code_summary.revenue` / `attributed_*`) and a current origin model (`{prefix}_*_stats`) answer different questions; adding them double-counts. Current models: [e9-model](../e9-model/SKILL.md).
 
 ### Worked example
 
-One person, $150 total (a $50 recurring series of three). Three models: 100% last click, 100% origin, 50% last-click / 50% origin.
+One person, $150 total (a $50 recurring series of three). Three assignments: 100% last-click attribution, 100% origin model (lifetime to first timeline engagement), and a 50/50 split of those two. The split is illustrative; engine9 does not ship it.
 
 | Date | Interaction | Source code | 100% last click | 100% origin | 50% adjusted |
 |------|-------------|-------------|----------------:|------------:|-------------:|
@@ -71,13 +75,13 @@ By source code:
 | `EM_CAN_456` | $0 | $0 | $0 |
 | `BAN_456` | $0 | $0 | $0 |
 
-Last click gives Facebook all credit. Origin gives the acquisition email all credit. 50% split shares those two and still ignores the middle clicks. engine9 does not ship a path-based or time-decay model out of the box.
+Last-click attribution gives Facebook the transactions. The origin model gives the acquisition email the lifetime total. The 50% split shares those two and still ignores the middle clicks. Path-based or time-decay assignment is not shipped; write a [model](../e9-model/SKILL.md) if you need another timeline rule.
 
 ### Last-click slices
 
 - **Initial transactions** — one-time, or the first transaction of a recurring series. Immediate message impact.
 - **Subsequent transactions** — recurring after the first. Use for upsell / recurring-activation over months.
 
-### Origin vs last click on the same code
+### Origin model vs last-click attribution on the same code
 
-A code can be origin-only (list buy), last-click-only (an appeal email), or both (a message that converts *and* recruits). Origin is the right lens for where to spend on acquisition and which partnerships pay over a lifetime. Last click is the right lens for A/B tests and channel bake-offs (Facebook vs Google, subject lines, etc.).
+A code can be origin-only (list buy), last-click-only (an appeal email), or both (a message that converts *and* recruits). Origin is a model: the right lens for where to spend on acquisition and which partnerships pay over a lifetime — read `{prefix}_*` tables, not `source_code_summary.origin_*`. Last click is attribution: the right lens for A/B tests and channel bake-offs (Facebook vs Google, subject lines, etc.).

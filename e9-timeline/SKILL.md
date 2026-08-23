@@ -14,7 +14,7 @@ description: >-
 
 The **timeline** is each person’s activity log. One row is one fact about one person at one time: an email send, open, or click; an SMS; a transaction; a signup; a form submit; a segment add.
 
-engine9 does not invent timeline rows from reports. Plugins load activity from the systems that already recorded it (ESP, SMS, CRM, payments, forms). Identity is stamped first (`person_id`); the event then lands on `timeline`. How that `person_id` is chosen is [e9-person-id](../e9-person-id/SKILL.md). Source codes on events are [e9-source-code](../e9-source-code/SKILL.md).
+engine9 does not invent timeline rows from reports. Plugins load activity from the systems that already recorded it (ESP, SMS, CRM, payments, forms). Identity is stamped first (`person_id`); the event then lands on `timeline`. How that `person_id` is chosen is [e9-person-id](../e9-person-id/SKILL.md). Source codes on events are [e9-source-code](../e9-source-code/SKILL.md). **Attribution** joins a transaction to a message from those codes. A **model** connects a person or transaction to an item in this history and writes `{prefix}_*` tables — [e9-model](../e9-model/SKILL.md).
 
 Say **transaction**, never donation. A payment can appear both as a `transaction` row and as a timeline `TRANSACTION_*` event; revenue questions use the transaction tables, not this log.
 
@@ -251,5 +251,6 @@ Record the first failing step in the Troubleshoot ticket notes (other accounts; 
 - Load path (ID files → tables): [loading.md](loading.md)
 - File shapes for plugins: [inputs/timeline](../inputs/timeline/SKILL.md)
 - Person identity: [e9-person-id](../e9-person-id/SKILL.md)
-- Source codes / attribution: [e9-source-code](../e9-source-code/SKILL.md)
+- Source codes / attribution (transaction ↔ message): [e9-source-code](../e9-source-code/SKILL.md)
+- Models (timeline long-term value): [e9-model](../e9-model/SKILL.md)
 - Troubleshoot (support tickets): [e9-troubleshoot](../e9-troubleshoot/SKILL.md)
