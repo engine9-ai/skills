@@ -1,6 +1,24 @@
 # Echo walkthrough
 
-Complete example: list the **Echo** sample flow, create a flow run, list runs, poll for completion, and read output. Assumes your administrator has provisioned `echo-flow` for your account.
+Complete example: schedule **Echo** as an **on-demand task** (`path` + `method`), poll with `task_runs/filter`, and read output. Echo lives on the **built-in Engine9 Workers plugin** that every bootstrapped account already has — you do **not** need an `echo-flow` flow, and you do **not** install a separate Echo plugin.
+
+MCP uses the same on-demand names: `path: "@engine9/plugins/e9workers:EchoWorker"` and `method: "echo"`. See [e9-mcp](../e9-mcp/SKILL.md#on-demand-tasks).
+
+To run a published multi-step workflow instead, see [getting-started.md](./getting-started.md#predefined-flow--flow_id-required) (`POST /flow_runs/` with `flow_id`).
+
+## On-demand task names
+
+On-demand tasks are identified by **`path` + `method`** (never a `flow_id`). The same strings are used by REST `POST /tasks/schedule` and MCP `task`.
+
+| What | Value |
+|------|--------|
+| **Plugin path** | `@engine9/plugins/e9workers` — installed by `bootstrapAccount` on every account |
+| **Echo path** | `@engine9/plugins/e9workers:EchoWorker` |
+| **Echo method** | `echo` — returns `options` plus metadata (`last_run`, …) |
+
+Other built-in on-demand examples: `@engine9/plugins/e9workers:SQLWorker` + `query`, `@engine9/plugins/e9workers:SegmentWorker` + a SegmentWorker method.
+
+Do **not** use `workers/EchoWorker` (local file path) or a standalone Echo plugin for this smoke test.
 
 ## Prerequisites
 
@@ -8,8 +26,7 @@ You need (from your administrator):
 
 - Running Task API at a known base URL
 - Valid `e9key_…` API key with `tasks:read` and `tasks:schedule`
-- Account id (examples use `test`)
-- `echo-flow` available via `GET /flows`
+- Account id (examples use `test`) whose Engine9 Workers plugin is installed (normal bootstrap)
 
 Set variables (see [authentication.md](./authentication.md)):
 
@@ -20,94 +37,47 @@ export ACCOUNT="X-ENGINE9-ACCOUNT-ID: test"
 export CURL_TLS=""
 ```
 
-## What the Echo flow does
+## What Echo does
 
-The Echo flow has one task that returns its input `options` unchanged (plus metadata like `last_run`). It is useful for verifying that authentication, scheduling, and result retrieval work end to end.
-
-Inspect the live definition (you do not POST this — use `GET /flows`):
-
-```bash
-curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
-  "$BASE_URL/flows/echo-flow" | jq '{id, name, tasks}'
-```
-
-Use `"flow_id": "echo-flow"` when creating runs.
+`EchoWorker.echo` returns its input `options` unchanged (plus metadata like `last_run`). It is the standard check that authentication, on-demand scheduling, and result retrieval work end to end.
 
 ---
 
-## Step 1: List available flows
+## Step 1: Schedule the on-demand Echo task
 
-```bash
-curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
-  "$BASE_URL/flows" | jq '[.[] | {id, name, task_count: (.tasks | length)}]'
-```
-
-Expected:
-
-```json
-[
-  {
-    "id": "echo-flow",
-    "name": "Echo Flow",
-    "task_count": 1
-  }
-]
-```
-
-If the array is empty or missing `echo-flow`, contact your administrator.
-
-### Filter by tag
+**`path` and `method` are required.** Do not send `flow_id`. Scheduling goes through `scheduleTasks` (same as MCP `task`).
 
 ```bash
 curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d '{
-    "flows": { "tags": { "any_": ["echo"] } },
-    "limit": 10,
-    "sort": "CREATED_DESC"
+    "path": "@engine9/plugins/e9workers:EchoWorker",
+    "method": "echo",
+    "options": { "message": "hello from echo", "seconds": 1 },
+    "label": "echo-demo-2026-06-08"
   }' \
-  "$BASE_URL/flows/filter" | jq .
+  "$BASE_URL/tasks/schedule" | tee /tmp/echo-task-run.json | jq .
 ```
 
-### Read full flow definition
-
-```bash
-curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
-  "$BASE_URL/flows/echo-flow" | jq .
-```
-
----
-
-## Step 2: Schedule the flow
-
-**Important:** `flow_id` is the flow **slug** (`echo-flow`), not the UUID `flow_id` field on the flow object. Scheduling goes through `scheduleTasks` (same as MCP).
-
-```bash
-curl $CURL_TLS -sS -X POST \
-  -H "$AUTH" -H "$ACCOUNT" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "flow_id": "echo-flow",
-    "name": "echo-demo-2026-06-08"
-  }' \
-  "$BASE_URL/flow_runs/" | tee /tmp/echo-flow-run.json | jq .
-```
+The server accepts that path without looking up installed plugins (`@engine9/plugins/e9workers` is well-known).
 
 Save IDs (shape matches MCP `task` schedule — `flow_run_id` / `task_run_ids`):
 
 ```bash
-export FLOW_RUN_ID=$(jq -r '.flow_run_id // .id' /tmp/echo-flow-run.json)
-export TASK_RUN_ID=$(jq -r '.task_run_ids[0] // .task_runs[0].id // empty' /tmp/echo-flow-run.json)
+export FLOW_RUN_ID=$(jq -r '.result.flow_run_id // .flow_run_id // .id' /tmp/echo-task-run.json)
+export TASK_RUN_ID=$(jq -r '.result.task_run_ids[0] // .task_run_ids[0] // empty' /tmp/echo-task-run.json)
 echo "FLOW_RUN_ID=$FLOW_RUN_ID"
 echo "TASK_RUN_ID=$TASK_RUN_ID"
 ```
 
+An on-demand task is still wrapped in a flow run so you can poll the same listing endpoints.
+
 ---
 
-## Step 3: Check status
+## Step 2: Check status
 
-Prefer Prefect `POST /task_runs/filter` (lists tasks for the run):
+`POST /task_runs/filter` lists tasks for the run:
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -117,32 +87,16 @@ curl $CURL_TLS -sS -X POST \
   "$BASE_URL/task_runs/filter" | jq .
 ```
 
-Deprecated `POST /tasks/listTasks` still works with the same body (same Frakture `POST /task_runs/filter` surface). Or GET the flow run:
+Or GET the flow run:
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
   "$BASE_URL/flow_runs/$FLOW_RUN_ID" | jq .
 ```
 
-### Only completed runs
-
-```bash
-curl $CURL_TLS -sS -X POST \
-  -H "$AUTH" -H "$ACCOUNT" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "flow_runs": {
-      "flow_id": { "eq_": "echo-flow" },
-      "state": { "type": { "any_": ["COMPLETED"] } }
-    },
-    "limit": 10
-  }' \
-  "$BASE_URL/flow_runs/filter" | jq 'length'
-```
-
 ---
 
-## Step 4: List task runs
+## Step 3: List task runs
 
 ### All task runs for your flow run
 
@@ -172,7 +126,7 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
 
 ---
 
-## Step 5: Poll until complete
+## Step 4: Poll until complete
 
 ### Single check
 
@@ -190,7 +144,7 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
 |--------------|--------|
 | `PENDING` | Wait — executor has not started the task |
 | `RUNNING` | Wait — task in progress |
-| `COMPLETED` | Read output (step 6) |
+| `COMPLETED` | Read output (step 5) |
 | `FAILED` | Inspect error details / contact support |
 
 ### Bash poll loop
@@ -236,7 +190,7 @@ print("output_path:", data.get("state", {}).get("state_details", {}).get("output
 
 ---
 
-## Step 6: Read Echo output
+## Step 5: Read Echo output
 
 When `state_type` is `COMPLETED`, get the result reference:
 
@@ -252,13 +206,31 @@ Retrieve the payload using the method your administrator documents (direct file 
 
 ```json
 {
-  "message": "hello from echo-flow",
+  "message": "hello from echo",
   "seconds": 1,
   "last_run": "2026-06-08T12:00:00.000Z"
 }
 ```
 
-The `message` and `seconds` values match the task `options` from the flow definition.
+The `message` and `seconds` values match the `options` you sent on schedule.
+
+---
+
+## MCP equivalent
+
+After MCP login and an `account_id`, call `task` with the same on-demand names. Do **not** call `account` first — `@engine9/plugins/e9workers:...` is well-known.
+
+```json
+{
+  "account_id": "test",
+  "path": "@engine9/plugins/e9workers:EchoWorker",
+  "method": "echo",
+  "options": { "message": "hello from echo", "seconds": 1 },
+  "label": "echo-demo"
+}
+```
+
+Poll with `action: "listTasks"` and the `flow_run_id` from the schedule response.
 
 ---
 
@@ -266,8 +238,9 @@ The `message` and `seconds` values match the task `options` from the flow defini
 
 | Symptom | What to check |
 |---------|----------------|
-| `404` on `POST /flow_runs/` | Wrong `flow_id` slug; flow not provisioned for your account |
-| `422 flow_id required` | POST body missing `flow_id` |
+| `422` on `POST /tasks/schedule` | Body missing `path` and `method`, or `flow_id` was sent (use `POST /flow_runs/` for a published flow) |
+| `Unknown engine9 worker` | Path submodule is not an Engine9Workers class (use `EchoWorker`, not a separate plugin) |
+| `could not find plugin for path @engine9/plugins/e9workers` | Account was not bootstrapped — Engine9 Workers plugin missing |
 | `401` | Token or account header — [authentication.md](./authentication.md) |
 | `503` | API not configured — ask administrator |
 | Stuck `PENDING` | Background execution not running — ask administrator |

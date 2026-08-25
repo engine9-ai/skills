@@ -103,7 +103,13 @@ Idempotency: pass `body.idempotency_key` to return an existing run for the same 
 
 ### Scheduling via TaskWorker / MCP `task`
 
-Pass `flow_path` (or MCP `flow_path`) to load a flow file with `loadFlowFromFile`. Tasks come from `flow.tasks`; optional schedule fields come from `flow.schedule` (or top-level overrides on the call). Explicit call parameters override flow defaults. Local tasks use `worker_path` values under `workers/...`; remote/plugin tasks use dotted plugin paths (e.g. `engine9.Engine9Workers.EchoWorker`). Mixed local and remote tasks in one flow are not supported in a single `scheduleTasks` call.
+Two schedule modes (same `scheduleTasks` engine):
+
+- **REST predefined flow:** `POST /flow_runs/` with `flow_id` (published slug).
+- **REST on-demand task:** `POST /tasks/schedule` with plugin `path` + `method` (Echo: `@engine9/plugins/e9workers:EchoWorker` + `echo`).
+- **MCP `task` / TaskWorker:** `flow_id` or `flow_path` (JSON5 file) for a flow; `path` + `method` for a single job.
+
+Tasks in a flow file come from `flow.tasks`; optional schedule fields come from `flow.schedule` (or top-level overrides). Explicit call parameters override flow defaults. Local tasks use `worker_path` values under `workers/...`; remote/plugin tasks use dotted plugin paths (e.g. `engine9.Engine9Workers.EchoWorker`). Mixed local and remote tasks in one flow are not supported in a single `scheduleTasks` call. API consumers should not pass a server filesystem `flow_path`.
 
 ## SQLTaskManager: execution
 

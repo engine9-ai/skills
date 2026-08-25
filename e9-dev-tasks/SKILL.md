@@ -11,7 +11,7 @@ disable-model-invocation: true
 
 **Developer skill only.** Do not load this skill unless you are in a development context — authoring JSON5 flows, working in `engine9/server`, debugging TaskWorker/SQLTaskManager, or extending the task execution pipeline.
 
-Normal engine9 users and API integrators should use [e9-tasks-api](../e9-tasks-api/SKILL.md) to **execute** flows via REST (`GET /flows`, `POST /flow_runs/`, poll `GET /task_runs/:id`). They do not author flow definitions through the API.
+Normal engine9 users and API integrators should use [e9-tasks-api](../e9-tasks-api/SKILL.md) to **schedule** work via REST: a predefined flow (`flow_id` on `POST /flow_runs/`) or an on-demand task (`path` + `method` on `POST /tasks/schedule`, e.g. `@engine9/plugins/e9workers:EchoWorker` + `echo`). They do not author flow definitions through the API.
 
 ## When to use this skill
 

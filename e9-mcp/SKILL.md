@@ -1,6 +1,6 @@
 ---
 name: e9-mcp
-description: Use the engine9 MCP server — log in first via mcp_auth, MCP-only discovery (never local code), prefer native tools over task, discover plugin methods via account when no native match exists, and invoke task as the catch-all for worker execution.
+description: Use the engine9 MCP server — log in first via mcp_auth, MCP-only discovery (never local code), prefer native tools over task, use @engine9/plugins/e9workers:EchoWorker + echo for on-demand smoke tests (no plugin lookup), discover other plugin methods via account, and invoke task as the catch-all for worker execution.
 ---
 
 # engine9 MCP
@@ -102,7 +102,7 @@ Local code is an **unreliable** source for MCP work because:
 | Available MCP tools and parameters | MCP tool schemas (client tool descriptors for the connected server) |
 | Installed plugins, submodules, methods | MCP `account` → `plugins[].metadata` |
 | Schema / tables / indexes / raw SQL | MCP `sql` (`command`: query, describe, indexes, tables, info, histo, compile_eql) |
-| Schedule or check async work | MCP `task` (after resolving path/method from `account`) |
+| Schedule or check async work | MCP `task`: on-demand = `path`+`method` (`@engine9/plugins/e9workers:EchoWorker` needs no `account` lookup); predefined flow = `flow_id` slug |
 | Analyze / summarize / profile table contents | MCP `analyze` (uses `tables` then `analyze`) |
 | Date histogram on indexed datetime column | MCP `sql` with `command: "histo"` |
 | List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
@@ -127,7 +127,8 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Describe tables, indexes, list tables, histo | `sql` with `command: "describe"` / `"indexes"` / `"tables"` / `"histo"` |
 | Compute plugin or input UUIDs | `plugin_id`, `input_id` |
 | Chat / conversation history | `chat` |
-| Run a plugin worker method | `task` (after discovery via `account` plugins) |
+| Run an on-demand plugin method | `task` with `path` + `method`. Built-in: `@engine9/plugins/e9workers:EchoWorker` + `echo` (no `account` lookup). Other plugins: discover via `account` first |
+| Run a published flow (predefined) | `task` with `flow_id` (slug from REST `GET /flows`) — no `path`/`method` |
 | Archive or retry flow runs / job lists | `task` with `action: "archive"` or `"retry"` |
 
 `task` is the **catch-all** for behaviors that do not have a native MCP call. Do not reach for `task` when a native tool already covers the request with equal or better fidelity.
@@ -288,28 +289,60 @@ Store and replay account-scoped conversations.
 - Required: `account_id`
 - Actions: `send` (default), `history`, `list`, `sample`, `list_samples`
 
+## On-demand tasks
+
+MCP `task` (default `action: "schedule"`) and REST `POST /tasks/schedule` use the same **on-demand** names: **`path` + `method`** (no `flow_id`).
+
+### Built-in Engine9 Workers
+
+Every bootstrapped account has `@engine9/plugins/e9workers`. Pass that path plus a worker submodule. **Do not** call MCP `account` to look up a plugin id. **Do not** install a separate Echo plugin.
+
+| On-demand `path` | Typical `method` |
+|------------------|------------------|
+| `@engine9/plugins/e9workers:EchoWorker` | `echo` (smoke test) |
+| `@engine9/plugins/e9workers:SQLWorker` | `query` |
+| `@engine9/plugins/e9workers:SegmentWorker` | SegmentWorker methods |
+
+Echo smoke test:
+
+```json
+{
+  "account_id": "test",
+  "path": "@engine9/plugins/e9workers:EchoWorker",
+  "method": "echo",
+  "options": { "message": "hello from echo", "seconds": 1 }
+}
+```
+
+### Other installed plugins
+
+For account-specific bots (RENxt, …), discover `path` + `method` from MCP `account` plugins, then call `task`. Slash shorthand (`renxt/people`) is resolved against that list.
+
 ## Fallback workflow: no native match → `account` → `task`
 
 When the user's request does not map cleanly to a native tool:
 
 1. **Ensure account scope** — `account_id` must be known from **this chat session** (`engine9.account_id` after `/e9a`), an explicit user statement, or MCP `account` search when the user asked you to find matching accounts. If missing, **ask the user** or suggest `/e9a <account_id>` and stop — do not read leftover CLI files (`.e9_parameters`, `.e9_config.json5`, etc.) for scope. If you only know org/prefix/plugin constraints and the user wants discovery, call `account` with `command: "search"` first, then confirm which `account_id` to use.
-2. **Call `account`** immediately with `{ "account_id": "<account_id>" }` (plugins command). If this fails (including `getPluginMetadata`), **stop** — do not call `task`. That metadata load must be fixed before scheduling can continue.
-3. **Scan the returned plugins** for a matching path/method combination:
+2. **Pick the schedule mode:**
+   - **Predefined flow** (`flow_id` slug from REST `GET /flows` or the user): call `task` with `flow_id` only. Skip plugin discovery.
+   - **On-demand built-in** (`@engine9/plugins/e9workers:<Worker>` such as Echo): call `task` with `path` + `method`. Skip plugin discovery.
+   - **On-demand account plugin**: continue with steps 3–4.
+3. **Call `account`** immediately with `{ "account_id": "<account_id>" }` (plugins command). If this fails (including `getPluginMetadata`), **stop** — do not call `task`. That metadata load must be fixed before scheduling a non-`engine9` on-demand task can continue.
+4. **Scan the returned plugins** for a matching path/method combination:
    - Each plugin has a `path` (e.g. `@frakture-com/channelbots/RENxtBot`) and `metadata.submodules` with method lists.
    - Match user intent to a plugin path + submodule + method name.
    - Resolve alias/submodule shorthand (e.g. `renxt/people`) against `metadata.alias` and `metadata.submodules` keys.
-4. **Call `task`** with the resolved `path`, `method`, `account_id`, and any `options` the user provided.
+5. **Call `task`** with the resolved `path`, `method`, `account_id`, and any `options`. No `flow_id`.
 
-Do not invent paths or methods — only use combinations present in the `account` response.
+Do not invent paths or methods for account plugins — only use combinations present in the `account` response. Do not mix `flow_id` with `path`/`method`.
 
 ### Path resolution for `task`
 
-Prefer canonical colon paths:
+Prefer these forms:
 
-- `@frakture-com/channelbots/RENxtBot:People`
-- `@engine9/plugins/e9workers:SQLWorker`
-
-Slash alias shorthand (`renxt/people`) is resolved by the server against installed plugins, but agents should resolve against cached `engine9.plugins` (from `/e9a`) first.
+- **Built-in workers (no lookup):** `@engine9/plugins/e9workers:EchoWorker`
+- **Account plugin colon paths:** `@frakture-com/channelbots/RENxtBot:People`
+- **Slash alias** for installed plugins (`renxt/people`) — resolved by the server; agents should resolve against cached `engine9.plugins` (from `/e9a`) first
 
 Do **not** use legacy Frakture dotted paths (`channelbots.RENxtBot.People`).
 
@@ -349,7 +382,7 @@ When the user asks for **all accounts**, **parent** children, or other multi-acc
 
 MCP `task` with `action: "list"` calls `TaskWorker.listRemoteFlowRuns` (`POST /flow_runs/filter` on the Frakture Task API). Returns **flow runs only** — nested `task_runs` are not included. Each flow run includes `account_id`, `parent_account_id` (first id in that account's `parent_ids`, or `null`), and `parent_ids`.
 
-MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listRemoteTaskRuns` (`POST /task_runs/filter` on the Frakture Task API) for a specific `flow_run_id` / `task_run_ids`. The MCP action name is unchanged. The result is `{ task_runs: [ … ], flow_run? }` — the same shape as REST `POST /task_runs/filter`. Pass `remote: false` to list local runs via `TaskWorker.listTasks`. Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`.
+MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listRemoteTaskRuns` (`POST /task_runs/filter` on the Frakture Task API) for a specific `flow_run_id` / `task_run_ids`. The result is `{ task_runs: [ … ], flow_run? }` — the same shape as REST `POST /task_runs/filter`. Pass `remote: false` to list local runs. Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`.
 
 MCP `task` with `action: "archive"` or `"retry"` bulk-archives or retries remote flow runs / job lists (`TaskWorker.archiveRemoteFlowRuns` / `retryRemoteFlowRuns` → Frakture `POST /flow_runs/archive` and `/flow_runs/retry`). Same Firebase / MCP session and account header as `action: "list"` — **`user_id` is not required** (listing never required it; archive/retry must not either). Do **not** send `e9key_` Task API credentials from Conductor or Cursor MCP. Do **not** ask the user for a Frakture `user_id`.
 

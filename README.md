@@ -11,7 +11,7 @@ Skills for working with engine9 deployments.
 | MCP tools | [e9-mcp/SKILL.md](./e9-mcp/SKILL.md) | Native MCP tool selection, account discovery, task fallback |
 | EQL | [e9-eql/SKILL.md](./e9-eql/SKILL.md) | engine9 Query Language — expressions, query objects, MCP `eql` |
 | Troubleshoot | [e9-troubleshoot/SKILL.md](./e9-troubleshoot/SKILL.md) | Support-ticket intake, product-side diagnosis, and recommended resolutions (`troubleshoot` only) |
-| Task API (REST) | [e9-tasks-api/SKILL.md](./e9-tasks-api/SKILL.md) | Execute flows via REST — list, create runs, poll state |
+| Task API (REST) | [e9-tasks-api/SKILL.md](./e9-tasks-api/SKILL.md) | Task API REST — predefined flows (`flow_id`) or an on-demand task (`path` + `method`; Echo: `@engine9/plugins/e9workers:EchoWorker`) |
 | Dev tasks (flows) | [e9-dev-tasks/SKILL.md](./e9-dev-tasks/SKILL.md) | Design/build JSON5 flows, TaskWorker, SQLTaskManager *(developers only)* |
 | Timeline | [e9-timeline/SKILL.md](./e9-timeline/SKILL.md) | Person activity log, entry types, querying, missing-event debug |
 | Timeline loading *(developers)* | [e9-timeline/loading.md](./e9-timeline/loading.md) | InputWorker ID files → `timeline` / detail tables |

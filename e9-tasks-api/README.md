@@ -9,7 +9,7 @@ Guides for developers and integrators who **call the engine9 Task API** over HTT
 1. [concepts.md](./concepts.md) — flows, runs, IDs, states, async execution
 2. [authentication.md](./authentication.md) — **API keys (`e9key_…`) and scopes** (`tasks:read` / `tasks:schedule`)
 3. [getting-started.md](./getting-started.md) — environment variables and first calls
-4. [echo-walkthrough.md](./echo-walkthrough.md) — schedule → task_runs/filter Echo walkthrough
+4. [echo-walkthrough.md](./echo-walkthrough.md) — on-demand Echo (`@engine9/plugins/e9workers:EchoWorker` + `echo`) → task_runs/filter
 5. [endpoints.md](./endpoints.md) — per-route reference with multiple examples
 6. [errors.md](./errors.md) — HTTP status codes (Prefect links for error semantics only)
 
@@ -22,7 +22,7 @@ Developers authoring JSON5 flow files: see [e9-dev-tasks](../e9-dev-tasks/SKILL.
 | Base URL | `https://data.engine9.ai` |
 | API key | `e9key_…` with `tasks:read` and/or `tasks:schedule` — see [authentication.md](./authentication.md) |
 | Account id | `acme` — sent as `X-ENGINE9-ACCOUNT-ID` |
-| Available flows | Slugs from `GET /flows`, e.g. `echo-flow`, `nightly-sync` |
+| Available flows | Slugs from `GET /flows` (optional; on-demand Echo does not need a flow) |
 | Output retrieval | How to fetch completed task results for your environment |
 
 Operators and deployment setup are documented separately (ask your administrator).
@@ -35,11 +35,13 @@ Routes live at the **API origin root** — not under `/api/task`:
 GET  /flows
 POST /tasks/schedule
 POST /task_runs/filter
-POST /tasks/listTasks   (deprecated)
 POST /flow_runs/
 GET  /flow_runs/:id
 GET  /task_runs/:id
 ...
 ```
 
-Primary integration path: **schedule** (`POST /tasks/schedule` or `POST /flow_runs/`) then **list** via Prefect `POST /task_runs/filter`. `POST /tasks/listTasks` remains as a deprecated HTTP poll alias. MCP `task` `action: "listTasks"` uses the same Frakture `POST /task_runs/filter` surface.
+Primary integration path: pick the **schedule endpoint**, then **list** via `POST /task_runs/filter`.
+
+- **Predefined flow:** `POST /flow_runs/` with **`flow_id`** (published slug) — see also `POST /tasks/schedule`
+- **On-demand task:** `POST /tasks/schedule` with plugin **`path`** + **`method`** — built-in: `@engine9/plugins/e9workers:EchoWorker` + `echo`; see also `POST /flow_runs/`

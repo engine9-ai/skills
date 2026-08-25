@@ -33,7 +33,7 @@ engine9 API keys require a **non-empty scopes list** at creation. A request is a
 | `people:write` | Core `POST /people` | Inbound people pipeline |
 | `tables:write` | Core `POST /upsert/:table` | Allowlisted table upserts |
 | `data:read` | Core `GET /read/:name` | Configured reads |
-| `tasks:read` | Task API | List/read flows; check run status (`GET /flows*`, `POST /task_runs/filter`, `GET /flow_runs/:id`, `GET /task_runs/:id`; deprecated `POST /tasks/listTasks`) |
+| `tasks:read` | Task API | List/read flows; check run status (`GET /flows*`, `POST /task_runs/filter`, `GET /flow_runs/:id`, `GET /task_runs/:id`) |
 | `tasks:schedule` | Task API | Schedule work (`POST /tasks/schedule`, `POST /flow_runs/`, `*/set_state`) |
 | `admin` | Any | All scopes (use this instead of the old `*` wildcard) |
 | `public` | Inbound | Public forms / e9-inbound (`e9publickey_` prefix; same `api_key` table) |
@@ -47,7 +47,6 @@ Prefixes: `e9key_…` for normal scopes; `e9publickey_…` when the key includes
 | Route | Scope |
 |-------|--------|
 | `GET /flows`, `GET /flows/:id`, `POST /flows/filter`, `GET /flows_dir` | `tasks:read` |
-| `POST /tasks/listTasks` (deprecated) | `tasks:read` |
 | `GET /flow_runs/:id`, `POST /flow_runs/filter` | `tasks:read` |
 | `POST /flow_runs/archive`, `POST /flow_runs/retry` | `tasks:schedule` |
 | `GET /task_runs/:id`, `POST /task_runs/filter` | `tasks:read` |
@@ -103,7 +102,7 @@ curl -sS -H "Authorization: Bearer $ENGINE9_API_KEY" \
   https://data.engine9.ai/flow_runs/filter
 ```
 
-Pass `"remote": false` for local runs. `POST /task_runs/filter` with `{ "flow_run_id": "…" }` lists that run's tasks (deprecated `POST /tasks/listTasks` still requires a `flow_run_id`).
+Pass `"remote": false` for local runs. `POST /task_runs/filter` with `{ "flow_run_id": "…" }` lists that run's tasks.
 
 ## curl variables
 
@@ -144,7 +143,9 @@ curl $CURL_TLS -sS -X POST \
   "$BASE_URL/flow_runs/filter"
 ```
 
-### Schedule (MCP-parity)
+### Schedule an on-demand task (`path` + `method`)
+
+`POST /tasks/schedule`. Echo smoke test uses `@engine9/plugins/e9workers:EchoWorker` (no plugin lookup). For a published flow, see [Schedule a predefined flow](#schedule-a-predefined-flow-flow_id-required).
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -152,28 +153,30 @@ curl $CURL_TLS -sS -X POST \
   -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d '{
-    "path": "@engine9/plugins/e9workers:SQLWorker",
-    "method": "query",
-    "options": { "sql": "select 1 as ok" },
+    "path": "@engine9/plugins/e9workers:EchoWorker",
+    "method": "echo",
+    "options": { "message": "hello from echo", "seconds": 1 },
     "label": "partner smoke"
   }' \
   "$BASE_URL/tasks/schedule"
 ```
 
-### Schedule a published flow by slug
+### Schedule a predefined flow (`flow_id` required)
+
+`POST /flow_runs/`. For a single plugin method, see [Schedule an on-demand task](#schedule-an-on-demand-task-path--method).
 
 ```bash
 curl $CURL_TLS -sS -X POST \
   -H "$AUTH" \
   -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
-  -d '{"flow_id":"echo-flow"}' \
+  -d '{"flow_id":"nightly-sync"}' \
   "$BASE_URL/flow_runs/"
 ```
 
 ### Check status
 
-Prefer Prefect `POST /task_runs/filter`. Deprecated `POST /tasks/listTasks` still accepts the same `flow_run_id` body.
+`POST /task_runs/filter` with the `flow_run_id` from the schedule response:
 
 ```bash
 curl $CURL_TLS -sS -X POST \

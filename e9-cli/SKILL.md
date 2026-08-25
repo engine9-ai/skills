@@ -245,32 +245,36 @@ Command form: `/e9 task <plugin-path-or-alias> <method> [options...]`
 
 Examples:
 
+- `/e9 task @engine9/plugins/e9workers:EchoWorker echo`
 - `/e9 task renxt/people listCustomFields`
 - `/e9 task @frakture-com/channelbots/RENxtBot:People listCustomFields`
-- `/e9 task @engine9/plugins/e9workers:SQLWorker queries`
+- `/e9 task @engine9/plugins/e9workers:SQLWorker query`
 
 ### Path forms (in priority order)
 
-1. **Canonical plugin path with colon submodule** (preferred for `task.path`):
+1. **Reserved Engine9 Workers path** (no plugin lookup; every bootstrapped account):
+   - `@engine9/plugins/e9workers:EchoWorker` + method `echo` (smoke test)
+   - `@engine9/plugins/e9workers:SQLWorker` + method `query`
+2. **Canonical plugin path with colon submodule** (account plugins):
    - `@frakture-com/channelbots/RENxtBot:People`
-   - `@engine9/plugins/e9workers:SQLWorker`
-2. **Slash alias shorthand** (resolve via `engine9.plugins` before MCP):
+3. **Slash alias shorthand** (resolve via `engine9.plugins` before MCP):
    - `renxt/people` → find plugin where `metadata.metadata.alias` (or `metadata.alias`) is `renxt`, submodule `People` from `metadata.submodules`
-3. **Bare plugin path** (no submodule): `@frakture-com/channelbots/RENxtBot` — only when the method lives on the plugin root
+4. **Bare plugin path** (no submodule): `@frakture-com/channelbots/RENxtBot` — only when the method lives on the plugin root
 
-Do **not** pass legacy remote job paths such as `channelbots.RENxtBot.People`.
+Do **not** pass legacy remote job paths such as `channelbots.RENxtBot.People`. Do **not** treat Echo as a separate installed plugin.
 
 ### Resolution algorithm
 
 Before MCP `task`:
 
-1. Require `engine9.plugins` from `/e9a` (or call MCP `account` once if missing).
-2. If the user path is already `plugin.path` or `plugin.path:Submodule` and matches an installed plugin, use it.
-3. If the path is `alias/submodule` (e.g. `renxt/people`), scan `engine9.plugins`:
+1. If the path is `@engine9/plugins/e9workers:<Worker>`, pass it through — **do not** require `engine9.plugins` / MCP `account`.
+2. Otherwise require `engine9.plugins` from `/e9a` (or call MCP `account` once if missing).
+3. If the user path is already `plugin.path` or `plugin.path:Submodule` and matches an installed plugin, use it.
+4. If the path is `alias/submodule` (e.g. `renxt/people`), scan `engine9.plugins`:
    - Match alias (case-insensitive) on `plugin.metadata.metadata.alias` or `plugin.metadata.alias`
    - Match submodule (case-insensitive) on keys of `plugin.metadata.submodules`
    - Build `{plugin.path}:{Submodule}` (preserve submodule casing from metadata keys)
-4. Call MCP `task` with `account_id` from `engine9.account_id`, resolved `path`, and `method`.
+5. Call MCP `task` with `account_id` from `engine9.account_id`, resolved `path`, and `method`.
 
 The MCP server also resolves slash/colon paths against the account plugin table if the agent passes shorthand.
 

@@ -6,15 +6,39 @@ Unless noted, responses are JSON. Successful reads return **200**; schedule retu
 
 ---
 
-## Schedule (MCP parity)
+## Schedule
 
-`POST /tasks/schedule` mirrors the MCP `task` tool and calls `TaskWorker.scheduleTasks`. Listing belongs on Prefect `POST /task_runs/filter`. Engine9 still accepts deprecated `POST /tasks/listTasks` as an alias that calls the same Frakture `POST /task_runs/filter` surface.
+Two endpoints, both call `TaskWorker.scheduleTasks`. Listing belongs on `POST /task_runs/filter`.
+
+| Endpoint | Schedules | Required |
+|----------|-----------|----------|
+| [`POST /flow_runs/`](#post-flow_runs) | **Predefined flow** | **`flow_id`** (published slug) |
+| [`POST /tasks/schedule`](#post-tasksschedule) | **On-demand task** | Plugin **`path`** + **`method`** |
 
 ### `POST /tasks/schedule`
 
 **Scope:** `tasks:schedule`
 
-Provide `flow_path` **or** both `path` and `method` (same as MCP).
+Schedule an **on-demand task** — one plugin worker method. Requires `path` and `method`. Do not send `flow_id`.
+
+Built-in Engine9 Workers (every account; no plugin lookup): `@engine9/plugins/e9workers:<Worker>`. Echo smoke test: `@engine9/plugins/e9workers:EchoWorker` + `echo`.
+
+To run a published workflow instead, use [`POST /flow_runs/`](#post-flow_runs) with `flow_id`.
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "@engine9/plugins/e9workers:EchoWorker",
+    "method": "echo",
+    "options": { "message": "hello from echo", "seconds": 1 },
+    "label": "echo smoke"
+  }' \
+  "$BASE_URL/tasks/schedule"
+```
+
+Account plugin example (`path` from MCP `account` / installed plugins):
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -30,13 +54,14 @@ curl $CURL_TLS -sS -X POST \
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `flow_path` | One of | Absolute/server path to a JSON5 flow file |
-| `path` + `method` | One of | Plugin path + worker method (resolved like MCP) |
+| `path` + `method` | **Yes** | On-demand plugin path + worker method. Built-in: `@engine9/plugins/e9workers:EchoWorker` + `echo`. |
 | `options` | No | Options object for the worker method |
 | `label`, `tracking_code`, `start_after_timestamp` | No | Schedule metadata |
 | `remote` | No | Default `true` (remote job-list); `false` for local workers |
 
 **Response:** `{ ok: true, action: "schedule", result: { flow_run_id, task_run_ids, … } }`
+
+**422** — missing `path`+`method`, or `flow_id` sent here (use `POST /flow_runs/` for a predefined flow).
 
 ---
 
@@ -65,7 +90,7 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows" \
 Read one flow by **slug** (`id` from the flow file).
 
 ```bash
-curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows/echo-flow"
+curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows/nightly-sync"
 ```
 
 **404** — no flow with that slug for your account.
@@ -83,7 +108,7 @@ curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d '{
-    "flows": { "name": { "eq_": "Echo Flow" } },
+    "flows": { "name": { "eq_": "Nightly sync" } },
     "limit": 20,
     "offset": 0,
     "sort": "CREATED_DESC"
@@ -98,7 +123,7 @@ curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d '{
-    "flows": { "tags": { "any_": ["echo", "etl"] } },
+    "flows": { "tags": { "any_": ["etl"] } },
     "limit": 10
   }' \
   "$BASE_URL/flows/filter"
@@ -124,7 +149,9 @@ Supported `sort`: `CREATED_DESC` (default), `CREATED_ASC`.
 
 **Scope:** `tasks:schedule`
 
-Schedule a **published** flow by slug. Resolves the account flows directory JSON5 file and calls `scheduleTasks` (same engine as MCP / `POST /tasks/schedule`).
+Schedule a **predefined** (published) flow. **`flow_id` is required** — the flow slug from `GET /flows`, not a plugin path. Resolves the account flows directory JSON5 file and calls `scheduleTasks`.
+
+To invoke a single plugin method instead, use [`POST /tasks/schedule`](#post-tasksschedule) with `path` + `method` (no `flow_id`). Echo smoke test is on-demand (`@engine9/plugins/e9workers:EchoWorker` + `echo`), not a flow.
 
 **Minimal body:**
 
@@ -132,7 +159,7 @@ Schedule a **published** flow by slug. Resolves the account flows directory JSON
 curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
-  -d '{"flow_id": "echo-flow"}' \
+  -d '{"flow_id": "nightly-sync"}' \
   "$BASE_URL/flow_runs/"
 ```
 
@@ -143,8 +170,8 @@ curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d '{
-    "flow_id": "echo-flow",
-    "name": "nightly-echo-check",
+    "flow_id": "nightly-sync",
+    "name": "nightly-sync-check",
     "remote": true
   }' \
   "$BASE_URL/flow_runs/"
@@ -152,7 +179,7 @@ curl $CURL_TLS -sS -X POST \
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `flow_id` | **Yes** | Flow slug (e.g. `echo-flow`), not the UUID |
+| `flow_id` | **Yes** | Flow slug (e.g. `nightly-sync`), not the UUID |
 | `name` / `label` | No | Job list label |
 | `tracking_code`, `start_after_timestamp` | No | Schedule metadata |
 | `remote` | No | Default `true` |
@@ -161,18 +188,20 @@ curl $CURL_TLS -sS -X POST \
 
 **422** — missing `flow_id`. **404** — unknown flow slug.
 
+See also: [`POST /tasks/schedule`](#post-tasksschedule) for a specific plugin method.
+
 ---
 
 ### `GET /flow_runs/:id`
 
-**Scope:** `tasks:read` — polls via `listTasks` (default `remote=true`; pass `?remote=false` for local).
+**Scope:** `tasks:read` — lists the run (default `remote=true`; pass `?remote=false` for local).
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
   "$BASE_URL/flow_runs/$FLOW_RUN_ID"
 ```
 
-Prefer `POST /task_runs/filter` with `{ "flow_run_id": "…" }` to list that run's tasks (Prefect).
+Prefer `POST /task_runs/filter` with `{ "flow_run_id": "…" }` to list that run's tasks.
 
 ---
 
@@ -217,7 +246,7 @@ curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d '{
-    "flow_runs": { "flow_id": { "eq_": "echo-flow" } },
+    "flow_runs": { "flow_id": { "eq_": "nightly-sync" } },
     "sort": "CREATED_DESC",
     "limit": 20,
     "offset": 0
@@ -412,7 +441,7 @@ curl $CURL_TLS -sS -X POST \
 
 ### `POST /task_runs/`
 
-Create a standalone task run (advanced). Most clients use `POST /flow_runs/` instead.
+Create a standalone task run (advanced). Most clients schedule an on-demand task (`POST /tasks/schedule` with `path` + `method`) or a predefined flow (`POST /flow_runs/` with `flow_id`) instead.
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -420,7 +449,7 @@ curl $CURL_TLS -sS -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "flow_run_id": "'"$FLOW_RUN_ID"'",
-    "task_key": "echo-step",
+    "task_key": "echo",
     "dynamic_key": "0"
   }' \
   "$BASE_URL/task_runs/"
@@ -465,7 +494,7 @@ Prefect **Read Task Runs**. Primary way to list or poll task runs. Returns `{ ok
 
 Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`.
 
-**All task runs for a flow run** (listTasks replacement):
+**All task runs for a flow run:**
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -563,18 +592,19 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows_dir"
 ## Typical integration sequence
 
 ```bash
-# 1. Discover
-curl ... "$BASE_URL/flows"
+# 1. On-demand Echo (path + method — no flow_id)
+curl -X POST ... -d '{"path":"@engine9/plugins/e9workers:EchoWorker","method":"echo","options":{"message":"hello from echo","seconds":1}}' \
+  "$BASE_URL/tasks/schedule"
 
-# 2. Create
-curl -X POST ... -d '{"flow_id":"echo-flow"}' "$BASE_URL/flow_runs/"
+# 2. Optional: predefined flow (flow_id required)
+curl -X POST ... -d '{"flow_id":"nightly-sync"}' "$BASE_URL/flow_runs/"
 
 # 3. Poll (lists tasks for the run; includes flow_run)
 curl -X POST ... -d '{"flow_run_id":"'"$FLOW_RUN_ID"'"}' \
   "$BASE_URL/task_runs/filter"
 
 # 4. Optional: list history
-curl -X POST ... -d '{"flow_runs":{"flow_id":{"eq_":"echo-flow"}},"limit":10}' \
+curl -X POST ... -d '{"flow_runs":{"flow_id":{"eq_":"nightly-sync"}},"limit":10}' \
   "$BASE_URL/flow_runs/filter"
 
 # 5. Optional: retry failed runs (GraphQL job_list_retry)

@@ -124,3 +124,11 @@ LIMIT 50;
 `models` lists every `model_*_person` / `model_*_transaction` table that exists (stats suffixes are ignored). Each `people[].models[prefix]` key matches that catalog so the UI can render a column per model even when `person` is `null`.
 
 Timeline context joins: `timeline.source_code_id` → `source_code_summary` (fallback `source_code_dictionary`); `timeline.input_id` → `input`; `input.plugin_id` → `plugin`; `timeline.id` → `transaction.id` for gift fields. Dictionary labels on model rows use the same `source_code_summary` join.
+
+## Legacy inspect
+
+`summarizePeopleLegacy` / `comparePeopleLegacy` live in `server/workers/model/legacy.js`. They read the old identity tables (`person_model_source_code_summary`, `timeline_v3_summary`, `transaction_model_source_code`, `person_metadata`, `transaction_metadata`) and do not write `{prefix}_*`.
+
+**Do not join `person_id_int` to `person.id`.** `person_metadata` generates `person_id_int` from the legacy `person_id` string. Current models use bigint `person.id`. Pair via `emails` (`person_email` + SHA-256 on `person_metadata.person_id`, email string as fallback) or explicit `person_ids` + `legacy_person_ids`.
+
+`model_id` 1/2/4/8/9/10 map to `model_first_touch` / `model_crm_origin` / `model_authentic_origin` / `model_last_acquisition` / `model_authentic_v2` / `model_authentic_v2025`. The console CASE leaves 10 as the raw id.

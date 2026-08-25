@@ -9,6 +9,7 @@ How to interpret failed Task API responses. Response bodies use a `detail` field
 | **401** | Unauthorized | Send valid `e9key_` API key + account header — [authentication.md](./authentication.md) |
 | **403** | Forbidden | Unknown/disabled account, or missing `tasks:read` / `tasks:schedule` scope |
 | **404** | Not found | Wrong flow slug, flow run id, or task run id |
+| **410** | Gone | Removed route — use the successor in `detail` (listing is `POST /task_runs/filter`) |
 | **422** | Validation error | Fix request body (missing required field) |
 | **500** | Server error | Unexpected failure — retry or contact administrator |
 | **503** | Service unavailable | API not fully configured for your environment — contact administrator |
@@ -60,7 +61,7 @@ Contact your administrator — the API is not fully provisioned for your account
 
 ## Errors by endpoint
 
-### `POST /flow_runs/`
+### `POST /flow_runs/` (predefined flow)
 
 | Status | `detail` | Cause |
 |--------|----------|-------|
@@ -68,7 +69,9 @@ Contact your administrator — the API is not fully provisioned for your account
 | 404 | Flow not found | Slug does not exist for your account |
 | 503 | Flow directory not configured | Flows not provisioned — contact administrator |
 
-**Example — missing flow_id:**
+To schedule an on-demand task instead, use [`POST /tasks/schedule`](./endpoints.md#post-tasksschedule) with `path` + `method`.
+
+**Example — missing flow_id on a predefined flow:**
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -89,6 +92,16 @@ curl $CURL_TLS -sS -X POST \
   "$BASE_URL/flow_runs/"
 # HTTP 404
 ```
+
+### `POST /tasks/schedule` (on-demand task)
+
+| Status | Cause |
+|--------|-------|
+| 422 | Body missing `path` and `method` |
+| 422 | Body included `flow_id` — use `POST /flow_runs/` for a predefined flow |
+| 500 / plugin error | `path` not installed on the account or method unknown |
+
+To schedule a predefined flow instead, use [`POST /flow_runs/`](./endpoints.md#post-flow_runs) with `flow_id`. Built-in on-demand path is `@engine9/plugins/e9workers:<Worker>` (e.g. `@engine9/plugins/e9workers:EchoWorker` + `echo`). Do not send a flow slug as `path`.
 
 ### `GET /flows/:id`
 
@@ -128,8 +141,6 @@ These mutate existing job lists (GraphQL `job_list_archive` / `job_list_retry`).
 | 200 with `task_runs: []` | No matches (unknown ids do **not** 404) |
 | 503 | API not fully configured |
 
-Deprecated `POST /tasks/listTasks` still **422**s without `flow_run_id` or `task_run_ids`.
-
 ### `GET /flows` / `POST /flows/filter`
 
 | Status | Cause |
@@ -167,6 +178,7 @@ These are not HTTP errors — handle in application logic.
 |--------|--------|
 | 401 | No — refresh token first |
 | 404 | No — fix id/slug |
+| 410 | No — switch to `POST /task_runs/filter` |
 | 422 | No — fix request body |
 | 500 | Yes — with backoff |
 | 503 | No — administrator must fix configuration |

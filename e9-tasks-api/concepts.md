@@ -12,31 +12,50 @@ You interact with definitions via:
 - `GET /flows/:id` — read one flow by **slug**
 - `POST /flows/filter` — search and paginate
 
-**Flow slug** — the human-readable `id` on the flow object (e.g. `echo-flow`). This is what you pass as `flow_id` when creating a run.
+**Flow slug** — the human-readable `id` on the flow object (e.g. `nightly-sync`). This is what you pass as `flow_id` when scheduling a **predefined flow**.
 
-**Flow UUID (`flow_id` on listed flows)** — a stable UUID associated with the slug. You may see it on flow and flow-run objects; for `POST /flow_runs/` use the **slug**, not this UUID.
+**Flow UUID (`flow_id` on listed flows)** — a stable UUID associated with the slug. You may see it on flow and flow-run objects; for scheduling use the **slug**, not this UUID.
 
 ### Example flow object (abridged)
 
 ```json
 {
-  "id": "echo-flow",
-  "name": "Echo Flow",
+  "id": "nightly-sync",
+  "name": "Nightly sync",
   "flow_id": "8f0a5e4d-b82b-5c8f-b4c7-46a39b2d9be0",
-  "tags": ["echo", "test"],
+  "tags": ["etl"],
   "tasks": [
     {
-      "task_key": "echo-step",
-      "name": "Echo step",
-      "options": { "message": "hello from echo-flow", "seconds": 1 }
+      "task_key": "load-step",
+      "name": "Load step",
+      "options": { "table": "person" }
     }
   ]
 }
 ```
 
+## Two schedule endpoints
+
+Pick the endpoint that matches the work. Do not send `flow_id` to `/tasks/schedule`.
+
+| Endpoint | When to use | Required fields |
+|----------|-------------|-----------------|
+| **`POST /flow_runs/`** | Run a published workflow (`GET /flows`) | **`flow_id`** — the flow slug (e.g. `nightly-sync`) |
+| **`POST /tasks/schedule`** | Invoke one **on-demand** plugin method | Plugin **`path`** + **`method`** (optional `options`) |
+
+See also: [POST /flow_runs/](./endpoints.md#post-flow_runs) ↔ [POST /tasks/schedule](./endpoints.md#post-tasksschedule).
+
+An on-demand task needs only plugin identifiers and the method — **no `flow_id`**. The server wraps that one job in a flow run so you can still poll `flow_run_id` / `task_run_ids`.
+
+**Built-in Engine9 Workers** use `@engine9/plugins/e9workers:<Worker>`. Echo smoke test: `path: "@engine9/plugins/e9workers:EchoWorker"`, `method: "echo"`. No plugin-id lookup. See [echo-walkthrough.md](./echo-walkthrough.md#on-demand-task-names).
+
+A predefined flow needs **`flow_id`** and does **not** take `path` or `method`. Worker path and method come from the flow definition.
+
+Do not pass a server filesystem `flow_path` unless your administrator told you to; API consumers use the published slug on `/flow_runs/`.
+
 ## Flow run (instance)
 
-A **flow run** is one execution of a flow. Created with `POST /flow_runs/`.
+A **flow run** is one execution of a predefined flow **or** the wrapper around an on-demand scheduled task. Created with `POST /flow_runs/` (`flow_id` required) or `POST /tasks/schedule`.
 
 | Field | Meaning |
 |-------|---------|
@@ -44,7 +63,7 @@ A **flow run** is one execution of a flow. Created with `POST /flow_runs/`.
 | `account_id` | Account that owns this run |
 | `parent_account_id` | First id in that account's `parent_ids` (`null` if the account has no parent) |
 | `parent_ids` | Full `parent_ids` array from the account document |
-| `flow_slug` | Which flow template (e.g. `echo-flow`) |
+| `flow_slug` | Which flow template (e.g. `nightly-sync`) |
 | `flow_id` | UUID associated with the slug |
 | `state_type` | Overall run state (`SCHEDULED`, `RUNNING`, `COMPLETED`, `FAILED`, …) |
 | `last_completed` | When this flow run (job list) last finished |
@@ -81,15 +100,15 @@ It is `true` when `dataflow_last_completed` exists and this flow run either neve
 | `last_completed` **before** `dataflow_last_completed` (a later run finished) | `true` |
 | `last_completed` **after** `dataflow_last_completed` | `false` |
 
-Use it on `GET /flow_runs/:id` / `POST /tasks/check` responses, or as a filter on `POST /flow_runs/filter` (`{ "completed_since": true }`). Same field as GraphQL `JobListQuery.completed_since`.
+Use it on `GET /flow_runs/:id` / `POST /task_runs/filter` responses, or as a filter on `POST /flow_runs/filter` (`{ "completed_since": true }`). Same field as GraphQL `JobListQuery.completed_since`.
 
 Do **not** treat a stored `dataflow_completed_since_last_update` value as the source of truth.
 
-## Task (step within a flow)
+## Task (step)
 
-A **task** is a single step in a flow. Tasks appear inside flow definitions and as `task_runs` when a flow runs. There is no separate API resource for task definitions.
+A **task** is a single worker method: either a step inside a predefined flow, or an **on-demand task** you schedule directly with plugin `path` + `method`. There is no separate API resource for task definitions.
 
-**`task_key`** — stable string identifying which step a task run belongs to (e.g. `echo-step`). It is a logical name within the flow, not an opaque database id.
+**`task_key`** — stable string identifying which step a task run belongs to. It is a logical name within the flow, not an opaque database id.
 
 **`dynamic_key`** — distinguishes multiple runs of the same task key (usually `"0"` for a single run).
 
@@ -115,10 +134,10 @@ A **task run** is one execution of one task within a flow run.
 {
   "id": "0196f1d1-2c55-7d89-9c24-6fe4f7fd93ea",
   "flow_run_id": "0196f1d0-87cf-7b6f-b9a0-8f5d2d6c2f9e",
-  "task_key": "echo-step",
+  "task_key": "echo",
   "state_type": "COMPLETED",
   "task_inputs": {
-    "options": { "message": "hello from echo-flow", "seconds": 1 }
+    "options": { "message": "hello from echo", "seconds": 1 }
   },
   "state": {
     "type": "COMPLETED",
@@ -144,7 +163,7 @@ Both flow runs and task runs use string `state_type` values.
 | `CANCELLED` | Stopped before completion |
 | `CRASHED` | Unexpected failure |
 
-**Typical integration pattern:** create a flow run → poll `GET /task_runs/:id` until `state_type` is terminal (`COMPLETED` or `FAILED`).
+**Typical integration pattern:** schedule (on-demand task or predefined flow) → poll `GET /task_runs/:id` until `state_type` is terminal (`COMPLETED` or `FAILED`).
 
 ## Scheduling vs execution
 
@@ -152,9 +171,10 @@ Both flow runs and task runs use string `state_type` values.
 
 | Action | What happens |
 |--------|----------------|
-| `POST /flow_runs/` | Creates a flow run and task runs in `PENDING` state |
+| `POST /flow_runs/` with `flow_id` | Schedules a **predefined flow** (slug required). See also `POST /tasks/schedule`. |
+| `POST /tasks/schedule` with `path` + `method` | Schedules an **on-demand task**. See also `POST /flow_runs/`. |
 | Background processing | Picks up `PENDING` tasks and executes them |
-| `GET /task_runs/:id` | Reports current state |
+| `POST /task_runs/filter` / `GET /task_runs/:id` | Reports current state |
 
 If tasks stay `PENDING` for a long time, execution may not be running in your environment — contact your administrator.
 
@@ -168,11 +188,11 @@ Completed task output is **not** returned inline in `GET /task_runs/:id`. Instea
 2. Read `state.state_details.output_path` (or other fields your administrator documents)
 3. Retrieve the result using the mechanism your deployment provides (direct file access, signed URL, follow-up API, etc.)
 
-For the Echo sample flow, the result object echoes the task `options`:
+For the Echo on-demand smoke test (`@engine9/plugins/e9workers:EchoWorker` + `echo`), the result object echoes the task `options`:
 
 ```json
 {
-  "message": "hello from echo-flow",
+  "message": "hello from echo",
   "seconds": 1,
   "last_run": "2026-06-08T12:00:00.000Z"
 }
@@ -184,13 +204,15 @@ If you only have HTTP access, ask your administrator how to fetch completed task
 
 | Name | Format | Example | Used in |
 |------|--------|---------|---------|
-| Flow slug | string | `echo-flow` | `POST /flow_runs/` body `flow_id`, `GET /flows/:id` |
+| Flow slug | string | `nightly-sync` | `flow_id` on `POST /flow_runs/` (predefined flow) |
 | Flow UUID | UUID | `8f0a5e4d-...` | Filter fields, flow run `flow_id` |
+| On-demand path | string | `@engine9/plugins/e9workers:EchoWorker` | `path` when scheduling an on-demand task |
+| Method | string | `echo` | `method` when scheduling an on-demand task |
 | Flow run id | UUID | `0196f1d0-...` | `GET /flow_runs/:id`, task run `flow_run_id` |
 | Task run id | UUID | `0196f1d1-...` | `GET /task_runs/:id` |
-| Task key | string | `echo-step` | Task run `task_key`, filters |
+| Task key | string | `echo` | Task run `task_key`, filters |
 
-**Common mistake:** passing the flow UUID as `flow_id` on create. Use the **slug** (`echo-flow`).
+**Common mistakes:** passing the flow UUID as `flow_id` (use the **slug**); sending `flow_id` to `POST /tasks/schedule` (use `POST /flow_runs/`); expecting an on-demand task to need a `flow_id`; treating Echo as a separate installed plugin (it is `@engine9/plugins/e9workers:EchoWorker`).
 
 ## Request flow (diagram)
 
@@ -198,11 +220,15 @@ If you only have HTTP access, ask your administrator how to fetch completed task
 You                    Task API                 Background execution
  |                         |                            |
  |  GET /flows             |                            |
- |------------------------>|  list flow definitions     |
+ |------------------------>|  list published flows      |
  |<------------------------|                            |
  |                         |                            |
- |  POST /flow_runs/       |                            |
- |  { "flow_id": "…" }     |                            |
+ |  either:                |                            |
+ |  POST /flow_runs/       |  predefined flow           |
+ |  { "flow_id": "…" }     |  (slug required)           |
+ |  or:                    |                            |
+ |  POST /tasks/schedule   |  on-demand task            |
+ |  { "path", "method" }   |  (no flow_id)              |
  |------------------------>|  create flow + task runs |
  |<------------------------|  (task runs: PENDING)      |
  |                         |--------------------------->| execute

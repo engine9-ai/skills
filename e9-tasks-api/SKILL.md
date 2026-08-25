@@ -2,8 +2,11 @@
 name: e9-tasks-api
 description: >-
   Use the engine9 Task API (flows, schedule, task_runs/filter, flow runs) over HTTP with
-  e9k API keys and task scopes. Scheduling uses the same scheduleTasks path as
-  MCP task. MCP itself stays on Firebase OAuth — do not mix credentials.
+  e9k API keys and task scopes. POST /flow_runs/ schedules a predefined flow (flow_id
+  required); POST /tasks/schedule schedules an on-demand task (plugin path + method).
+  Built-in workers use `@engine9/plugins/e9workers:<Worker>` (e.g. EchoWorker + echo).
+  Scheduling uses the same scheduleTasks path as MCP task. MCP itself stays on Firebase
+  OAuth — do not mix credentials.
 ---
 
 # engine9 Task API
@@ -14,6 +17,19 @@ When the user is working through **MCP** (not REST/curl), use MCP `account` and 
 
 For designing and building flow JSON5 files (developers only), see [e9-dev-tasks](../e9-dev-tasks/SKILL.md).
 
+## Two schedule endpoints
+
+Pick the endpoint that matches the work. They both call `scheduleTasks` and return `flow_run_id` / `task_run_ids`.
+
+| Endpoint | Schedules | Required | See also |
+|----------|-----------|----------|----------|
+| **`POST /flow_runs/`** | A **predefined flow** from `GET /flows` | **`flow_id`** (the flow slug) | For one plugin method: [`POST /tasks/schedule`](./endpoints.md#post-tasksschedule) |
+| **`POST /tasks/schedule`** | An **on-demand task** | Plugin **`path`** + **`method`** | For a published flow: [`POST /flow_runs/`](./endpoints.md#post-flow_runs) |
+
+An on-demand task does **not** need a `flow_id`. A predefined flow does **not** need `path` or `method` — those come from the flow definition. Do not send `flow_id` to `/tasks/schedule`.
+
+**On-demand names** (REST and MCP): built-in Engine9 Workers use `@engine9/plugins/e9workers:<Worker>` — no plugin-id lookup. Echo smoke test: `path: "@engine9/plugins/e9workers:EchoWorker"`, `method: "echo"`. See [echo-walkthrough.md](./echo-walkthrough.md#on-demand-task-names).
+
 ## Documentation
 
 | Doc | Use when |
@@ -21,7 +37,7 @@ For designing and building flow JSON5 files (developers only), see [e9-dev-tasks
 | [concepts.md](./concepts.md) | Terminology: flows, runs, IDs, async execution, `completed_since` |
 | [authentication.md](./authentication.md) | **API keys (`e9key_…`), scopes (`tasks:read` / `tasks:schedule`), account header** |
 | [getting-started.md](./getting-started.md) | First requests in five minutes |
-| [echo-walkthrough.md](./echo-walkthrough.md) | Full Echo schedule → task_runs/filter walkthrough |
+| [echo-walkthrough.md](./echo-walkthrough.md) | On-demand Echo (`@engine9/plugins/e9workers:EchoWorker` + `echo`) → task_runs/filter |
 | [endpoints.md](./endpoints.md) | Every route with curl examples |
 | [errors.md](./errors.md) | HTTP status codes |
 
@@ -31,19 +47,19 @@ For designing and building flow JSON5 files (developers only), see [e9-dev-tasks
 - Routes at API origin root (`/flows`, `/tasks/schedule`, `/task_runs/filter`, `/flow_runs/`, … — not under `/api/task`)
 - Auth: `Authorization: Bearer e9key_…` (or `X-API-Key`) + `X-ENGINE9-ACCOUNT-ID`
 - Scopes: `tasks:read` (discover/list), `tasks:schedule` (schedule) — see [authentication.md](./authentication.md)
-- Prefer **`POST /tasks/schedule`** (MCP-parity enqueue) and **`POST /task_runs/filter`** (Prefect listing). `POST /tasks/listTasks` is deprecated.
-- `POST /flow_runs/` with `flow_id` also calls `scheduleTasks` for a published flow slug
+- **`POST /tasks/schedule`** — on-demand task (`path` + `method`, e.g. `@engine9/plugins/e9workers:EchoWorker` + `echo`). **`POST /flow_runs/`** — predefined flow (`flow_id` required). **`POST /task_runs/filter`** — list/poll task runs.
 - Does not block until execution finishes — poll `POST /task_runs/filter` until terminal
 - `completed_since` on flow runs is computed from timestamps (`last_completed` ≤ `dataflow_last_completed`; **equal is true**) — [concepts.md](./concepts.md#completed-since)
 
 ## Typical workflow
 
-1. `GET /flows` — confirm published flow slugs (needs `tasks:read`)
-2. `POST /flow_runs/filter` with `{"limit":20}` — list recent **remote** runs for the account (default `remote: true`; no `flow_run_id`)
-3. `POST /tasks/schedule` — `{ "path", "method", "options" }` or `{ "flow_path" }` → save `flow_run_id` / `task_run_ids`
-   - or `POST /flow_runs/` with `{ "flow_id": "<slug>" }`
-4. `POST /task_runs/filter` — `{ "flow_run_id": "…" }` until complete (`POST /tasks/listTasks` still works, deprecated)
-5. Retrieve output using your administrator's documented method
+1. `POST /flow_runs/filter` with `{"limit":20}` — list recent **remote** runs for the account (default `remote: true`; no `flow_run_id`)
+2. Schedule — pick the matching endpoint:
+   - **On-demand task:** `POST /tasks/schedule` with `{ "path": "@engine9/plugins/e9workers:EchoWorker", "method": "echo", "options"? }`. Built-in workers: `@engine9/plugins/e9workers:<Worker>` (no plugin lookup). Account plugins: path from discovery, then this endpoint. See also `POST /flow_runs/`.
+   - **Predefined flow:** `GET /flows` then `POST /flow_runs/` with `{ "flow_id": "<slug>" }` — `flow_id` is required. See also `POST /tasks/schedule`.
+   → save `flow_run_id` / `task_run_ids`
+3. `POST /task_runs/filter` — `{ "flow_run_id": "…" }` until complete
+4. Retrieve output using your administrator's documented method
 
 Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
 
@@ -54,7 +70,6 @@ Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
 | GET | `/flows`, `/flows/:id` | `tasks:read` |
 | POST | `/flows/filter` | `tasks:read` |
 | POST | `/tasks/schedule` | `tasks:schedule` |
-| POST | `/tasks/listTasks` (deprecated) | `tasks:read` |
 | POST | `/flow_runs/` | `tasks:schedule` |
 | GET | `/flow_runs/:id` | `tasks:read` |
 | POST | `/flow_runs/filter` | `tasks:read` |
@@ -72,7 +87,8 @@ Details: [endpoints.md](./endpoints.md).
 | 401 | Missing/invalid `e9key_` key or account header — [authentication.md](./authentication.md) |
 | 403 | Wrong account or missing scope |
 | 404 | Wrong flow slug or run id |
-| 422 | Missing `flow_id` / `path`+`method` / `flow_run_ids` (listTasks still requires `flow_run_id`) |
+| 410 | Removed listing path — use `POST /task_runs/filter` |
+| 422 | Missing `flow_id` (predefined flow) or `path`+`method` (on-demand task) |
 | 503 | API or `api_key` table not configured — administrator: `e9 sqlworker createApiKey` |
 
 Full list: [errors.md](./errors.md).

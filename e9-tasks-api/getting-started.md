@@ -24,14 +24,6 @@ export CURL_TLS=""    # set to "-k" for self-signed dev certs
 
 ## 3. Confirm the API is reachable
 
-List flows:
-
-```bash
-curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows" | jq .
-```
-
-**Success:** HTTP 200, JSON array (may be `[]` if no flows published yet).
-
 List recent **remote** runs for the account (`tasks:read`; `remote` defaults to `true`; no `flow_run_id`):
 
 ```bash
@@ -46,41 +38,57 @@ Pass `"remote": false` to list local runs instead.
 
 **401/403?** Check key, account header, and scopes — [authentication.md](./authentication.md).
 
-## 4. Schedule work (MCP-parity)
+Optional: `GET /flows` lists published flow slugs (may be `[]` if none are published). On-demand Echo does not need a flow.
 
-Prefer `POST /tasks/schedule` with a plugin `path` + `method`, or a `flow_path`:
+## 4. Schedule work
+
+Two mutually exclusive modes. Both enqueue via `scheduleTasks` and return `flow_run_id` / `task_run_ids`.
+
+### On-demand task — plugin path and method (recommended first call)
+
+No `flow_id`. Identify the worker with `path` + `method`. Built-in Engine9 Workers use **`@engine9/plugins/e9workers:<Worker>`** — no plugin-id lookup. Echo is the smoke test:
 
 ```bash
 curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d '{
-    "flow_path": "/path/on/server/to/echo-flow.json5",
-    "label": "my-first-run"
+    "path": "@engine9/plugins/e9workers:EchoWorker",
+    "method": "echo",
+    "options": { "message": "hello from echo", "seconds": 1 },
+    "label": "my-first-task"
   }' \
   "$BASE_URL/tasks/schedule" | tee /tmp/schedule.json | jq .
 ```
 
-Or schedule a **published** flow by slug:
+Other built-in examples: `@engine9/plugins/e9workers:SQLWorker` + `query`. Account plugins (RENxt, …) still need a path from MCP `account` — see [echo-walkthrough.md](./echo-walkthrough.md#on-demand-task-names).
+
+For a published multi-step workflow, use [`POST /flow_runs/`](#predefined-flow--flow_id-required) instead.
+
+### Predefined flow — `flow_id` required
+
+Use a slug from `GET /flows`. Worker `path` and `method` come from the flow file; do not send them.
 
 ```bash
 curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
-  -d '{"flow_id": "echo-flow", "name": "my-first-run"}' \
+  -d '{"flow_id": "nightly-sync", "name": "my-first-run"}' \
   "$BASE_URL/flow_runs/" | tee /tmp/schedule.json | jq .
 ```
+
+`POST /tasks/schedule` takes `path` + `method` only — it is not equivalent. Use `POST /flow_runs/` for published flows.
 
 Save identifiers:
 
 ```bash
-export FLOW_RUN_ID=$(jq -r '.flow_run_id // .result.flow_run_id // .id' /tmp/schedule.json)
+export FLOW_RUN_ID=$(jq -r '.result.flow_run_id // .flow_run_id // .id' /tmp/schedule.json)
 echo "flow_run=$FLOW_RUN_ID"
 ```
 
 ## 5. Poll status
 
-Prefer Prefect `POST /task_runs/filter` (lists the run's tasks; includes `flow_run` when a single `flow_run_id` is sent):
+`POST /task_runs/filter` lists the run's tasks (includes `flow_run` when a single `flow_run_id` is sent):
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -89,8 +97,6 @@ curl $CURL_TLS -sS -X POST \
   -d "{\"flow_run_id\": \"$FLOW_RUN_ID\"}" \
   "$BASE_URL/task_runs/filter" | jq .
 ```
-
-Deprecated `POST /tasks/listTasks` still accepts the same `flow_run_id` body (it calls the same Frakture `POST /task_runs/filter` surface).
 
 Repeat until the run reaches a terminal state. See [concepts — scheduling vs execution](./concepts.md#scheduling-vs-execution).
 

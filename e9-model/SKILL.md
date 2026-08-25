@@ -36,6 +36,7 @@ Suffixes: `_person`, `_transaction`, `_person_stats`, `_transaction_stats`.
 - Running `ModelWorker.run` / `runPeople` / `runTransactions` / `summarizeSourceCodes` / `summarizePeople`
 - Querying `{prefix}_person` / `{prefix}_transaction` / `{prefix}_*_stats` (current models)
 - Comparing a current model to last-click attributed revenue on `source_code_summary` (`revenue` / attributed fields — never `origin_*`)
+- Inspecting **legacy** model tables (`person_model_source_code_summary`, `timeline_v3_summary`, `transaction_model_source_code`) via `summarizePeopleLegacy`. Legacy `person_id_int` is generated from `person_metadata.person_id` and is **not** `person.id`
 
 ## Run
 
@@ -53,6 +54,8 @@ await model.summarizePeople({ emails: 'a@example.com' });
 | `run` | Files **and** `{prefix}_*` tables + stats | Production / account load. Installs the plugin row, then deploys tables from `metadata.prefix` (not the plugin counter prefix) |
 | `summarizeSourceCodes({ model })` | — | Read `{prefix}_person_stats` and `{prefix}_transaction_stats` (rollup by source code). Alias: `summarize` |
 | `summarizePeople({ emails / person_ids })` | — | UI inspect: timeline + stored rows from every available `model_*` table. Does **not** run models |
+| `summarizePeopleLegacy({ person_ids / person_id_ints / emails })` | — | Legacy tables only. `emails` looks up `person_email` (current) and SHA-256 then email on `person_metadata.person_id`. **Not** `person.id` = `person_id_int` |
+| `comparePeopleLegacy({ emails })` | — | Current vs legacy paired by email (hash first). Or pass `person_ids` + `legacy_person_ids` |
 | `loadStats({ model })` | Rebuilds those stats tables | After a manual SQL edit |
 
 `summarizeSourceCodes` / `loadStats` also accept `prefix: 'model_first_touch'`.
@@ -162,6 +165,23 @@ Each `people[]` item:
 Timeline `source_code_id` is **as stored**. This method does not apply the run-time source-code override stream. Stored model `reason` / `date_of_source` are what `run` last wrote.
 
 Full field list: [schema.md](schema.md#summarizepeople-ui-inspect).
+
+## Legacy inspect (old identity)
+
+Keep this out of the current `{prefix}_*` path. `workers/model/legacy.js` reads the old tables only. **`person_id_int` is not `person.id`.** `person_metadata` generates `person_id_int` from the legacy `person_id` string (hash, sometimes an email). Never join those integers to current `person.id`.
+
+`emails` is the bridge: `person_email` → current `person.id`; SHA-256 of trimmed lowercase email (`email_hash_v1`) → `person_metadata.person_id`; if the hash misses, try the email string on that column.
+
+```javascript
+const legacy = await model.summarizePeopleLegacy({
+  person_ids: '1d0cbfeb8a0d6e5606317f9493460d1fbcd4b531f583eba01ba5c7eed9e2e292'
+});
+const { current, legacy, comparison, email_map } = await model.comparePeopleLegacy({
+  emails: 'user@example.com'
+});
+```
+
+`model_id` labels match the console CASE: 1 First Touch, 2 CRM Origin, 4 Authentic First Touch, 8 Last Channel Acquisition, 9 Authentic V2; 10 (Authentic V2025) falls through to the raw id. Person `match` is source_code equality (empty ≡ missing). Missing legacy tables are skipped.
 
 ```sql
 SELECT d.source_code, s.person_count
