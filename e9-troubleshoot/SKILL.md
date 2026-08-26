@@ -72,8 +72,8 @@ State the category as soon as the report allows it:
 | **Timeline / engagement** | Blank Timeline tab, missing open/click/send, opener segment empty |
 | **Source coding / attribution** | Revenue on the wrong message, coded link not credited |
 | **Transactions** | Missing or wrong payment rows (not attribution) |
-| **Messaging** | Message list / content / send stats, not timeline events |
-| **Segments** | Audience wrong after events exist |
+| **Messaging** | Message list / content / send stats, not timeline entries |
+| **Segments** | Audience wrong after entries exist |
 | **UI / console** | Button, blank page, layout — data underneath looks fine |
 | **Auth / access** | Cannot sign in, cannot see an account |
 | **Other** | Say so |
@@ -145,11 +145,11 @@ Use MCP `search` on the example email / phone / id. Conceptual model: [e9-person
 
 ### Timeline / engagement
 
-One person + one expected event. Checklist: [e9-timeline missing-event A–F](../e9-timeline/SKILL.md#missing-event-debug-af) — but **A/B via `search` + plugins/inputs/loads**, not a `timeline` dump.
+One person + one expected entry. Checklist: [e9-timeline missing-entry A–F](../e9-timeline/SKILL.md#missing-entry-debug-af) — but **A/B via `search` + plugins/inputs/loads**, not a `timeline` dump.
 
-Person missing → People. Input never loaded → Plugins / inputs. Vendor also lacks the event → remote. Sends without opens is often real behavior.
+Person missing → People. Input never loaded → Plugins / inputs. Vendor also lacks the activity → remote. Sends without opens is often real behavior.
 
-**Resolutions:** load the engagement stream; check segment window (e.g. 90-day opener defs vs an old `publish_date`); tell the client the vendor has no event; escalate only if the event exists in-product and the Timeline tab / segment still hides it.
+**Resolutions:** load the engagement stream; check segment window (e.g. 90-day opener defs vs an old `publish_date`); tell the client the vendor has no record; escalate only if the entry exists in-product and the Timeline tab / segment still hides it.
 
 ### Source coding / attribution
 
@@ -161,7 +161,7 @@ Two remotes: messaging platform (link coding) and payment platform (code stored 
 
 ### Segments / UI / auth
 
-- **Segment:** `segment` list; confirm universe and date window after the underlying events exist.
+- **Segment:** `segment` list; confirm universe and date window after the underlying entries exist.
 - **UI:** keep the URL. If the same example looks correct via `search` / `analyze`, the resolution is a UI handoff — not more warehouse queries.
 - **Auth:** `user` access map; they may not have the account.
 
@@ -195,7 +195,7 @@ Record: single-account / multi-account / unknown.
 | Vendor / live link / payment form lacks the fact | Remote — client or vendor action |
 | In-product data is correct; console disagrees | UI — engineering handoff |
 | In-product data is wrong after a successful load of good remote data | Engineering handoff |
-| Matches documented window, first-wins, or “vendor has no event” | Expected behavior — explain, do not escalate |
+| Matches documented window, first-wins, or “vendor has no record” | Expected behavior — explain, do not escalate |
 
 For attribution, A/B gaps are remote; C–F are in-product. For timeline, vendor-missing is remote; no input is ingestion; no person is People.
 

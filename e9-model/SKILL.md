@@ -36,7 +36,7 @@ Suffixes: `_person`, `_transaction`, `_person_stats`, `_transaction_stats`.
 - Running `ModelWorker.run` / `runPeople` / `runTransactions` / `summarizeSourceCodes` / `summarizePeople`
 - Querying `{prefix}_person` / `{prefix}_transaction` / `{prefix}_*_stats` (current models)
 - Comparing a current model to last-click attributed revenue on `source_code_summary` (`revenue` / attributed fields — never `origin_*`)
-- Inspecting **legacy** model tables (`person_model_source_code_summary`, `timeline_v3_summary`, `transaction_model_source_code`) via `summarizePeopleLegacy`. Legacy `person_id_int` is generated from `person_metadata.person_id` and is **not** `person.id`
+- Inspecting **legacy** model tables (`person_model_source_code_summary`, `timeline_v3_summary`, `transaction_model_source_code`) via `summarizePeopleLegacy`. Legacy `person_id_int` is generated from `person_metadata.person_id` and is **not** `person.id`. `timeline_v3_summary` names the type **`entry_type_label`**, not `entry_type`.
 
 ## Run
 
@@ -168,7 +168,7 @@ Full field list: [schema.md](schema.md#summarizepeople-ui-inspect).
 
 ## Legacy inspect (old identity)
 
-Keep this out of the current `{prefix}_*` path. `workers/model/legacy.js` reads the old tables only. **`person_id_int` is not `person.id`.** `person_metadata` generates `person_id_int` from the legacy `person_id` string (hash, sometimes an email). Never join those integers to current `person.id`.
+Keep this out of the current `{prefix}_*` path. `workers/model/legacy.js` reads the old tables only. **`person_id_int` is not `person.id`.** `person_metadata` generates `person_id_int` from the legacy `person_id` string (hash, sometimes an email). Never join those integers to current `person.id`. Legacy timeline inspect reads **`timeline_v3_summary`**, where the type column is **`entry_type_label`** (current `timeline` / plugin summaries use `entry_type`). Legacy timeline inspect reads **`timeline_v3_summary`**, where the type column is **`entry_type_label`** (current `timeline` / plugin summaries use `entry_type`).
 
 `emails` is the bridge: `person_email` → current `person.id`; SHA-256 of trimmed lowercase email (`email_hash_v1`) → `person_metadata.person_id`; if the hash misses, try the email string on that column.
 

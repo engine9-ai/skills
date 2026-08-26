@@ -43,7 +43,7 @@ Success responses use JSON text in `content` with `{ ok: true, ... }`. Failures 
 
 ### Hard stop — do not continue
 
-When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `chat`, etc.).
+When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `auditPeople`, `chat`, etc.).
 
 1. Tool result has **`isError: true`**
 2. Response text matches a fatal pattern (even when only plain text is visible):
@@ -104,6 +104,7 @@ Local code is an **unreliable** source for MCP work because:
 | Schema / tables / indexes / raw SQL | MCP `sql` (`command`: query, describe, indexes, tables, info, histo, compile_eql) |
 | Schedule or check async work | MCP `task`: on-demand = `path`+`method` (`@engine9/plugins/e9workers:EchoWorker` needs no `account` lookup); predefined flow = `flow_id` slug |
 | Analyze / summarize / profile table contents | MCP `analyze` (uses `tables` then `analyze`) |
+| Account people / identity / timeline / model health | MCP `auditPeople` |
 | Date histogram on indexed datetime column | MCP `sql` with `command: "histo"` |
 | List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
 
@@ -120,6 +121,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Find accounts by prefix, parent, type, tags, or installed plugin | `account` with `command: "search"` (one call — do not fan out) |
 | List plugins / methods on one account | `account` with `account_id` (or `command: "plugins"`) |
 | Search people by email, phone, name, or id | `search` |
+| Account people / timeline / identity / model health check | `auditPeople` |
 | List segments or schedule segment builds | `segment` |
 | Create accounts / manage domains or domain secrets | e9-account Worker (`cloud-services/e9-account`) — not MCP |
 | Run a SQL/EQL query | `eql` / `sql` (`command: "query"` or omit when `sql` is set) |
@@ -184,6 +186,27 @@ Searches people by metadata filters and returns person summaries with related re
 - Required: `account_id`
 - Filters: `emails`, `person_ids`, `phones`, `given_names`, `last_names`
 - Optional: `limit` (max 1000, default 10)
+
+### `auditPeople`
+
+Read-only account people / identity / timeline / model health check (`AccountWorker.auditPeople`). Independent components: missing tables are skipped, query failures are reported, the rest continue. Prefer this over ad-hoc SQL or MCP `task` when the UI or agent needs an account audit payload. Render `current` and `legacy` as separate sections.
+
+- Required: `account_id`
+- Optional: `components` (subset of checks), `exclude`, `legacy` (default true; `false` skips timeline_v3 / person_model_source_code / transaction_model_source_code)
+- Returns: `{ ok, account_id, available_components, components, current, legacy, errors, started_at, finished_at }`
+- `ok` is false only when a component `status` is `error` (skipped is still success)
+
+Example:
+
+```json
+{ "account_id": "test" }
+```
+
+Example — current identity/timeline only:
+
+```json
+{ "account_id": "test", "legacy": false }
+```
 
 ### `segment`
 
@@ -376,7 +399,7 @@ When the user asks for **all accounts**, **parent** children, or other multi-acc
 - Do **not** call `account` plugins (or any account-DB worker) once per child to “check access”.
 - Do **not** use the first id in a parent/all list as a required DB-connected `account_id` before the remote list.
 - Drive the request with remote multi-account filters (`parent_account_id`, `account_ids`, etc.) and status filters. Prefer Prefect `state_type` values (`FAILED`, `RUNNING`, `COMPLETED`). Legacy Mongo statuses are accepted and mapped (see below). Account database connectivity is not a prerequisite for Frakture flow-run list reads.
-- The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `search`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
+- The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `search`, `auditPeople`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
 
 ### `task` action `list` — remote flow runs
 

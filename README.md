@@ -13,7 +13,7 @@ Skills for working with engine9 deployments.
 | Troubleshoot | [e9-troubleshoot/SKILL.md](./e9-troubleshoot/SKILL.md) | Support-ticket intake, product-side diagnosis, and recommended resolutions (`troubleshoot` only) |
 | Task API (REST) | [e9-tasks-api/SKILL.md](./e9-tasks-api/SKILL.md) | Task API REST — predefined flows (`flow_id`) or an on-demand task (`path` + `method`; Echo: `@engine9/plugins/e9workers:EchoWorker`) |
 | Dev tasks (flows) | [e9-dev-tasks/SKILL.md](./e9-dev-tasks/SKILL.md) | Design/build JSON5 flows, TaskWorker, SQLTaskManager *(developers only)* |
-| Timeline | [e9-timeline/SKILL.md](./e9-timeline/SKILL.md) | Person activity log, entry types, querying, missing-event debug |
+| Timeline | [e9-timeline/SKILL.md](./e9-timeline/SKILL.md) | Person activity log, entries (never events), entry types, querying, missing-entry debug |
 | Timeline loading *(developers)* | [e9-timeline/loading.md](./e9-timeline/loading.md) | InputWorker ID files → `timeline` / detail tables |
 | Timeline files *(plugins)* | [inputs/timeline/SKILL.md](./inputs/timeline/SKILL.md) | Timeline ID vs Raw file shapes and `@engine9/input-tools` helpers |
 | Transaction mapping | [inputs/transaction-mapping/SKILL.md](./inputs/transaction-mapping/SKILL.md) | Map 3rd-party payment data into the Transaction schema |

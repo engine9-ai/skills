@@ -1,6 +1,6 @@
 # Timeline loading (developer)
 
-User-facing model, entry types, querying, and missing-event debug: [SKILL.md](SKILL.md). Plugin file shapes and `@engine9/input-tools` helpers: [inputs/timeline](../inputs/timeline/SKILL.md).
+User-facing model, entry types, querying, and missing-entry debug: [SKILL.md](SKILL.md). Plugin file shapes and `@engine9/input-tools` helpers: [inputs/timeline](../inputs/timeline/SKILL.md). Timeline rows are **entries**, never events.
 
 Use this file when writing or modifying **load jobs**, or when an engineering investigation of `InputWorker` is requested. Support tickets stay in [e9-troubleshoot](../e9-troubleshoot/SKILL.md) and do not use this file.
 
@@ -14,7 +14,7 @@ engine9 server workers treat timeline data in two stages:
 A **Timeline ID file** is typically parquet whose name ends with `.idv1.parquet`. Rows already have:
 
 - **`id`**: UUID (`getTimelineEntryUUID`)
-- **`ts`**: event timestamp
+- **`ts`**: entry timestamp
 - **`person_id`**: internal numeric person id
 - **`entry_type_id`**: integer from `TIMELINE_ENTRY_TYPES`
 - **Optional**: `source_code_id`, `email_domain`, plus plugin-specific detail columns
@@ -57,7 +57,7 @@ Upserts extra columns into the plugin detail table (UUID `id` PK). Native parque
 
 ## Timeline Raw vs ID (producers)
 
-Email/SMS/form workers often start from **Raw**-like vendor events: `ts`, `entry_type` (`EMAIL_OPEN`, …), `email`, maybe no `person_id`. They map with `getEntryTypeId` / `getTimelineEntryUUID`, write Raw (needs person resolution) or ID (if `person_id` is already known), then hand off to `loadTimeline` / `loadTimelineTables`.
+Email/SMS/form workers often start from **Raw**-like vendor activity: `ts`, `entry_type` (`EMAIL_OPEN`, …), `email`, maybe no `person_id`. They map with `getEntryTypeId` / `getTimelineEntryUUID`, write Raw (needs person resolution) or ID (if `person_id` is already known), then hand off to `loadTimeline` / `loadTimelineTables`. Once loaded, each row is a timeline **entry**, never an event.
 
 - **Prefer ID files** when you already have `person_id`, `input_id`, and `entry_type_id`.
 - **Use Raw** when you only have an email or external person id and will resolve people later.

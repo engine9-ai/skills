@@ -10,14 +10,14 @@ Use this skill whenever you are:
 - **Designing timeline outputs** from plugins or ingestion code.
 - **Producing files** that will eventually land in an engine9 `timeline`-style table (for example via server workers).
 
-Product model, entry types, querying, and missing-event debug: [e9-timeline](../../e9-timeline/SKILL.md). Server load jobs: [e9-timeline/loading.md](../../e9-timeline/loading.md).
+Product model, entry types, querying, and missing-entry debug: [e9-timeline](../../e9-timeline/SKILL.md). Server load jobs: [e9-timeline/loading.md](../../e9-timeline/loading.md).
 
-engine9 models person-level activity as **timeline entries**. A timeline entry is a single fact about a person at a point in time (email send, open, click, transaction, signup, etc.), identified by:
+engine9 models person-level activity as **timeline entries**, never events. A timeline entry is a single fact about a person at a point in time (email send, open, click, transaction, signup, etc.), identified by:
 
-- **`ts`**: timestamp of the event.
+- **`ts`**: timestamp of the entry.
 - **`entry_type_id`**: numeric type from `TIMELINE_ENTRY_TYPES` (`input-tools/timelineTypes.js`).
 - **`person_id`**: internal person identifier.
-- **`plugin_id`**: which plugin this event came from (used as UUID namespace).
+- **`plugin_id`**: which plugin this entry came from (used as UUID namespace).
 - **`id`**: a deterministic UUID derived from the above (via `getTimelineEntryUUID`).
 
 There are **two main on-disk timeline file shapes**:
@@ -72,11 +72,11 @@ When authoring a Timeline ID-producing job or plugin using `@engine9/input-tools
 
 ## Timeline Raw files
 
-**Use when** you have raw events from an external system and **cannot yet** assign `person_id` but still want to capture structured activity.
+**Use when** you have raw activity from an external system and **cannot yet** assign `person_id` but still want to capture structured **entries**.
 
 Examples:
 
-- Raw web or email events that only know an email or other external identifier.
+- Raw web or email activity that only knows an email or other external identifier.
 - Logs from external APIs where person resolution happens later in the pipeline.
 
 ### Core shape
@@ -85,7 +85,7 @@ Timeline Raw files:
 
 - **Must not contain** `person_id` (by definition for this skill).
 - **May or may not contain** `id`.
-  - If they do contain an `id`, it is usually an external event ID or `remote_entry_uuid`, not necessarily the final engine9 `id`.
+  - If they do contain an `id`, it is usually an external id or `remote_entry_uuid`, not necessarily the final engine9 `id`.
 - **Should contain enough information** to derive:
   - A timestamp: **`ts`** (or a field that is mapped to `ts`).
   - An entry type: **`entry_type`** (string) or **`entry_type_id`** (numeric).
@@ -98,7 +98,7 @@ Typical fields you will see:
 - **Contact fields**: `email`, `remote_person_id`, phone number, etc.
 - **Source metadata**: `account_id`, `plugin_id`, `url`, `user_agent`, `ip_address`, etc.
 
-For example, a plugin may map an inbound event into a row with:
+For example, a plugin may map inbound activity into a row with:
 
 - `ts`, `account_id`, `entry_type_id`, `email`, `email_domain`, `url`, `user_agent`
 
@@ -108,7 +108,7 @@ and **no `person_id`** yet.
 
 The usual pathway for Raw → ID is:
 
-1. **Map raw events into a timeline-shaped object** (with `ts`, `entry_type`/`entry_type_id`, and contact info).
+1. **Map raw activity into a timeline-shaped object** (with `ts`, `entry_type`/`entry_type_id`, and contact info).
 2. **Resolve people** (outside of input-tools):
    - Use your application's person resolution or a server worker to:
      - Look up or create `person` rows.

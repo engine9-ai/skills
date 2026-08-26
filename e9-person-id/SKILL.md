@@ -158,7 +158,7 @@ After assignment, upserts write attributes. Email upsert looks up existing `pers
 
 `person_metadata`, `person_id_int`, `transaction_metadata`, and `timeline_v3` all use an **OLD identity model that did not account for multiple emails or phones per person**.
 
-In that model the person key was a single integer `person_id_int`, and `person_metadata.person_id` was often the **email string** (legacy loaders filter `meta.person_id like '%@%'`). `person_metadata` **generates `person_id_int` from that `person_id` string**. `person_id_int` is not current `person.id` — do not join them. One email ≈ one person. Phones were not first-class match keys. `timeline_v3` joined `person_metadata` **using (`person_id_int`)**. `transaction_metadata` sat in the same integer-person space.
+In that model the person key was a single integer `person_id_int`, and `person_metadata.person_id` was often the **email string** (legacy loaders filter `meta.person_id like '%@%'`). `person_metadata` **generates `person_id_int` from that `person_id` string**. `person_id_int` is not current `person.id` — do not join them. One email ≈ one person. Phones were not first-class match keys. `timeline_v3` joined `person_metadata` **using (`person_id_int`)**. Inspect that log through **`timeline_v3_summary`**, whose type column is **`entry_type_label`** (not current `entry_type`). `transaction_metadata` sat in the same integer-person space.
 
 `PersonWorker.unwindPersonMetadata` is the bridge: copy `person_metadata.person_id_int` into `person.id`, then delete those legacy metadata rows. `LocalDatabasePersonWorker.importFromTimelineV3` still reads `timeline_v3` joined to `person_metadata` and feeds emails into the **current** people pipeline.
 
