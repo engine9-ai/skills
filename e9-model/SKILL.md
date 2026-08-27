@@ -1,229 +1,212 @@
 ---
 name: e9-model
 description: >-
-  Run and author engine9 models via ModelWorker: timeline-based long-term
-  value (LTV, first touch, CRM origin, last acquisition, …) written to
-  {prefix}_* tables (model_first_touch_person, …) with bigint person_id and
-  UUID transaction_id. Use when working with ModelWorker, model_*_person,
-  model_*_transaction, or writing a new model — not last-click attribution
-  (e9-source-code) and not source_code_summary.origin_* (legacy origin).
+  Explains engine9 models: a model reads a person's timeline of entries and
+  decides which source code deserves credit for that person (first touch, CRM
+  origin, last acquisition), writing {prefix}_* tables
+  (model_first_touch_person, …) that answer lifetime value (LTV) and acquisition
+  ROI questions. Models connect people and their transactions to PEOPLE-level
+  origin; attribution connects a transaction to a MESSAGE and is never a model
+  (see e9-source-code). Also explains the timeline effective date cascade
+  (timeline.ts / effective_date, default_timestamp, extract_timestamp,
+  source_code_date, acquisition_date, SOURCE_CODE_OVERRIDE) that every model
+  sorts by. Use when working with ModelWorker, model_*_person,
+  model_*_transaction, lifetime value, LTV, acquisition ROI, first touch, CRM
+  origin, or reading/running a model. Authoring and internals: developers.md.
 ---
 
 # engine9 models
 
-**Attribution** connects a transaction to a message (`recommended_message_id`, `attributed_revenue`). That join is [e9-source-code](../e9-source-code/SKILL.md). Do not call last-click a model.
+This document explains **what a model is, why it exists, and how to read what it
+produces**. It assumes no prior engine9 knowledge. Building or running one in
+code is [developers.md](developers.md).
 
-A **model** connects a person or transaction to an item in their [timeline](../e9-timeline/SKILL.md) history — not to a message. First touch, last acquisition, CRM origin, and account-specific variants are models. Current models use the new identity (`person.id` bigint, `transaction.id` UUID) and write `{prefix}_person` / `{prefix}_transaction` / stats.
+## 1. The timeline: what a model reads
 
-`source_code_summary.origin_people` / `origin_revenue` (and other `origin_*` columns there) are the **legacy** origin implementation, computed against the old identity ([e9-person-id](../e9-person-id/SKILL.md#old-identity-model-person_metadata-person_id_int-timeline_v3-transaction_metadata)). Do not use them for current model work. Last-click `revenue` / `attributed_*` on that same table are attribution, not a model.
+Every person in engine9 has a **timeline**: a list of things that happened to
+them or that they did, in time order. One row is one **entry** — one fact about
+one person at one moment.
 
-`ModelWorker` (alias `model`) loads a plugin, streams timeline rows, runs the plugin transforms, and writes **that plugin’s** tables. The stem is `metadata.prefix` and is the same on every account (like `{prefix}segment`).
-
-| Plugin | `metadata.prefix` | Person table |
+| effective date (`ts`) | entry | source code on the entry |
 | --- | --- | --- |
-| `@engine9/plugins/models/first_touch` | `model_first_touch` | `model_first_touch_person` |
-| `@engine9/plugins/models/crm_origin` | `model_crm_origin` | `model_crm_origin_person` |
-| `@engine9/plugins/models/last_acquisition` | `model_last_acquisition` | `model_last_acquisition_person` |
-| `engine9-accounts/frakture/authentic/authentic_origin` | `model_authentic_origin` | `model_authentic_origin_person` |
-| `engine9-accounts/frakture/authentic/authentic_v2` | `model_authentic_v2` | `model_authentic_v2_person` |
-| `engine9-accounts/frakture/authentic/authentic_v2025` | `model_authentic_v2025` | `model_authentic_v2025_person` |
+| 2019-03-02 | signed a petition | `WEB_PET_2019_climate` |
+| 2019-03-05 | email send | `EM_WEL_20190305` |
+| 2020-01-14 | email click | `EM_FR_20200114_appeal` |
+| 2020-01-14 | transaction, $25 | `EM_FR_20200114_appeal` |
+| 2023-06-01 | transaction, $50 | `MAIL_JUN2023` |
 
-Suffixes: `_person`, `_transaction`, `_person_stats`, `_transaction_stats`.
+A **source code** is the campaign/effort label carried on an entry ("the June
+2023 mail piece", "the climate petition"). Details: [e9-timeline](../e9-timeline/SKILL.md)
+and [e9-source-code](../e9-source-code/SKILL.md).
 
-## When to use this skill
+The timeline is raw history. It does not say which of those five entries
+*explains* why this person is on the file, and nothing in it lets you total up
+"revenue from people the climate petition brought us." That is the gap a model
+fills.
 
-- Authoring or testing a model plugin
-- Running `ModelWorker.run` / `runPeople` / `runTransactions` / `summarizeSourceCodes` / `summarizePeople`
-- Querying `{prefix}_person` / `{prefix}_transaction` / `{prefix}_*_stats` (current models)
-- Comparing a current model to last-click attributed revenue on `source_code_summary` (`revenue` / attributed fields — never `origin_*`)
-- Inspecting **legacy** model tables (`person_model_source_code_summary`, `timeline_v3_summary`, `transaction_model_source_code`, `transaction_model_pivot`) via `summarizePeopleLegacy` / `compareSourceCodesLegacy`. Legacy `person_id_int` is generated from `person_metadata.person_id` and is **not** `person.id`. `timeline_v3_summary` names the type **`entry_type_label`**, not `entry_type`.
+## 2. What a model is
 
-## Run
+A **model** is a rule that walks one person's entries and picks the single entry
+that deserves credit for **that person**. It stores four things per person:
 
-```javascript
-const model = new ModelWorker(accountWorker);
-await model.run({ model: '@engine9/plugins/models/first_touch' });
-await model.summarizeSourceCodes({ model: '@engine9/plugins/models/first_touch' });
-await model.summarizePeople({ emails: 'a@example.com' });
-```
+| Stored | Example |
+| --- | --- |
+| the source code from the chosen entry | `WEB_PET_2019_climate` |
+| the date of that entry | 2019-03-02 |
+| the reason the rule chose it | `First Touch` |
+| the person | `person_id` 12345 |
 
-| Method | Writes | Use when |
+It then stamps that same credit onto **every transaction that person ever
+makes** — the $25 in 2020 and the $50 in 2023 both count toward the climate
+petition. A model may optionally use a different rule for transactions than for
+people, but the default is "the person's credit applies to their transactions."
+
+That one step is what makes person-level economics computable:
+
+| Question | How the model answers it |
+| --- | --- |
+| **Lifetime value (LTV)** — what is a person acquired by this effort worth over time? | Sum every transaction stamped with that source code, divide by the number of people stamped with it |
+| **Acquisition ROI** — did this effort pay for itself? | That revenue against the acquisition cost recorded for the source code |
+| How many people did this effort bring onto the file? | Count of people stamped with that source code |
+| Which channel produces donors who keep giving? | Compare LTV across the source codes of each channel |
+
+A model is a *judgment call made explicit and stored*. Two models can disagree
+about the same person and both be correct, because they answer different
+questions ("who first touched them?" vs. "what most recently reactivated
+them?"). This is why engine9 runs several models side by side instead of
+choosing one, and why every stored row carries a `reason`.
+
+## 3. Attribution is NOT a model
+
+This is the most important distinction in this document, and the easiest to get
+wrong.
+
+| | **Attribution** | **Model** |
 | --- | --- | --- |
-| `runPeople` | Result **file** (csv) | Test the person transform |
-| `runTransactions` | Result **file** (csv) | Test the transaction transform. Pass `person_filename` if there is no `transforms.transaction` |
-| `run` | Files **and** `{prefix}_*` tables + stats | Production / account load. Installs the plugin row, then deploys tables from `metadata.prefix` (not the plugin counter prefix) |
-| `summarizeSourceCodes({ model })` | — | Read `{prefix}_person_stats` and `{prefix}_transaction_stats` (rollup by source code). Alias: `summarize` |
-| `summarizePeople({ emails / person_ids })` | — | UI inspect: timeline + stored rows from every available `model_*` table. Does **not** run models |
-| `inspectPerson({ emails / person_ids })` | — | Conductor / MCP `timelinePerson`: **current** `timeline` / `model_*` only. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` (opt-in; future deployments will drop this). SQL lives in `workers/model` |
-| `summarizePeopleLegacy({ person_ids / person_id_ints / emails })` | — | Legacy tables only. `emails` looks up `person_email` (current) and SHA-256 then email on `person_metadata.person_id`. **Not** `person.id` = `person_id_int` |
-| `comparePeopleLegacy({ emails })` | — | Current vs legacy paired by email (hash first). Or pass `person_ids` + `legacy_person_ids` |
-| `compareSourceCodes({ source_codes? })` | — | All current `model_*_stats` by source code. Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` |
-| `summarizeSourceCodesLegacy({ source_codes })` | — | Legacy `transaction_model_pivot` by source code. Comma-delimited; `%` is LIKE |
-| `compareSourceCodesLegacy({ source_codes })` | — | Same-stem pivot vs current `model_*_stats` for first_touch, crm_origin, last_acquisition |
-| `loadStats({ model })` | Rebuilds those stats tables | After a manual SQL edit |
+| Connects a transaction to | a **message** | — |
+| Connects a person (and all their transactions) to | — | an **entry in that person's timeline** |
+| Question answered | "Which email/mail piece produced *this* gift?" | "What brought *this person* onto the file?" |
+| Scope | one transaction at a time | a person's whole history |
+| Method | last click on the transaction's source code | a rule over the timeline |
+| Lives in | [e9-source-code](../e9-source-code/SKILL.md) | this document |
+| Output | `recommended_message_id`, `attributed_revenue`, `source_code_summary.revenue` | `{prefix}_person`, `{prefix}_transaction` |
 
-`summarizeSourceCodes` / `loadStats` also accept `prefix: 'model_first_touch'`.
+**Attribution is exclusively transaction → message.** It is never a model. Do
+not call last click "the last-click model", do not list it among the models, and
+do not put it in a model comparison as if it were a peer.
 
-Common options: `model` (plugin path), `timeline` (`sql` / `.duckdb` / file), `person_ids` / `emails` / `search`, `output_filename`.
+Both are true at once, and they are not alternatives:
 
-Test caps (stop after N rows, then write whatever was produced):
+> The $50 gift in June 2023 was **attributed** to the June mail piece — that
+> mail piece is what produced that gift. The **first touch model** says this
+> person came from the 2019 climate petition — that petition is why this person
+> exists at all. Credit the mail piece for the gift; credit the petition for the
+> donor.
 
-| Option | `runPeople` | `runTransactions` | `run` |
-| --- | --- | --- | --- |
-| `people_limit` | max people | max people | both stages |
-| `transaction_limit` | — | max transactions | transaction stage |
-| `limit` | alias for `people_limit` | alias for `transaction_limit` | both aliases (10 people **and** 10 transactions) |
+Consequences to respect:
 
-```javascript
-await model.runPeople({ model: '…', people_limit: 25 });
-await model.runTransactions({ model: '…', transaction_limit: 100, person_filename });
-await model.run({ model: '…', people_limit: 25 }); // all transactions for those 25 people
-```
+- Never add attributed revenue and model revenue together; they are the same
+  dollars counted for two different questions.
+- Model revenue for a source code will not equal that source code's attributed
+  revenue, and that is not a bug. A petition that never asks for money can have
+  huge model revenue and near-zero attributed revenue.
+- `source_code_summary.revenue` / `attributed_*` are attribution. The
+  `source_code_summary.origin_*` columns are a **legacy** model implementation
+  (old identity) and are not current model output — see
+  [developers.md](developers.md#legacy-old-identity).
 
-File-only tests do not install tables. `metadata.prefix` is still required (the path must compile).
+## 4. The models engine9 ships
 
-## Timeline source
+Each model is a plugin with a stable `prefix`. The prefix is the table name stem
+and is identical on every account.
 
-`openTimelineSource` is the only place that knows SQL vs DuckDB vs file. Pass `timeline`; get `{ stream, close, mode }`.
+| Model | `prefix` | The rule, in words |
+| --- | --- | --- |
+| First Touch (`@engine9/plugins/models/first_touch`) | `model_first_touch` | The **earliest** entry of any kind. "Where did this person first show up?" |
+| CRM Origin (`@engine9/plugins/models/crm_origin`) | `model_crm_origin` | The entry the CRM itself labels as the origin (`CRM_ORIGIN`). "What does the system of record say?" Blank when the CRM says nothing. |
+| Last Acquisition (`@engine9/plugins/models/last_acquisition`) | `model_last_acquisition` | The **most recent** entry marked `ACQUISITION`, falling back to `CRM_ORIGIN`. "What most recently brought this person in?" |
 
-| `timeline` | Reads |
-| --- | --- |
-| omitted / `'sql'` | Account `timeline` + dictionary labels. Transaction runs join `transaction` on `timeline.id = transaction.id` |
-| `*.duckdb` | Same SQL against that file |
-| `.parquet` / `.csv` / `.json` | File rows, ordered by `person_id` |
+In all three, an explicit `SOURCE_CODE_OVERRIDE` entry on the timeline wins over
+the rule, and the stored `reason` says `Source Code Override`. That is the
+supported way to hand-correct one person without changing the model.
 
-Transaction identity is `transaction.id` (UUID).
+Accounts can ship additional models of their own with the same contract and the
+same `model_<name>` prefix rule; they appear alongside these in every read and
+comparison.
 
-## Output
+## 5. The effective date of an entry
 
-**Files:** csv with `person_id`, `prefix`, `source_code`, `source_code_id`, `date_of_source`, `reason` (plus `transaction_id` / `amount` / `ts` on the transaction file).
+Every rule above is a statement about **time** — *earliest* entry, *most recent*
+acquisition. So a model's answer depends entirely on which date each entry
+carries. That date is the entry's **effective date**: when the thing actually
+happened, not when engine9 loaded it. It is stored as `timeline.ts`, and
+`timelinePerson` shows it as `effective_date`.
 
-**SQL** (`run` only) — one set of tables per model, named from `metadata.prefix`:
+The effective date is decided **once, at load time**, and models only read it. A
+model never recomputes it. So if a model picked the "wrong" entry, check the
+dates before questioning the rule — an entry with a bad effective date sorts to
+the wrong end of history and quietly changes both first touch and last
+acquisition.
 
-| Table | Grain |
-| --- | --- |
-| `{prefix}_person` | one row per `person_id` (bigint) |
-| `{prefix}_transaction` | one row per `transaction_id` (UUID) |
-| `{prefix}_person_stats` | people per `source_code_id` |
-| `{prefix}_transaction_stats` | tx / revenue / refunds / unique people per `source_code_id` |
+**Cascade for a single entry**, first usable value wins:
 
-No shared `person_model` interface table. Join `source_code_dictionary` for the code string; join `transaction` on `id` for amount / `ts`.
+| Order | Date used | Applies when |
+| --- | --- | --- |
+| 1 | the `ts` the source system gave the row | The system of record knows when it happened — send time, click time, gift date. Nearly every entry stops here. |
+| 2 | the input's **default timestamp** (below) | The row has no `ts`, or it is a `SOURCE_CODE_OVERRIDE` entry whose `ts` is the placeholder `1970-01-01` (treated as "no date given") |
+| 3 | none — the row does not become a timeline entry | Neither of the above produced a date |
 
-Detail: [schema.md](schema.md).
+Rows loaded from a file often have no per-row date. A **source code override**
+file is the common case: it names a set of people and says "credit this source
+code," with no date in the file at all. The date it should land on is the date of
+the effort itself, so the default timestamp is derived from the source code.
 
-## Plugin contract
+**Cascade for the default timestamp**, first usable value wins:
 
-`metadata.prefix` is required and must match `model_<name>` (letters, digits, underscores). That stem is the table name on every account.
+| Order | Date used | Applies when |
+| --- | --- | --- |
+| 1 | the field named by the `extract_timestamp` option (`source_code_date` or `acquisition_date`) | Someone stated explicitly which date to use. If that field is missing or unparseable the load **fails** rather than guessing. |
+| 2 | the source code's parsed `source_code_date` | No explicit choice, and the code contains a date that parsed cleanly — `EM_FR_20200114_appeal` → 2020-01-14 |
+| 3 | the source code's `acquisition_date` | The code has no usable date of its own, but the format's parsed values or the dictionary record when the effort acquired people |
+| 4 | the literal `default_timestamp` option | Given, and nothing above resolved |
+| 5 | today's date | `default_timestamp` is `now` or omitted |
 
-```javascript
-const metadata = { name: 'Transaction model: my_model', prefix: 'model_my_model', unique: true, version: '1.0.0' };
-const model = { model_id: 9, label: 'My Model' }; // optional label only
+Two override values in the source code dictionary sit above the parsed value:
+`source_code_date_override` and `acquisition_date_override` replace what was
+parsed out of the code string. Use them when a code's embedded date is wrong or
+unparseable, rather than editing history.
 
-async function transform({ batch }) {
-  for (const row of batch) {
-    row.source_code = /* pick */;
-    row.date_of_source = /* ts */;
-    row.reason = ['why'];
-  }
-}
-```
+A date resolved this way is normalized to a UTC calendar day (`YYYY-MM-DD`) and
+must be a real date on or after 1980-01-01. Missing, zero, or unparseable values
+raise an error and the file fails to load. That strictness is deliberate: a
+mis-parsed code should fail loudly rather than land silently at 1970 and become
+everyone's "first touch".
 
-Set `source_code`. Do not set `source_code_id` — the worker resolves it (`doNotUpsert`). Optional `transforms.transaction` sees `transaction.transaction_id` (UUID) and `transaction.person_model_*`.
+Field-level detail, date format heuristics, and the exact option names:
+[developers.md](developers.md#effective-date-resolution).
 
-Authoring: [writing-a-model.md](writing-a-model.md).
+## 6. What a model writes
 
-## Sample statistics
+One `run` of one model produces four tables, named from its prefix:
 
-```javascript
-const { person_stats, transaction_stats, tables } = await model.summarizeSourceCodes({
-  model: '@engine9/plugins/models/first_touch'
-});
-```
+| Table | One row per | Holds |
+| --- | --- | --- |
+| `{prefix}_person` | person | chosen `source_code_id`, `date_of_source`, `reason` |
+| `{prefix}_transaction` | transaction | the credit for that transaction |
+| `{prefix}_person_stats` | source code | `person_count` — people acquired |
+| `{prefix}_transaction_stats` | source code | `transactions`, `revenue`, `refund_count`, `refund_amount`, `transaction_unique_person` |
 
-## Inspect people (UI)
+So `model_first_touch_person`, `model_first_touch_transaction`,
+`model_first_touch_person_stats`, `model_first_touch_transaction_stats`.
 
-`summarizePeople` is a **read-only** payload for a console or debugger. It does not call person/transaction transforms and does not write tables. Require `person_ids`, `emails`, or `search` (same filters as `run`).
+Amounts and dates stay on `transaction`; the readable code string lives in
+`source_code_dictionary`. There is no shared cross-model table — one set per
+model, on purpose, so models never overwrite each other. Column types:
+[schema.md](schema.md).
 
-```javascript
-const { person_ids, models, people } = await model.summarizePeople({
-  emails: 'a@example.com,b@example.com'
-});
-```
+## 7. Reading the answers
 
-Return shape (also on `summarizePeople.metadata.output`):
-
-| Field | Meaning |
-| --- | --- |
-| `person_ids` | Resolved bigint ids (after optional `people_limit`) |
-| `models[]` | Warehouse catalog: `{ prefix, person_table, transaction_table }` for every `model_*_person` / `model_*_transaction` that exists (stats tables are omitted). Empty if no model has been `run` yet |
-| `people[]` | One object per requested id, even when that person has no timeline or model row |
-
-Each `people[]` item:
-
-| Field | Meaning |
-| --- | --- |
-| `person_id` | bigint |
-| `timeline[]` | Warehouse `timeline` rows for that person, ordered by `ts`, plus `entry_type`. Joins: `source_code_summary` (or `source_code_dictionary`) for parsed labels; `input` (`input_name`, `input_type`, `input_remote_id`); `plugin` (`plugin_path`, `plugin_name`); `transaction` (`transaction_id`, `amount`, …) when the row is a gift |
-| `models[prefix]` | Stored `{prefix}_person` (or `null`) and `{prefix}_transaction[]`. Same source-code labels as timeline. Transaction rows also carry `amount` / `transaction_ts` from `transaction` |
-
-Timeline `source_code_id` is **as stored**. This method does not apply the run-time source-code override stream. Stored model `reason` / `date_of_source` are what `run` last wrote.
-
-Full field list: [schema.md](schema.md#summarizepeople-ui-inspect).
-
-## Legacy inspect (old identity)
-
-Keep this out of the current `{prefix}_*` path. `workers/model/legacy.js` reads the old tables only. **`person_id_int` is not `person.id`.** `person_metadata` generates `person_id_int` from the legacy `person_id` string (hash, sometimes an email). Never join those integers to current `person.id`. Legacy timeline inspect reads **`timeline_v3_summary`**, where the type column is **`entry_type_label`** (current `timeline` / plugin summaries use `entry_type`). Legacy timeline inspect reads **`timeline_v3_summary`**, where the type column is **`entry_type_label`** (current `timeline` / plugin summaries use `entry_type`).
-
-`emails` is the bridge: `person_email` → current `person.id`; SHA-256 of trimmed lowercase email (`email_hash_v1`) → `person_metadata.person_id`; if the hash misses, try the email string on that column.
-
-```javascript
-const legacy = await model.summarizePeopleLegacy({
-  person_ids: '1d0cbfeb8a0d6e5606317f9493460d1fbcd4b531f583eba01ba5c7eed9e2e292'
-});
-const { current, legacy, comparison, email_map } = await model.comparePeopleLegacy({
-  emails: 'user@example.com'
-});
-```
-
-`model_id` labels match the console CASE: 1 First Touch, 2 CRM Origin, 4 Authentic First Touch, 8 Last Channel Acquisition, 9 Authentic V2; 10 (Authentic V2025) falls through to the raw id. Person `match` is source_code equality (empty ≡ missing). Missing legacy tables are skipped.
-
-## Person inspect (conductor / MCP)
-
-`inspectPerson` is the payload for MCP `timelinePerson` and the conductor Timeline & Models artifact. **Current identity only** (`inspect.js` / `summarize.js`): `timeline` and `model_*_person`. It does not import or query legacy tables.
-
-Pass `legacy: true` to also run `legacy.js` (`timeline_v3_summary` / `person_model_source_code`) and append `section: 'legacy'` tables. Default is off. Future deployments will not support this. Conductor currently opts in via `TIMELINE_PERSON_INCLUDE_LEGACY` in `defs/timelinePerson.ts` — delete that flag to drop the UI.
-
-```javascript
-const { queried, tables, person_ids, emails } = await model.inspectPerson({
-  emails: 'a@example.com'
-});
-const withLegacy = await model.inspectPerson({
-  emails: 'a@example.com',
-  legacy: true
-});
-```
-
-`tables[]` entries have `status` `ok` / `skipped` / `error`. Current tables: `timeline`, `models`. Legacy (opt-in): `timeline_v3_summary`, `person_model_source_code`. Emails are the only identity bridge; `person.id` is never joined to `person_id_int`.
-
-The payload includes top-level **`sql`**: `[{ id, sql, error, table? }]` for every warehouse statement this inspect ran (email lookup, timeline, each `model_*` table, and opt-in legacy). Same field on `compareSourceCodes`. This is the MCP executed-SQL standard — see [e9-mcp](../e9-mcp/SKILL.md#executed-sql-sql).
-
-## Aggregate source-code compare
-
-`compareSourceCodes` is the payload for MCP `timelinePerson` `command: compareSourceCodes` and the conductor `/models` artifact. It reads **every** current `model_*_person_stats` / `model_*_transaction_stats` table (not only the three pivot stems). Pass `legacy: true` to also load `transaction_model_pivot` stems (first_touch, crm_origin, last_acquisition). Default is current-only.
-
-When `source_codes` is omitted, each included model contributes its **top 10 source codes by `person_count` and top 10 by `revenue`**. The comparison uses the union (up to 20 × number of models unique codes). Tokens with `%` use SQL `LIKE`.
-
-```javascript
-const auto = await model.compareSourceCodes(); // top 10 people + top 10 revenue per current model
-const specified = await model.compareSourceCodes({
-  source_codes: 'EM_%,MAIL',
-  legacy: true
-});
-```
-
-Each `rows[]` item is one source code with `{prefix}_{person_count|revenue|transactions}` and, when opted in, `legacy_{stem}_*` columns. The payload includes top-level **`sql`** for the top-N selection queries and each model's stats SELECT.
-
-`compareSourceCodesLegacy` is the older same-stem pivot-vs-current **delta** (`{ legacy, current, delta, match }` per metric). `source_codes` is required there. `summarizeSourceCodesLegacy` returns pivot rows only.
+**Which efforts brought the most people?**
 
 ```sql
 SELECT d.source_code, s.person_count
@@ -231,28 +214,118 @@ FROM model_first_touch_person_stats s
 JOIN source_code_dictionary d ON d.source_code_id = s.source_code_id
 ORDER BY s.person_count DESC
 LIMIT 20;
+```
 
+**Lifetime value per person acquired** — all revenue those people have ever
+given, divided by how many of them there are:
+
+```sql
 SELECT
   d.source_code,
-  tms.revenue AS model_revenue,
-  scs.revenue AS last_click_revenue
-FROM model_first_touch_transaction_stats tms
-JOIN source_code_dictionary d ON d.source_code_id = tms.source_code_id
-LEFT JOIN source_code_summary scs ON scs.source_code_id = tms.source_code_id
-ORDER BY tms.revenue DESC
-LIMIT 20;
-
-SELECT d.source_code, COUNT(*) AS transactions, SUM(t.amount) AS revenue
-FROM model_first_touch_transaction tm
-JOIN transaction t ON t.id = tm.transaction_id
-JOIN source_code_dictionary d ON d.source_code_id = tm.source_code_id
-GROUP BY d.source_code
-ORDER BY revenue DESC
+  p.person_count,
+  t.revenue,
+  t.revenue / NULLIF(p.person_count, 0) AS lifetime_value_per_person
+FROM model_first_touch_person_stats p
+JOIN model_first_touch_transaction_stats t ON t.source_code_id = p.source_code_id
+JOIN source_code_dictionary d ON d.source_code_id = p.source_code_id
+ORDER BY t.revenue DESC
 LIMIT 20;
 ```
 
+**Acquisition ROI** — the same revenue against what the effort cost. Requires
+`acquisition_cost` to be populated on the source code dictionary for that code;
+where it is not, ROI cannot be computed for that code:
+
+```sql
+SELECT
+  d.source_code,
+  p.person_count,
+  t.revenue,
+  d.acquisition_cost,
+  t.revenue / NULLIF(d.acquisition_cost, 0) AS roi
+FROM model_first_touch_transaction_stats t
+JOIN model_first_touch_person_stats p ON p.source_code_id = t.source_code_id
+JOIN source_code_dictionary d ON d.source_code_id = t.source_code_id
+WHERE d.acquisition_cost > 0
+ORDER BY roi DESC
+LIMIT 20;
+```
+
+**Model revenue next to attributed revenue** — two different questions in two
+columns. Read them side by side; never sum them:
+
+```sql
+SELECT
+  d.source_code,
+  t.revenue AS model_revenue,        -- people this code acquired, all their giving
+  scs.revenue AS last_click_revenue  -- gifts attributed to this code's messages
+FROM model_first_touch_transaction_stats t
+JOIN source_code_dictionary d ON d.source_code_id = t.source_code_id
+LEFT JOIN source_code_summary scs ON scs.source_code_id = t.source_code_id
+ORDER BY t.revenue DESC
+LIMIT 20;
+```
+
+**Every model, one source code per row:** `compareSourceCodes` returns
+`{prefix}_person_count` / `_revenue` / `_transactions` columns for each model
+that has been run, so disagreement between models is visible in one grid. With
+no arguments it picks each model's top codes by people and by revenue. Available
+over MCP as `timelinePerson` with `command: compareSourceCodes`.
+
+## 8. Checking one person
+
+To see why a person got the credit they got, read their entries and each model's
+stored conclusion together. MCP tool **`timelinePerson`** returns exactly that:
+the person's `timeline` entries (with input, plugin, source code, and
+transaction detail) plus each `model_*_person` row and its `reason`.
+
+Read it in this order:
+
+1. Are the entries you expect present at all? If an acquisition entry is
+   missing, no model can pick it — that is a timeline loading question
+   ([e9-timeline](../e9-timeline/SKILL.md)), not a model question.
+2. Does the entry carry the source code you expect? If not, that is a source
+   code question ([e9-source-code](../e9-source-code/SKILL.md)).
+3. Is each entry's `effective_date` right, and do the entries sort the way you
+   expect? A date resolved from a default or a mis-parsed source code puts an
+   entry at the wrong end of history — see §5.
+4. Given those entries in that order, did each model's rule pick correctly? The
+   `reason` column says which branch fired. Only now is it a model question.
+
+Stored `reason` and `date_of_source` reflect the last `run`; a model does not
+re-decide when you read it.
+
+## 9. Running a model
+
+A model is not live — someone has to run it, and the tables hold whatever the
+last run decided.
+
+```javascript
+const model = new ModelWorker(accountWorker);
+await model.run({ model: '@engine9/plugins/models/first_touch' });
+```
+
+`run` streams the timeline, applies the rule, and writes that model's four
+tables. Method list, test options, authoring a new model, and legacy tables:
+[developers.md](developers.md).
+
+## Vocabulary
+
+| Term | Meaning |
+| --- | --- |
+| **entry** | One row on the timeline: one fact about one person at one time. Never say "event". |
+| **transaction** | A payment. Never say "donation" in schema or field talk. |
+| **source code** | The campaign/effort label on an entry. |
+| **effective date** | When an entry actually happened (`timeline.ts`), resolved once at load time. What every model sorts by. |
+| **model** | A rule that credits a person (and their transactions) to one timeline entry. |
+| **attribution** | Connecting one transaction to one message. Not a model. |
+| **prefix** | A model's table stem, e.g. `model_first_touch`. |
+| **reason** | Why the model chose what it chose, stored per row. |
+
 ## Additional resources
 
-- Table DDL: [schema.md](schema.md)
-- Writing / testing: [writing-a-model.md](writing-a-model.md)
-- Last-click attribution (transaction ↔ message): [e9-source-code](../e9-source-code/SKILL.md)
+- Running, authoring, testing, internals, legacy: [developers.md](developers.md)
+- Table columns and payload shapes: [schema.md](schema.md)
+- The timeline the model reads: [e9-timeline](../e9-timeline/SKILL.md)
+- Source codes and **attribution** (transaction ↔ message): [e9-source-code](../e9-source-code/SKILL.md)
+- How `person_id` is decided: [e9-person-id](../e9-person-id/SKILL.md)

@@ -1,6 +1,6 @@
 # Per-model result tables
 
-Read [SKILL.md](SKILL.md) first. There is no `@engine9/interfaces/model`. Each plugin’s `metadata.prefix` is the stem (`model_first_touch` → `model_first_touch_person`). Same suffix set on every account.
+Read [SKILL.md](SKILL.md) for concepts and [developers.md](developers.md) for the API. There is no `@engine9/interfaces/model`. Each plugin’s `metadata.prefix` is the stem (`model_first_touch` → `model_first_touch_person`). Same suffix set on every account.
 
 These tables are the **current** identity-aware model output (`person_id` bigint, `transaction_id` UUID). They are not `source_code_summary.origin_*` — those columns are the legacy origin implementation (old identity).
 
@@ -133,11 +133,11 @@ Person inspect of the legacy activity log uses **`timeline_v3_summary`**, not ba
 
 **Do not join `person_id_int` to `person.id`.** `person_metadata` generates `person_id_int` from the legacy `person_id` string. Current models use bigint `person.id`. Pair via `emails` (`person_email` + SHA-256 on `person_metadata.person_id`, email string as fallback) or explicit `person_ids` + `legacy_person_ids`.
 
-`model_id` 1/2/4/8/9/10 map to `model_first_touch` / `model_crm_origin` / `model_authentic_origin` / `model_last_acquisition` / `model_authentic_v2` / `model_authentic_v2025`. The console CASE leaves 10 as the raw id.
+Legacy `model_id` 1, 2, and 8 map to `model_first_touch`, `model_crm_origin`, and `model_last_acquisition`. Account-specific model ids the console CASE does not name fall through to the raw id.
 
 ## inspectPerson (conductor tables)
 
-`ModelWorker.inspectPerson` (`server/workers/model/inspect.js`) is **current-identity only** (`timeline`, `model_*_person`). MCP tool **`timelinePerson`**. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` from `legacy.js` (opt-in; not in future deployments). Missing tables are `skipped`. Emails bridge identity; `person.id` is never joined to `person_id_int`. Conductor currently sets `TIMELINE_PERSON_INCLUDE_LEGACY = true` in one place. Returns top-level **`sql`**: `[{ id, sql, error, table? }]` for every statement this request ran.
+`ModelWorker.inspectPerson` (`server/workers/model/inspect.js`) is **current-identity only** (`timeline`, `model_*_person`). MCP tool **`timelinePerson`**. Timeline rows add **`effective_date`** = `timeline.ts` (resolved at load time — see [SKILL.md §5](SKILL.md#5-the-effective-date-of-an-entry)). Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` from `legacy.js` (opt-in; not in future deployments). Missing tables are `skipped`. Emails bridge identity; `person.id` is never joined to `person_id_int`. Conductor currently sets `TIMELINE_PERSON_INCLUDE_LEGACY = true` in one place. Returns top-level **`sql`**: `[{ id, sql, error, table? }]` for every statement this request ran.
 
 ## compareSourceCodes (all current models)
 
