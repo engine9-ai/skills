@@ -41,6 +41,35 @@ engine9 MCP tools return failures with **`isError: true`** (MCP standard) plus o
 
 Success responses use JSON text in `content` with `{ ok: true, ... }`. Failures use **plain text** in `content` (not `{ ok: false }` JSON).
 
+### Executed SQL (`sql`)
+
+Tools that run warehouse SQL include a top-level **`sql`** field so you can debug without reconstructing statements. Prefer this over guessing SQL.
+
+**Array form** (`timelinePerson`, `auditPeople`, and any multi-query tool):
+
+```json
+{
+  "ok": true,
+  "sql": [
+    { "id": "person_email", "table": "person_email", "sql": "SELECT …", "error": null },
+    { "id": "timeline", "table": "timeline", "sql": "SELECT …", "error": null }
+  ]
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `id` | Label for the statement |
+| `sql` | Statement text, or `null` if it was not generated |
+| `error` | `null` on success, `"skipped"` if not run, or the failure message |
+| `table` | Optional primary table |
+
+Omit `sql` only when the tool did not execute SQL. Empty `[]` means the tool could have queried but did not.
+
+**String form** (`eql`, `sql` `command: query`): `sql` is the single statement string — equivalent to `[{ "id": "query", "sql": "<statement>", "error": null }]`.
+
+When diagnosing timeline or model results, read `sql` first. Do not re-invent those SELECTs via the `sql` tool unless you need a variant.
+
 ### Hard stop — do not continue
 
 When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `auditPeople`, `timelinePerson`, `chat`, etc.).
@@ -197,7 +226,8 @@ Read-only account people / identity / timeline / model health check (`AccountWor
 
 - Required: `account_id`
 - Optional: `components` (subset of checks), `exclude`, `legacy` (default true; `false` skips timeline_v3 / person_model_source_code / transaction_model_source_code)
-- Returns: `{ ok, account_id, available_components, components, current, legacy, errors, started_at, finished_at }`
+- Returns: `{ ok, account_id, available_components, components, current, legacy, sql, errors, started_at, finished_at }`
+- `sql` is `[{ id, sql, error }]` for every warehouse statement this audit ran
 - `ok` is false only when a component `status` is `error` (skipped is still success)
 
 Example:
@@ -217,10 +247,12 @@ Example — current identity/timeline only:
 Person-level **current-identity** timeline + model inspect (`ModelWorker.inspectPerson`) and source-code model compare (`compareSourceCodes`). SQL lives on the server; prefer this over ad-hoc SQL. The conductor Timeline artifact is a shell over `command: inspect`; `/models` is a shell over `command: compareSourceCodes`.
 
 - Required: `account_id`
-- **command: inspect** (default) — `emails` and/or `person_ids`. Returns `{ queried, tables[], person_ids, emails }` for current `timeline` / `model_*` only. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` (opt-in; future deployments will drop this). Missing tables are skipped. Do not join `person.id` to `person_id_int`.
-- **command: compareSourceCodes** — all current `model_*_stats` by source code (`person_count`, `revenue`, `transactions`). Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` stems. Optional `models` subset.
+- **command: inspect** (default) — `emails` and/or `person_ids`. Returns `{ queried, tables[], person_ids, emails, sql }` for current `timeline` / `model_*` only. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` (opt-in; future deployments will drop this). Missing tables are skipped. Do not join `person.id` to `person_id_int`.
+- **command: compareSourceCodes** — all current `model_*_stats` by source code (`person_count`, `revenue`, `transactions`). Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` stems. Optional `models` subset. Returns `sql` for top-N selection and per-model stats.
 - **command: compareSourceCodesLegacy** — same-stem pivot vs current delta. `source_codes` required (comma-delimited; `%` is LIKE).
 - **command: summarizeSourceCodesLegacy** — pivot rows only. `source_codes` required.
+
+All commands include top-level **`sql`**: `[{ id, sql, error, table? }]` — the statements executed for this request. Use that log when debugging inspect/compare results.
 
 Example — person inspect (current only):
 

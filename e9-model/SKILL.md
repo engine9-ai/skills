@@ -205,6 +205,8 @@ const withLegacy = await model.inspectPerson({
 
 `tables[]` entries have `status` `ok` / `skipped` / `error`. Current tables: `timeline`, `models`. Legacy (opt-in): `timeline_v3_summary`, `person_model_source_code`. Emails are the only identity bridge; `person.id` is never joined to `person_id_int`.
 
+The payload includes top-level **`sql`**: `[{ id, sql, error, table? }]` for every warehouse statement this inspect ran (email lookup, timeline, each `model_*` table, and opt-in legacy). Same field on `compareSourceCodes`. This is the MCP executed-SQL standard — see [e9-mcp](../e9-mcp/SKILL.md#executed-sql-sql).
+
 ## Aggregate source-code compare
 
 `compareSourceCodes` is the payload for MCP `timelinePerson` `command: compareSourceCodes` and the conductor `/models` artifact. It reads **every** current `model_*_person_stats` / `model_*_transaction_stats` table (not only the three pivot stems). Pass `legacy: true` to also load `transaction_model_pivot` stems (first_touch, crm_origin, last_acquisition). Default is current-only.
@@ -219,7 +221,7 @@ const specified = await model.compareSourceCodes({
 });
 ```
 
-Each `rows[]` item is one source code with `{prefix}_{person_count|revenue|transactions}` and, when opted in, `legacy_{stem}_*` columns.
+Each `rows[]` item is one source code with `{prefix}_{person_count|revenue|transactions}` and, when opted in, `legacy_{stem}_*` columns. The payload includes top-level **`sql`** for the top-N selection queries and each model's stats SELECT.
 
 `compareSourceCodesLegacy` is the older same-stem pivot-vs-current **delta** (`{ legacy, current, delta, match }` per metric). `source_codes` is required there. `summarizeSourceCodesLegacy` returns pivot rows only.
 

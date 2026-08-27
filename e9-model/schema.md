@@ -137,11 +137,11 @@ Person inspect of the legacy activity log uses **`timeline_v3_summary`**, not ba
 
 ## inspectPerson (conductor tables)
 
-`ModelWorker.inspectPerson` (`server/workers/model/inspect.js`) is **current-identity only** (`timeline`, `model_*_person`). MCP tool **`timelinePerson`**. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` from `legacy.js` (opt-in; not in future deployments). Missing tables are `skipped`. Emails bridge identity; `person.id` is never joined to `person_id_int`. Conductor currently sets `TIMELINE_PERSON_INCLUDE_LEGACY = true` in one place.
+`ModelWorker.inspectPerson` (`server/workers/model/inspect.js`) is **current-identity only** (`timeline`, `model_*_person`). MCP tool **`timelinePerson`**. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` from `legacy.js` (opt-in; not in future deployments). Missing tables are `skipped`. Emails bridge identity; `person.id` is never joined to `person_id_int`. Conductor currently sets `TIMELINE_PERSON_INCLUDE_LEGACY = true` in one place. Returns top-level **`sql`**: `[{ id, sql, error, table? }]` for every statement this request ran.
 
 ## compareSourceCodes (all current models)
 
-`ModelWorker.compareSourceCodes` (`server/workers/model/compare.js`) lists every `model_*_stats` table and returns one row per source code with that model's person_count / revenue / transactions. MCP **`timelinePerson` `command: compareSourceCodes`**. Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` stems (opt-in; conductor currently sets `MODEL_COMPARE_INCLUDE_LEGACY = true`).
+`ModelWorker.compareSourceCodes` (`server/workers/model/compare.js`) lists every `model_*_stats` table and returns one row per source code with that model's person_count / revenue / transactions. MCP **`timelinePerson` `command: compareSourceCodes`**. Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` stems (opt-in; conductor currently sets `MODEL_COMPARE_INCLUDE_LEGACY = true`). Returns top-level **`sql`** for the top-N selection queries and each model's stats SELECT.
 
 ## transaction_model_pivot vs model_*_stats
 
