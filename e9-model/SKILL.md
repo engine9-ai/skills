@@ -36,7 +36,7 @@ Suffixes: `_person`, `_transaction`, `_person_stats`, `_transaction_stats`.
 - Running `ModelWorker.run` / `runPeople` / `runTransactions` / `summarizeSourceCodes` / `summarizePeople`
 - Querying `{prefix}_person` / `{prefix}_transaction` / `{prefix}_*_stats` (current models)
 - Comparing a current model to last-click attributed revenue on `source_code_summary` (`revenue` / attributed fields — never `origin_*`)
-- Inspecting **legacy** model tables (`person_model_source_code_summary`, `timeline_v3_summary`, `transaction_model_source_code`) via `summarizePeopleLegacy`. Legacy `person_id_int` is generated from `person_metadata.person_id` and is **not** `person.id`. `timeline_v3_summary` names the type **`entry_type_label`**, not `entry_type`.
+- Inspecting **legacy** model tables (`person_model_source_code_summary`, `timeline_v3_summary`, `transaction_model_source_code`, `transaction_model_pivot`) via `summarizePeopleLegacy` / `compareSourceCodesLegacy`. Legacy `person_id_int` is generated from `person_metadata.person_id` and is **not** `person.id`. `timeline_v3_summary` names the type **`entry_type_label`**, not `entry_type`.
 
 ## Run
 
@@ -54,8 +54,12 @@ await model.summarizePeople({ emails: 'a@example.com' });
 | `run` | Files **and** `{prefix}_*` tables + stats | Production / account load. Installs the plugin row, then deploys tables from `metadata.prefix` (not the plugin counter prefix) |
 | `summarizeSourceCodes({ model })` | — | Read `{prefix}_person_stats` and `{prefix}_transaction_stats` (rollup by source code). Alias: `summarize` |
 | `summarizePeople({ emails / person_ids })` | — | UI inspect: timeline + stored rows from every available `model_*` table. Does **not** run models |
+| `inspectPerson({ emails / person_ids })` | — | Conductor / MCP `timelinePerson`: **current** `timeline` / `model_*` only. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` (opt-in; future deployments will drop this). SQL lives in `workers/model` |
 | `summarizePeopleLegacy({ person_ids / person_id_ints / emails })` | — | Legacy tables only. `emails` looks up `person_email` (current) and SHA-256 then email on `person_metadata.person_id`. **Not** `person.id` = `person_id_int` |
 | `comparePeopleLegacy({ emails })` | — | Current vs legacy paired by email (hash first). Or pass `person_ids` + `legacy_person_ids` |
+| `compareSourceCodes({ source_codes? })` | — | All current `model_*_stats` by source code. Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` |
+| `summarizeSourceCodesLegacy({ source_codes })` | — | Legacy `transaction_model_pivot` by source code. Comma-delimited; `%` is LIKE |
+| `compareSourceCodesLegacy({ source_codes })` | — | Same-stem pivot vs current `model_*_stats` for first_touch, crm_origin, last_acquisition |
 | `loadStats({ model })` | Rebuilds those stats tables | After a manual SQL edit |
 
 `summarizeSourceCodes` / `loadStats` also accept `prefix: 'model_first_touch'`.
@@ -182,6 +186,42 @@ const { current, legacy, comparison, email_map } = await model.comparePeopleLega
 ```
 
 `model_id` labels match the console CASE: 1 First Touch, 2 CRM Origin, 4 Authentic First Touch, 8 Last Channel Acquisition, 9 Authentic V2; 10 (Authentic V2025) falls through to the raw id. Person `match` is source_code equality (empty ≡ missing). Missing legacy tables are skipped.
+
+## Person inspect (conductor / MCP)
+
+`inspectPerson` is the payload for MCP `timelinePerson` and the conductor Timeline & Models artifact. **Current identity only** (`inspect.js` / `summarize.js`): `timeline` and `model_*_person`. It does not import or query legacy tables.
+
+Pass `legacy: true` to also run `legacy.js` (`timeline_v3_summary` / `person_model_source_code`) and append `section: 'legacy'` tables. Default is off. Future deployments will not support this. Conductor currently opts in via `TIMELINE_PERSON_INCLUDE_LEGACY` in `defs/timelinePerson.ts` — delete that flag to drop the UI.
+
+```javascript
+const { queried, tables, person_ids, emails } = await model.inspectPerson({
+  emails: 'a@example.com'
+});
+const withLegacy = await model.inspectPerson({
+  emails: 'a@example.com',
+  legacy: true
+});
+```
+
+`tables[]` entries have `status` `ok` / `skipped` / `error`. Current tables: `timeline`, `models`. Legacy (opt-in): `timeline_v3_summary`, `person_model_source_code`. Emails are the only identity bridge; `person.id` is never joined to `person_id_int`.
+
+## Aggregate source-code compare
+
+`compareSourceCodes` is the payload for MCP `timelinePerson` `command: compareSourceCodes` and the conductor `/models` artifact. It reads **every** current `model_*_person_stats` / `model_*_transaction_stats` table (not only the three pivot stems). Pass `legacy: true` to also load `transaction_model_pivot` stems (first_touch, crm_origin, last_acquisition). Default is current-only.
+
+When `source_codes` is omitted, each included model contributes its **top 10 source codes by `person_count` and top 10 by `revenue`**. The comparison uses the union (up to 20 × number of models unique codes). Tokens with `%` use SQL `LIKE`.
+
+```javascript
+const auto = await model.compareSourceCodes(); // top 10 people + top 10 revenue per current model
+const specified = await model.compareSourceCodes({
+  source_codes: 'EM_%,MAIL',
+  legacy: true
+});
+```
+
+Each `rows[]` item is one source code with `{prefix}_{person_count|revenue|transactions}` and, when opted in, `legacy_{stem}_*` columns.
+
+`compareSourceCodesLegacy` is the older same-stem pivot-vs-current **delta** (`{ legacy, current, delta, match }` per metric). `source_codes` is required there. `summarizeSourceCodesLegacy` returns pivot rows only.
 
 ```sql
 SELECT d.source_code, s.person_count

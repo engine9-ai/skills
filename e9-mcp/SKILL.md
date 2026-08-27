@@ -43,7 +43,7 @@ Success responses use JSON text in `content` with `{ ok: true, ... }`. Failures 
 
 ### Hard stop — do not continue
 
-When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `auditPeople`, `chat`, etc.).
+When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `auditPeople`, `timelinePerson`, `chat`, etc.).
 
 1. Tool result has **`isError: true`**
 2. Response text matches a fatal pattern (even when only plain text is visible):
@@ -105,6 +105,8 @@ Local code is an **unreliable** source for MCP work because:
 | Schedule or check async work | MCP `task`: on-demand = `path`+`method` (`@engine9/plugins/e9workers:EchoWorker` needs no `account` lookup); predefined flow = `flow_id` slug |
 | Analyze / summarize / profile table contents | MCP `analyze` (uses `tables` then `analyze`) |
 | Account people / identity / timeline / model health | MCP `auditPeople` |
+| Person timeline + models (current and legacy) | MCP `timelinePerson` (`command: inspect`) |
+| Compare current (and opt-in legacy) model scores by source code | MCP `timelinePerson` (`command: compareSourceCodes`) |
 | Date histogram on indexed datetime column | MCP `sql` with `command: "histo"` |
 | List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
 
@@ -122,6 +124,8 @@ If a path, method, or option is not present in MCP responses, report that to the
 | List plugins / methods on one account | `account` with `account_id` (or `command: "plugins"`) |
 | Search people by email, phone, name, or id | `search` |
 | Account people / timeline / identity / model health check | `auditPeople` |
+| Person timeline + stored models (current and legacy) | `timelinePerson` |
+| Compare current `model_*_stats` (and opt-in pivot) by source code | `timelinePerson` with `command: "compareSourceCodes"` |
 | List segments or schedule segment builds | `segment` |
 | Create accounts / manage domains or domain secrets | e9-account Worker (`cloud-services/e9-account`) — not MCP |
 | Run a SQL/EQL query | `eql` / `sql` (`command: "query"` or omit when `sql` is set) |
@@ -206,6 +210,40 @@ Example — current identity/timeline only:
 
 ```json
 { "account_id": "test", "legacy": false }
+```
+
+### `timelinePerson`
+
+Person-level **current-identity** timeline + model inspect (`ModelWorker.inspectPerson`) and source-code model compare (`compareSourceCodes`). SQL lives on the server; prefer this over ad-hoc SQL. The conductor Timeline artifact is a shell over `command: inspect`; `/models` is a shell over `command: compareSourceCodes`.
+
+- Required: `account_id`
+- **command: inspect** (default) — `emails` and/or `person_ids`. Returns `{ queried, tables[], person_ids, emails }` for current `timeline` / `model_*` only. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` (opt-in; future deployments will drop this). Missing tables are skipped. Do not join `person.id` to `person_id_int`.
+- **command: compareSourceCodes** — all current `model_*_stats` by source code (`person_count`, `revenue`, `transactions`). Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` stems. Optional `models` subset.
+- **command: compareSourceCodesLegacy** — same-stem pivot vs current delta. `source_codes` required (comma-delimited; `%` is LIKE).
+- **command: summarizeSourceCodesLegacy** — pivot rows only. `source_codes` required.
+
+Example — person inspect (current only):
+
+```json
+{ "account_id": "test", "emails": "user@example.com" }
+```
+
+Example — person inspect with legacy tables:
+
+```json
+{ "account_id": "test", "emails": "user@example.com", "legacy": true }
+```
+
+Example — auto top source codes across current models:
+
+```json
+{ "account_id": "test", "command": "compareSourceCodes" }
+```
+
+Example — specified source codes, with legacy pivot:
+
+```json
+{ "account_id": "test", "command": "compareSourceCodes", "source_codes": "EM_%,MAIL", "legacy": true }
 ```
 
 ### `segment`
@@ -399,7 +437,7 @@ When the user asks for **all accounts**, **parent** children, or other multi-acc
 - Do **not** call `account` plugins (or any account-DB worker) once per child to “check access”.
 - Do **not** use the first id in a parent/all list as a required DB-connected `account_id` before the remote list.
 - Drive the request with remote multi-account filters (`parent_account_id`, `account_ids`, etc.) and status filters. Prefer Prefect `state_type` values (`FAILED`, `RUNNING`, `COMPLETED`). Legacy Mongo statuses are accepted and mapped (see below). Account database connectivity is not a prerequisite for Frakture flow-run list reads.
-- The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `search`, `auditPeople`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
+- The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `search`, `auditPeople`, `timelinePerson`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
 
 ### `task` action `list` — remote flow runs
 

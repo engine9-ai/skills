@@ -134,3 +134,15 @@ Person inspect of the legacy activity log uses **`timeline_v3_summary`**, not ba
 **Do not join `person_id_int` to `person.id`.** `person_metadata` generates `person_id_int` from the legacy `person_id` string. Current models use bigint `person.id`. Pair via `emails` (`person_email` + SHA-256 on `person_metadata.person_id`, email string as fallback) or explicit `person_ids` + `legacy_person_ids`.
 
 `model_id` 1/2/4/8/9/10 map to `model_first_touch` / `model_crm_origin` / `model_authentic_origin` / `model_last_acquisition` / `model_authentic_v2` / `model_authentic_v2025`. The console CASE leaves 10 as the raw id.
+
+## inspectPerson (conductor tables)
+
+`ModelWorker.inspectPerson` (`server/workers/model/inspect.js`) is **current-identity only** (`timeline`, `model_*_person`). MCP tool **`timelinePerson`**. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` from `legacy.js` (opt-in; not in future deployments). Missing tables are `skipped`. Emails bridge identity; `person.id` is never joined to `person_id_int`. Conductor currently sets `TIMELINE_PERSON_INCLUDE_LEGACY = true` in one place.
+
+## compareSourceCodes (all current models)
+
+`ModelWorker.compareSourceCodes` (`server/workers/model/compare.js`) lists every `model_*_stats` table and returns one row per source code with that model's person_count / revenue / transactions. MCP **`timelinePerson` `command: compareSourceCodes`**. Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` stems (opt-in; conductor currently sets `MODEL_COMPARE_INCLUDE_LEGACY = true`).
+
+## transaction_model_pivot vs model_*_stats
+
+`compareSourceCodesLegacy` / `summarizeSourceCodesLegacy` (`server/workers/model/compare.js`) are **opt-in** same-stem reads of the legacy pivot vs current `{prefix}_*_stats`. They are not the `/models` artifact. Pivot stems: `first_touch`, `crm_origin`, `last_acquisition`. Shared metrics: `person_count`, `transactions`, `revenue`, `refund_count`, `refund_amount`, `transaction_unique_person`. Pivot also has `incipient_*` (legacy only). `source_codes` is required; tokens with `%` use `LIKE`. Future deployments will drop the pivot table.
