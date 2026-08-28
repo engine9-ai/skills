@@ -45,7 +45,7 @@ Pick the endpoint that matches the work. Do not send `flow_id` to `/tasks/schedu
 
 See also: [POST /flow_runs/](./endpoints.md#post-flow_runs) ↔ [POST /tasks/schedule](./endpoints.md#post-tasksschedule).
 
-An on-demand task needs only plugin identifiers and the method — **no `flow_id`**. The server wraps that one job in a flow run so you can still poll `flow_run_id` / `task_run_ids`.
+An on-demand task needs only plugin identifiers and the method — **no `flow_id`**. The server wraps that one task in a flow run so you can still poll `flow_run_id` / `task_run_ids`.
 
 **Built-in Engine9 Workers** use `@engine9/plugins/e9workers:<Worker>`. Echo smoke test: `path: "@engine9/plugins/e9workers:EchoWorker"`, `method: "echo"`. No plugin-id lookup. See [echo-walkthrough.md](./echo-walkthrough.md#on-demand-task-names).
 
@@ -66,7 +66,7 @@ A **flow run** is one execution of a predefined flow **or** the wrapper around a
 | `flow_slug` | Which flow template (e.g. `nightly-sync`) |
 | `flow_id` | UUID associated with the slug |
 | `state_type` | Overall run state (`SCHEDULED`, `RUNNING`, `COMPLETED`, `FAILED`, …) |
-| `last_completed` | When this flow run (job list) last finished |
+| `last_completed` | When this flow run last finished |
 | `dataflow_last_completed` | When any run of the same dataflow last finished |
 | `completed_since` | See [Completed since](#completed-since) |
 | `task_runs` | Array of task runs created with this flow run (on create response) |
@@ -77,7 +77,7 @@ List those task runs with **`POST /task_runs/filter`** (`{ "flow_run_id": "…" 
 
 ### Account parent
 
-`parent_account_id` and `parent_ids` are looked up from the **account** document (`account.parent_ids`), not stored on the job list / job. They are included on `GET /flow_runs/:id`, `GET /task_runs/:id`, `POST /flow_runs/filter`, and `POST /task_runs/filter`.
+`parent_account_id` and `parent_ids` are looked up from the **account** document (`account.parent_ids`), not stored on the flow run or task run. They are included on `GET /flow_runs/:id`, `GET /task_runs/:id`, `POST /flow_runs/filter`, and `POST /task_runs/filter`.
 
 | Field | Meaning |
 |-------|---------|
@@ -100,7 +100,7 @@ It is `true` when `dataflow_last_completed` exists and this flow run either neve
 | `last_completed` **before** `dataflow_last_completed` (a later run finished) | `true` |
 | `last_completed` **after** `dataflow_last_completed` | `false` |
 
-Use it on `GET /flow_runs/:id` / `POST /task_runs/filter` responses, or as a filter on `POST /flow_runs/filter` (`{ "completed_since": true }`). Same field as GraphQL `JobListQuery.completed_since`.
+Use it on `GET /flow_runs/:id` / `POST /task_runs/filter` responses, or as a filter on `POST /flow_runs/filter` (`{ "completed_since": true }`).
 
 Do **not** treat a stored `dataflow_completed_since_last_update` value as the source of truth.
 

@@ -57,7 +57,7 @@ curl $CURL_TLS -sS -X POST \
 | `path` + `method` | **Yes** | On-demand plugin path + worker method. Built-in: `@engine9/plugins/e9workers:EchoWorker` + `echo`. |
 | `options` | No | Options object for the worker method |
 | `label`, `tracking_code`, `start_after_timestamp` | No | Schedule metadata |
-| `remote` | No | Default `true` (remote job-list); `false` for local workers |
+| `remote` | No | Default `true` (remote execution); `false` for local workers |
 
 **Response:** `{ ok: true, action: "schedule", result: { flow_run_id, task_run_ids, … } }`
 
@@ -180,7 +180,7 @@ curl $CURL_TLS -sS -X POST \
 | Field | Required | Description |
 |-------|----------|-------------|
 | `flow_id` | **Yes** | Flow slug (e.g. `nightly-sync`), not the UUID |
-| `name` / `label` | No | Job list label |
+| `name` / `label` | No | Display label for the run |
 | `tracking_code`, `start_after_timestamp` | No | Schedule metadata |
 | `remote` | No | Default `true` |
 
@@ -209,7 +209,7 @@ Prefer `POST /task_runs/filter` with `{ "flow_run_id": "…" }` to list that run
 
 **Scope:** `tasks:read`
 
-**Default `remote: true`** — lists Frakture / remote job-list runs via `TaskWorker.listRemoteFlowRuns` (same as MCP `task` `action: "list"`). Pass `"remote": false` (or `?remote=false`) for local SQL/file runs.
+**Default `remote: true`** — lists remote flow runs via `TaskWorker.listRemoteFlowRuns` (same as MCP `task` `action: "list"`). Pass `"remote": false` (or `?remote=false`) for local SQL/file runs.
 
 **List recent remote runs for this account** (after creating a key; no `flow_run_id` required):
 
@@ -316,11 +316,11 @@ Computation: `completed_since` is `true` when `dataflow_last_completed` exists a
 
 **Scope:** `tasks:schedule`
 
-**Auth (same as listing):** `user_id` is **not** required. MCP / server-token callers that can `POST /flow_runs/filter` can archive with the same credentials (`X-ENGINE9-ACCOUNT-ID` or `X-Account-Id` + bearer / `X-E9-Server-Token`).
+**Auth (same as listing):** `user_id` is **not** required. Callers that can `POST /flow_runs/filter` can archive with the same credentials.
 
-Bulk-archive flow runs (job lists). Same operation as the GraphQL mutation `job_list_archive(_ids: [ID]!)`.
+Bulk-archive flow runs.
 
-Ids may be sent as Prefect `flow_run_ids`, GraphQL `_ids`, or `flow_runs.id.any_`.
+Ids are sent as `flow_run_ids` (or the Prefect-style `flow_runs.id.any_` filter shape).
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -332,37 +332,23 @@ curl $CURL_TLS -sS -X POST \
   "$BASE_URL/flow_runs/archive"
 ```
 
-**GraphQL-shaped body** (same ids the UI sends to `job_list_archive`):
-
-```bash
-curl $CURL_TLS -sS -X POST \
-  -H "$AUTH" -H "$ACCOUNT" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "_ids": ["6a82fed56813e4e2a0a0144e"]
-  }' \
-  "$BASE_URL/flow_runs/archive"
-```
-
-**Response:**
+**Response** (`flow_run_ids` echoes the requested ids; `result` is the remote outcome):
 
 ```json
 {
   "ok": true,
   "action": "archive",
   "flow_run_ids": ["6a82fed56813e4e2a0a0144e"],
-  "_ids": ["6a82fed56813e4e2a0a0144e"]
+  "result": { "ok": true }
 }
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `flow_run_ids` | One of | Array of flow run / job list ids |
-| `_ids` | One of | GraphQL alias for the same ids |
-| `job_list_ids` | One of | Legacy job-list alias |
+| `flow_run_ids` | One of | Array of flow run ids (preferred) |
 | `flow_runs.id.any_` / `eq_` | One of | Prefect-style filter shape |
 
-**422** — none of those id fields provided. **503** — archive is not configured on the server.
+**422** — none of those id fields provided. **503** — archive is not reachable/configured on the server.
 
 ---
 
@@ -372,9 +358,9 @@ curl $CURL_TLS -sS -X POST \
 
 **Auth (same as listing):** `user_id` is **not** required.
 
-Bulk-retry flow runs (job lists). Same operation as the GraphQL mutation `job_list_retry(_ids: [ID]!)`.
+Bulk-retry flow runs.
 
-For each id, the server retries the job in `error` status, or the last `complete` job if there is no error job. Ids that cannot be retried are omitted from the response.
+For each id, the server retries the failed task run, or the most recent completed one if nothing failed. The `result` field of the response reflects which runs the remote server actually retried.
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -382,18 +368,6 @@ curl $CURL_TLS -sS -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "flow_run_ids": ["6a82fed56813e4e2a0a0144e"]
-  }' \
-  "$BASE_URL/flow_runs/retry"
-```
-
-**GraphQL-shaped body** (same ids the UI sends to `job_list_retry`):
-
-```bash
-curl $CURL_TLS -sS -X POST \
-  -H "$AUTH" -H "$ACCOUNT" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "_ids": ["6a82fed56813e4e2a0a0144e"]
   }' \
   "$BASE_URL/flow_runs/retry"
 ```
@@ -405,13 +379,13 @@ curl $CURL_TLS -sS -X POST \
   "ok": true,
   "action": "retry",
   "flow_run_ids": ["6a82fed56813e4e2a0a0144e"],
-  "_ids": ["6a82fed56813e4e2a0a0144e"]
+  "result": { "ok": true }
 }
 ```
 
 Body fields match `POST /flow_runs/archive`.
 
-**422** — none of those id fields provided. **503** — retry is not configured on the server.
+**422** — none of those id fields provided. **503** — retry is not reachable/configured on the server.
 
 ---
 
@@ -439,23 +413,7 @@ curl $CURL_TLS -sS -X POST \
 
 ## Task runs
 
-### `POST /task_runs/`
-
-Create a standalone task run (advanced). Most clients schedule an on-demand task (`POST /tasks/schedule` with `path` + `method`) or a predefined flow (`POST /flow_runs/` with `flow_id`) instead.
-
-```bash
-curl $CURL_TLS -sS -X POST \
-  -H "$AUTH" -H "$ACCOUNT" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "flow_run_id": "'"$FLOW_RUN_ID"'",
-    "task_key": "echo",
-    "dynamic_key": "0"
-  }' \
-  "$BASE_URL/task_runs/"
-```
-
----
+Task runs are created by scheduling — an on-demand task (`POST /tasks/schedule` with `path` + `method`) or a predefined flow (`POST /flow_runs/` with `flow_id`). There is no standalone task-run create endpoint.
 
 ### `GET /task_runs/:id`
 
@@ -490,7 +448,7 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
 
 Prefect **Read Task Runs**. Primary way to list or poll task runs. Returns `{ ok: true, task_runs: [ … ] }`. When a **single** `flow_run_id` is supplied, also includes `flow_run` (extension so one call can poll the parent run).
 
-**Default `remote: true`** — lists Frakture / remote jobs via `TaskWorker.listRemoteTaskRuns`. Pass `"remote": false` (or `?remote=false`) for local SQL task runs.
+**Default `remote: true`** — lists remote task runs via `TaskWorker.listRemoteTaskRuns`. Pass `"remote": false` (or `?remote=false`) for local SQL task runs.
 
 Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`.
 
@@ -525,7 +483,7 @@ curl $CURL_TLS -sS -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "task_runs": {
-      "id": { "any_": ["job-id-1"] },
+      "id": { "any_": ["task-run-id-1"] },
       "state": { "type": { "any_": ["FAILED"] } }
     },
     "limit": 50
@@ -607,12 +565,12 @@ curl -X POST ... -d '{"flow_run_id":"'"$FLOW_RUN_ID"'"}' \
 curl -X POST ... -d '{"flow_runs":{"flow_id":{"eq_":"nightly-sync"}},"limit":10}' \
   "$BASE_URL/flow_runs/filter"
 
-# 5. Optional: retry failed runs (GraphQL job_list_retry)
+# 5. Optional: retry failed runs
 curl -X POST ... -d '{"flow_run_ids":["'"$FLOW_RUN_ID"'"]}' \
   "$BASE_URL/flow_runs/retry"
 
-# 6. Optional: archive finished runs (GraphQL job_list_archive)
-curl -X POST ... -d '{"_ids":["'"$FLOW_RUN_ID"'"]}' \
+# 6. Optional: archive finished runs
+curl -X POST ... -d '{"flow_run_ids":["'"$FLOW_RUN_ID"'"]}' \
   "$BASE_URL/flow_runs/archive"
 ```
 

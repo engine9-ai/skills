@@ -129,10 +129,10 @@ Prefect task run state updates: [Set Task Run State](https://docs.prefect.io/v3/
 
 | Status | Cause |
 |--------|-------|
-| 422 | Body missing `flow_run_ids`, `_ids`, `job_list_ids`, or `flow_runs.id` |
-| 503 | Archive/retry not configured on the server |
+| 422 | Body missing `flow_run_ids` (or `flow_runs.id`) |
+| 503 | Archive/retry backend not reachable/configured on the server |
 
-These mutate existing job lists (GraphQL `job_list_archive` / `job_list_retry`). Ids that cannot be retried (no error or complete job) are omitted from the 200 body.
+These mutate existing flow runs. The `result` field of the 200 body reflects which runs the remote server actually archived or retried.
 
 ### `POST /task_runs/filter`
 
@@ -150,14 +150,15 @@ These mutate existing job lists (GraphQL `job_list_archive` / `job_list_retry`).
 
 ## Authentication errors (401)
 
-No body shape is guaranteed. Common causes:
+The body is a `detail` message. Common causes:
 
-- Header omitted: `Authorization: Bearer ...`
-- Expired or invalid Firebase ID token
-- Dev token not valid for your account or environment
+- `X-ENGINE9-ACCOUNT-ID` header omitted
+- API key omitted (`Authorization: Bearer e9key_…` or `X-API-Key`)
+- Key unknown, inactive, or issued for a different account (`Invalid API key (…)`)
+- A non-`e9key_` bearer token (e.g. a Firebase/OAuth token meant for MCP) was sent
 
 ```bash
-# This will 401
+# This will 401 (no API key)
 curl $CURL_TLS -sS -H "$ACCOUNT" "$BASE_URL/flows"
 ```
 

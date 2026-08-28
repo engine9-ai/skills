@@ -2,6 +2,8 @@
 
 Minimal steps to make your first Task API calls. The default production base URL is **`https://data.engine9.ai`**.
 
+Agents: use [echo-walkthrough.md](./echo-walkthrough.md) instead — it is written to be run interactively, with expected responses for each step and instructions for reporting progress to the user.
+
 ## 1. Collect connection details
 
 From your administrator:

@@ -37,7 +37,7 @@ An on-demand task does **not** need a `flow_id`. A predefined flow does **not** 
 | [concepts.md](./concepts.md) | Terminology: flows, runs, IDs, async execution, `completed_since` |
 | [authentication.md](./authentication.md) | **API keys (`e9key_…`), scopes (`tasks:read` / `tasks:schedule`), account header** |
 | [getting-started.md](./getting-started.md) | First requests in five minutes |
-| [echo-walkthrough.md](./echo-walkthrough.md) | On-demand Echo (`@engine9/plugins/e9workers:EchoWorker` + `echo`) → task_runs/filter |
+| [echo-walkthrough.md](./echo-walkthrough.md) | **Agent-runnable** end-to-end Echo demo: schedule → poll → completion, with expected responses |
 | [endpoints.md](./endpoints.md) | Every route with curl examples |
 | [errors.md](./errors.md) | HTTP status codes |
 
@@ -50,6 +50,10 @@ An on-demand task does **not** need a `flow_id`. A predefined flow does **not** 
 - **`POST /tasks/schedule`** — on-demand task (`path` + `method`, e.g. `@engine9/plugins/e9workers:EchoWorker` + `echo`). **`POST /flow_runs/`** — predefined flow (`flow_id` required). **`POST /task_runs/filter`** — list/poll task runs.
 - Does not block until execution finishes — poll `POST /task_runs/filter` until terminal
 - `completed_since` on flow runs is computed from timestamps (`last_completed` ≤ `dataflow_last_completed`; **equal is true**) — [concepts.md](./concepts.md#completed-since)
+
+## Agent demo (prove an account/key works)
+
+Follow [echo-walkthrough.md](./echo-walkthrough.md) end to end: **ask the user for an account id and `e9key_` API key** (offer the default base URL `https://data.engine9.ai`), then schedule the Echo task, poll until it completes, and report the output — explaining each call and each response as you go. Never print the full API key.
 
 ## Typical workflow
 

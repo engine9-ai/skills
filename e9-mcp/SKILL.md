@@ -155,7 +155,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Account people / timeline / identity / model health check | `auditPeople` |
 | Person timeline + stored models (current and legacy) | `timelinePerson` |
 | Compare current `model_*_stats` (and opt-in pivot) by source code | `timelinePerson` with `command: "compareSourceCodes"` |
-| List segments or schedule segment builds | `segment` |
+| List segments, load segment detail, or schedule segment builds | `segment` |
 | Create accounts / manage domains or domain secrets | e9-account Worker (`cloud-services/e9-account`) — not MCP |
 | Run a SQL/EQL query | `eql` / `sql` (`command: "query"` or omit when `sql` is set) |
 | Analyze / summarize / profile a table | `analyze` |
@@ -214,11 +214,20 @@ Plugins command is also the **discovery step** before calling `task` when no nat
 
 ### `search`
 
-Searches people by metadata filters and returns person summaries with related records.
+Person search by metadata filters. Prefer this over ad-hoc SQL or `task` when looking up people by email, phone, name, or id. Returns person summaries with related records; each related subsection (`emails`, `phones`, `addresses`, `person_remote`, `transactions`) includes a total count and up to 100 sample records.
 
 - Required: `account_id`
-- Filters: `emails`, `person_ids`, `phones`, `given_names`, `last_names`
+- Filters (string or array each): `emails`, `person_ids`, `phones`, `given_names`, `last_names`
 - Optional: `limit` (max 1000, default 10)
+- Returns: `{ ok: true, result }` where `result` is the `PersonWorker.search` payload
+
+Example — email lookup:
+
+```json
+{ "account_id": "test", "emails": ["foo@bar.com"], "limit": 10 }
+```
+
+For `/e9 search …` token parsing (emails vs person_ids vs names), see [e9-cli — `/e9 search` parsing rules](../e9-cli/SKILL.md#e9-search-parsing-rules).
 
 ### `auditPeople`
 
@@ -247,7 +256,7 @@ Example — current identity/timeline only:
 Person-level **current-identity** timeline + model inspect (`ModelWorker.inspectPerson`) and source-code model compare (`compareSourceCodes`). SQL lives on the server; prefer this over ad-hoc SQL. The conductor Timeline artifact is a shell over `command: inspect`; `/models` is a shell over `command: compareSourceCodes`.
 
 - Required: `account_id`
-- **command: inspect** (default) — `emails` and/or `person_ids`. Returns `{ queried, tables[], person_ids, emails, sql }` for current `timeline` / `model_*` only. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` (opt-in; future deployments will drop this). Missing tables are skipped. Do not join `person.id` to `person_id_int`.
+- **command: inspect** (default) — `emails` and/or `person_ids`. `person_ids` is a number, string, or array of either (warehouse `person.id` is an integer — do not stringify). Returns `{ queried, tables[], person_ids, emails, sql }` for current `timeline` / `model_*` only. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` (opt-in; future deployments will drop this). Missing tables are skipped. Do not join `person.id` to `person_id_int`.
 - **command: compareSourceCodes** — all current `model_*_stats` by source code (`person_count`, `revenue`, `transactions`). Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` stems. Optional `models` subset. Returns `sql` for top-N selection and per-model stats.
 - **command: compareSourceCodesLegacy** — same-stem pivot vs current delta. `source_codes` required (comma-delimited; `%` is LIKE).
 - **command: summarizeSourceCodesLegacy** — pivot rows only. `source_codes` required.
@@ -258,6 +267,12 @@ Example — person inspect (current only):
 
 ```json
 { "account_id": "test", "emails": "user@example.com" }
+```
+
+Example — person inspect by numeric `person.id`:
+
+```json
+{ "account_id": "test", "person_ids": 1517 }
 ```
 
 Example — person inspect with legacy tables:
@@ -280,16 +295,29 @@ Example — specified source codes, with legacy pivot:
 
 ### `segment`
 
-List account segments or schedule `SegmentWorker.buildSegmentPersonFile`.
+List or load rows from the account **`segment` table**, or schedule `SegmentWorker.buildSegmentPersonFile`. Do not use legacy `global_segment`. There is no free-text filter — **list → match in the agent → detail**.
 
-- Required: `account_id`, `command` (`list` or `build`)
-- **list** — rows from `segment` (plugin_name, build_status, segment_directory when present). Optional `fields: '*'` for all columns.
+- Required: `account_id`, `command` (`list`, `detail`, or `build`)
+- **list** — summary rows from `segment` joined to `plugin` (`plugin_name`, `plugin_path`). Structured filters only: `plugin_id`, `plugin_path`, `segment_id` / `segment_ids`, `remote_segment_ids`, `build_type`, `submodule`, `fields`. Optional `fields: '*'` for all columns. Returns `sql`.
+- **detail** — full `segment` row(s) plus plugin_name / plugin_path. Requires `segment_id` or `segment_ids`. Returns `sql`.
 - **build** — enqueue a segment person-file build. Requires `segment_id` or `definition_path`. Optional: `plugin_id`, `filename`, `engine`, `duckdb_file`, `input_id`, `label`, `remote`.
 
 Example list:
 
 ```json
 { "command": "list", "account_id": "test" }
+```
+
+Example list by plugin path:
+
+```json
+{ "command": "list", "account_id": "test", "plugin_path": "@engine9/interfaces/channels/email" }
+```
+
+Example detail after matching a listed row:
+
+```json
+{ "command": "detail", "account_id": "test", "segment_id": "<uuid>" }
 ```
 
 Example build by definition path:
@@ -394,7 +422,7 @@ Every bootstrapped account has `@engine9/plugins/e9workers`. Pass that path plus
 |------------------|------------------|
 | `@engine9/plugins/e9workers:EchoWorker` | `echo` (smoke test) |
 | `@engine9/plugins/e9workers:SQLWorker` | `query` |
-| `@engine9/plugins/e9workers:SegmentWorker` | SegmentWorker methods |
+| `@engine9/plugins/e9workers:SegmentWorker` | `list`, `detail`, `build`, `buildSegmentPersonFile` |
 
 Echo smoke test:
 

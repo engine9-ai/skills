@@ -54,9 +54,9 @@ Prefixes: `e9key_…` for normal scopes; `e9publickey_…` when the key includes
 | `POST /flow_runs/` | `tasks:schedule` |
 | `POST /flow_runs/:id/set_state`, `POST /task_runs/:id/set_state` | `tasks:schedule` |
 
-`POST /flow_runs/archive` and `POST /flow_runs/retry` use the **same identity as listing** (`POST /flow_runs/filter`). A Frakture `user_id` is **not** a request field and is **not** required — MCP/server-token callers that can list can archive/retry.
+`POST /flow_runs/archive` and `POST /flow_runs/retry` use the **same identity as listing** (`POST /flow_runs/filter`). A `user_id` is **not** a request field and is **not** required — callers that can list can archive/retry.
 
-For a partner that discovers flows and schedules jobs, issue a key with both:
+For a partner that discovers flows and schedules tasks, issue a key with both:
 
 ```text
 tasks:read,tasks:schedule
@@ -132,7 +132,7 @@ curl $CURL_TLS -sS \
 
 ### List recent runs
 
-Defaults to **remote** Frakture jobs (`TaskWorker.listRemoteFlowRuns`). Pass `"remote": false` for local runs.
+Defaults to **remote** runs (`TaskWorker.listRemoteFlowRuns`). Pass `"remote": false` for local runs.
 
 ```bash
 curl $CURL_TLS -sS -X POST \
