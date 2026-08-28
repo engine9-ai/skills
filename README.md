@@ -1,6 +1,6 @@
 # skills
 
-Skills for working with engine9 deployments.
+Public skills for working with engine9 deployments.
 
 **MCP rule:** When using an engine9 MCP server, discover plugins, methods, and tool parameters from MCP responses only — not from local workspace code. See [e9-mcp — MCP-only discovery](./e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code).
 
@@ -10,7 +10,6 @@ Skills for working with engine9 deployments.
 | CLI / `/e9`, `/e9a` | [e9-cli/SKILL.md](./e9-cli/SKILL.md) | Connect Cursor to engine9 MCP, account scope, search, task scheduling |
 | MCP tools | [e9-mcp/SKILL.md](./e9-mcp/SKILL.md) | Native MCP tool selection, account discovery, task fallback |
 | EQL | [e9-eql/SKILL.md](./e9-eql/SKILL.md) | engine9 Query Language — expressions, query objects, MCP `eql` |
-| Troubleshoot | [e9-troubleshoot/SKILL.md](./e9-troubleshoot/SKILL.md) | Support-ticket intake, product-side diagnosis, and recommended resolutions (`troubleshoot` only) |
 | Task API (REST) | [e9-tasks-api/SKILL.md](./e9-tasks-api/SKILL.md) | Task API REST — predefined flows (`flow_id`) or an on-demand task (`path` + `method`; Echo: `@engine9/plugins/e9workers:EchoWorker`) |
 | Dev tasks (flows) | [e9-dev-tasks/SKILL.md](./e9-dev-tasks/SKILL.md) | Design/build JSON5 flows, TaskWorker, SQLTaskManager *(developers only)* |
 | Timeline | [e9-timeline/SKILL.md](./e9-timeline/SKILL.md) | Person activity log, entries (never events), entry types, querying, missing-entry debug |

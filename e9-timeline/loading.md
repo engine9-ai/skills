@@ -2,7 +2,7 @@
 
 User-facing model, entry types, querying, and missing-entry debug: [SKILL.md](SKILL.md). Plugin file shapes and `@engine9/input-tools` helpers: [inputs/timeline](../inputs/timeline/SKILL.md). Timeline rows are **entries**, never events.
 
-Use this file when writing or modifying **load jobs**, or when an engineering investigation of `InputWorker` is requested. Support tickets stay in [e9-troubleshoot](../e9-troubleshoot/SKILL.md) and do not use this file.
+Use this file when writing or modifying **load jobs**, or when an engineering investigation of `InputWorker` is requested. Do not use this file to diagnose a missing Timeline tab entry from the product; that is not a load-job change.
 
 engine9 server workers treat timeline data in two stages:
 

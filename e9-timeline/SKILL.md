@@ -7,8 +7,8 @@ description: >-
   querying, segments, and missing-entry debug. Timeline rows are entries, never
   events. Use when working with timeline,
   entry_type_id, EMAIL_OPEN, EMAIL_CLICK, EMAIL_SEND, person's activity,
-  person_entry_summary, timeline_detail, missing opens/clicks, or when a
-  Troubleshoot session classifies a Timeline issue.
+  person_entry_summary, timeline_detail, missing opens/clicks, or diagnosing
+  a missing Timeline entry.
 ---
 
 # engine9 timeline
@@ -173,7 +173,7 @@ Resolve email → `person_id` via `person_email` ([e9-person-id](../e9-person-id
 
 ## Missing-entry debug (A–F)
 
-Use this when [e9-troubleshoot](../e9-troubleshoot/SKILL.md) classifies a **Timeline** issue (person Timeline tab empty/wrong, missing open/click/send, engagement segment empty, “we sent this but engine9 has no entry”). Find the person and input from the product first; SQL confirms one named entry. Do **not** inspect application code.
+Use this when diagnosing a **Timeline** issue (person Timeline tab empty/wrong, missing open/click/send, engagement segment empty, “we sent this but engine9 has no entry”). Find the person and input from the product first; SQL confirms one named entry. Do **not** inspect application code.
 
 Walk **A → F in order**. Stop at the first gap. Pick **one** person and **one** expected entry (type + message/input if known).
 
@@ -261,7 +261,7 @@ The `timeline` row is present and correctly typed/joined, but the complaint is a
 - **Segment empty:** check universe (message `publish_date` / channel) **and** search window. A recent open on a message published more than 90 days ago does not qualify for the shipped email-opener segments.
 - **UI disagrees after F matches:** report/UI issue, not this pipeline.
 
-Record the first failing step in the Troubleshoot ticket notes (other accounts; ESP/CRM/payment remotes).
+Record the first failing step (other accounts; ESP/CRM/payment remotes).
 
 ## Additional resources
 
@@ -270,4 +270,3 @@ Record the first failing step in the Troubleshoot ticket notes (other accounts; 
 - Person identity: [e9-person-id](../e9-person-id/SKILL.md)
 - Source codes / attribution (transaction ↔ message): [e9-source-code](../e9-source-code/SKILL.md)
 - Models (timeline long-term value): [e9-model](../e9-model/SKILL.md)
-- Troubleshoot (support tickets): [e9-troubleshoot](../e9-troubleshoot/SKILL.md)

@@ -212,4 +212,3 @@ Duplicate-people symptoms: same email on two `person_id`s (lookup first-wins; at
 
 - Worked dedupe examples: [examples.md](examples.md)
 - Person activity log: [e9-timeline](../e9-timeline/SKILL.md)
-- Troubleshoot People tickets: [e9-troubleshoot](../e9-troubleshoot/SKILL.md)

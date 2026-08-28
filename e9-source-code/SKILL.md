@@ -7,8 +7,8 @@ description: >-
   platform → message load → transaction load → attribution →
   global_message_summary). Use when working with source_code,
   source_code_dictionary, message_source_code, transaction_summary, attributed
-  revenue, last click, recommended_message_id, or when a Troubleshoot session
-  classifies a source-code attribution issue. Current timeline models are
+  revenue, last click, recommended_message_id, or diagnosing a source-code
+  attribution issue. Current timeline models are
   e9-model (`{prefix}_*` tables). `source_code_summary.origin_*` is legacy.
 ---
 
@@ -151,7 +151,7 @@ Details and method comparison: [attribution.md](attribution.md).
 
 ## Last-click pipeline debug (A–F)
 
-Use this when [e9-troubleshoot](../e9-troubleshoot/SKILL.md) classifies a **Source coding / attribution** issue (wrong/zero attributed revenue, message not credited, source code missing in engine9). Diagnose from the live link and payment platform first; SQL confirms a named code. Do **not** inspect application code.
+Use this when diagnosing a **Source coding / attribution** issue (wrong/zero attributed revenue, message not credited, source code missing in engine9). Diagnose from the live link and payment platform first; SQL confirms a named code. Do **not** inspect application code.
 
 The usual last-click path is two platforms joined by one string. Walk **A → F in order**. Stop at the first gap; later steps are meaningless until that gap is explained. `DESCRIBE` tables first if column names differ. Filter to **one** example source code (here `SC_EG_123`) and LIMIT probes.
 
@@ -274,4 +274,4 @@ LIMIT 20;
 
 **Gap:** E has `recommended_message_id` but summary is zero/stale/wrong → stats job has not run or is aggregating a different set (overrides, date filters, refunds). A UI report that still disagrees after F matches is a report/UI issue, not this pipeline.
 
-Record the first failing step in the Troubleshoot ticket notes (other accounts; messaging vs payment remotes).
+Record the first failing step (other accounts; messaging vs payment remotes).
