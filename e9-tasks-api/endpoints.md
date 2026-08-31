@@ -417,30 +417,64 @@ Task runs are created by scheduling — an on-demand task (`POST /tasks/schedule
 
 ### `GET /task_runs/:id`
 
-Primary endpoint for checking execution progress and results.
+**Scope:** `tasks:read` — default `remote=true`. Remote responses include `resolved_options`, `output`, display fields (`bot`, `submodule`, `method`, `bot_location_id`, `errors`, `records`, `expected_start_time`, `updated`), and `log_url` when the job server can sign one.
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
   "$BASE_URL/task_runs/$TASK_RUN_ID"
 ```
 
-**Key fields to extract:**
+**Key fields:**
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
   "$BASE_URL/task_runs/$TASK_RUN_ID" | jq '{
-    id,
-    state_type,
-    task_key,
-    flow_run_id,
-    start_time,
-    end_time,
-    output_path: .state.state_details.output_path,
-    options: .task_inputs.options
+    id: .task_run.id,
+    state_type: .task_run.state_type,
+    task_key: .task_run.task_key,
+    flow_run_id: .task_run.flow_run_id,
+    options: .task_run.options,
+    resolved_options: .task_run.resolved_options,
+    output: .task_run.output,
+    records: .task_run.records
   }'
 ```
 
 **404** — unknown task run id.
+
+---
+
+### `GET /task_runs/:id/log`
+
+**Scope:** `tasks:read`
+
+Returns the job-server log text for a remote task run.
+
+```bash
+curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
+  "$BASE_URL/task_runs/$TASK_RUN_ID/log"
+```
+
+**200:**
+
+```json
+{
+  "ok": true,
+  "task_run_id": "…",
+  "log": "<text>",
+  "truncated": false
+}
+```
+
+When the log cannot be fetched inline, `log` may be empty and `log_url` (signed, short-lived) is still returned. **404** — no log available.
+
+---
+
+### `GET /task_runs/:id/output`
+
+**Scope:** `tasks:read`
+
+Returns `{ "ok": true, "task_run_id": "…", "output": { … } }` for remote runs (same `output` as `GET /task_runs/:id`).
 
 ---
 
@@ -514,23 +548,136 @@ curl $CURL_TLS -sS -X POST \
 
 Does **not** 404 when ids are missing — unmatched filters return `task_runs: []` (`flow_run: null` if a single unknown `flow_run_id` was sent).
 
+Each remote `task_run` includes display fields used by the flow-run UI: `bot.path`, `submodule`, `method`, `bot_location_id`, `errors` (`{ level, message, ts }[]`), `records`, `expected_start_time`, `updated`, plus `options` / `output`.
+
 ---
 
-### `POST /task_runs/:id/set_state`
+### `POST /task_runs/:id/retry`
+
+**Scope:** `tasks:schedule`
+
+Retry a **specific** remote task run (unlike `POST /flow_runs/retry`, which retries the failed task or the most recent completed one).
 
 ```bash
 curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
-  -d '{
-    "state": {
-      "type": "COMPLETED",
-      "id": "0196f1d3-0000-7000-8000-000000000002",
-      "name": "Completed"
-    }
-  }' \
+  -d '{ "force": false }' \
+  "$BASE_URL/task_runs/$TASK_RUN_ID/retry"
+```
+
+Queue behind another task in the same flow:
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{ "start_after": "previous" }' \
+  "$BASE_URL/task_runs/$TASK_RUN_ID/retry"
+```
+
+Or pass an explicit sibling: `{ "start_after_task_run_id": "<previous task_run_id>" }`.
+
+**200:** `{ "ok": true, "action": "retry", "task_run_id": "…", "flow_run_id": "…" }`
+
+| Field | Description |
+|-------|-------------|
+| `force` | Re-run even if `COMPLETED`. Required to retry a `RUNNING` run |
+| `start_after` | `"previous"` — wait for the preceding task in the flow |
+| `start_after_task_run_id` | Wait for that sibling task run |
+
+**422** — task run is `RUNNING` and `force` is not set.
+
+---
+
+### `POST /task_runs/:id/pause`
+
+**Scope:** `tasks:schedule`
+
+Pause a pending/scheduled remote task run (`Job.pause`).
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  "$BASE_URL/task_runs/$TASK_RUN_ID/pause"
+```
+
+---
+
+### `POST /task_runs/:id/resume`
+
+**Scope:** `tasks:schedule`
+
+Resume a paused remote task run (same as retry without `force`).
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  "$BASE_URL/task_runs/$TASK_RUN_ID/resume"
+```
+
+---
+
+### `POST /task_runs/:id/stop`
+
+**Scope:** `tasks:schedule`
+
+Kill a remote task run.
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{ "reason": "user_request" }' \
+  "$BASE_URL/task_runs/$TASK_RUN_ID/stop"
+```
+
+---
+
+### `POST /task_runs/:id/set_state`
+
+On **remote** runs, `state.type` maps to the first-class actions above:
+
+| `state.type` | Action |
+|--------------|--------|
+| `PAUSED` | pause |
+| `SCHEDULED` / `PENDING` | resume |
+| `CANCELLED` | stop |
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{ "state": { "type": "PAUSED" } }' \
   "$BASE_URL/task_runs/$TASK_RUN_ID/set_state"
 ```
+
+**422** — missing `state.type`, or an unsupported type for remote runs. Pass `remote: false` for local file/SQL state updates.
+
+---
+
+### `PATCH /task_runs/:id`
+
+**Scope:** `tasks:schedule`
+
+Merge `options` onto a **pending or paused** remote task run before it executes.
+
+```bash
+curl $CURL_TLS -sS -X PATCH \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "options": {
+      "model": "@engine9/plugins/models/first_touch",
+      "limit": 100
+    }
+  }' \
+  "$BASE_URL/task_runs/$TASK_RUN_ID"
+```
+
+**200:** `{ "ok": true, "task_run_id": "…", "options": { …merged… } }`
+
+**409** — task run is already `RUNNING` or terminal. **422** — body missing `options` object.
 
 ---
 
@@ -565,11 +712,20 @@ curl -X POST ... -d '{"flow_run_id":"'"$FLOW_RUN_ID"'"}' \
 curl -X POST ... -d '{"flow_runs":{"flow_id":{"eq_":"nightly-sync"}},"limit":10}' \
   "$BASE_URL/flow_runs/filter"
 
-# 5. Optional: retry failed runs
+# 5. Optional: retry a specific task, or the flow's failed task
+curl -X POST ... -d '{"force":false}' "$BASE_URL/task_runs/$TASK_RUN_ID/retry"
 curl -X POST ... -d '{"flow_run_ids":["'"$FLOW_RUN_ID"'"]}' \
   "$BASE_URL/flow_runs/retry"
 
-# 6. Optional: archive finished runs
+# 6. Optional: pause / resume / edit options of a pending task
+curl -X POST ... "$BASE_URL/task_runs/$TASK_RUN_ID/pause"
+curl -X PATCH ... -d '{"options":{"limit":100}}' "$BASE_URL/task_runs/$TASK_RUN_ID"
+
+# 7. Optional: log and output
+curl ... "$BASE_URL/task_runs/$TASK_RUN_ID/log"
+curl ... "$BASE_URL/task_runs/$TASK_RUN_ID/output"
+
+# 8. Optional: archive finished runs
 curl -X POST ... -d '{"flow_run_ids":["'"$FLOW_RUN_ID"'"]}' \
   "$BASE_URL/flow_runs/archive"
 ```

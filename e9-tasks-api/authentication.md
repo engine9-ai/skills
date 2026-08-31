@@ -33,8 +33,8 @@ engine9 API keys require a **non-empty scopes list** at creation. A request is a
 | `people:write` | Core `POST /people` | Inbound people pipeline |
 | `tables:write` | Core `POST /upsert/:table` | Allowlisted table upserts |
 | `data:read` | Core `GET /read/:name` | Configured reads |
-| `tasks:read` | Task API | List/read flows; check run status (`GET /flows*`, `POST /task_runs/filter`, `GET /flow_runs/:id`, `GET /task_runs/:id`) |
-| `tasks:schedule` | Task API | Schedule work (`POST /tasks/schedule`, `POST /flow_runs/`, `*/set_state`) |
+| `tasks:read` | Task API | List/read flows; check run status and logs (`GET /flows*`, `POST /task_runs/filter`, `GET /flow_runs/:id`, `GET /task_runs/:id`, `GET /task_runs/:id/log`, `GET /task_runs/:id/output`) |
+| `tasks:schedule` | Task API | Schedule and control work (`POST /tasks/schedule`, `POST /flow_runs/`, retry/pause/resume/stop, `PATCH /task_runs/:id`, `*/set_state`) |
 | `admin` | Any | All scopes (use this instead of the old `*` wildcard) |
 | `public` | Inbound | Public forms / e9-inbound (`e9publickey_` prefix; same `api_key` table) |
 
@@ -49,10 +49,12 @@ Prefixes: `e9key_…` for normal scopes; `e9publickey_…` when the key includes
 | `GET /flows`, `GET /flows/:id`, `POST /flows/filter`, `GET /flows_dir` | `tasks:read` |
 | `GET /flow_runs/:id`, `POST /flow_runs/filter` | `tasks:read` |
 | `POST /flow_runs/archive`, `POST /flow_runs/retry` | `tasks:schedule` |
-| `GET /task_runs/:id`, `POST /task_runs/filter` | `tasks:read` |
+| `GET /task_runs/:id`, `GET /task_runs/:id/log`, `GET /task_runs/:id/output`, `POST /task_runs/filter` | `tasks:read` |
 | `POST /tasks/schedule` | `tasks:schedule` |
 | `POST /flow_runs/` | `tasks:schedule` |
 | `POST /flow_runs/:id/set_state`, `POST /task_runs/:id/set_state` | `tasks:schedule` |
+| `POST /task_runs/:id/retry`, `/pause`, `/resume`, `/stop` | `tasks:schedule` |
+| `PATCH /task_runs/:id` | `tasks:schedule` |
 
 `POST /flow_runs/archive` and `POST /flow_runs/retry` use the **same identity as listing** (`POST /flow_runs/filter`). A `user_id` is **not** a request field and is **not** required — callers that can list can archive/retry.
 

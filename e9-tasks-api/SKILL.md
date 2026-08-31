@@ -63,7 +63,7 @@ Follow [echo-walkthrough.md](./echo-walkthrough.md) end to end: **ask the user f
    - **Predefined flow:** `GET /flows` then `POST /flow_runs/` with `{ "flow_id": "<slug>" }` — `flow_id` is required. See also `POST /tasks/schedule`.
    → save `flow_run_id` / `task_run_ids`
 3. `POST /task_runs/filter` — `{ "flow_run_id": "…" }` until complete
-4. Retrieve output using your administrator's documented method
+4. Remote output: `GET /task_runs/:id` (`output`, `resolved_options`) or `GET /task_runs/:id/output`. Logs: `GET /task_runs/:id/log`. Per-task **Run now**: `POST /task_runs/:id/retry`.
 
 Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
 
@@ -79,8 +79,10 @@ Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
 | POST | `/flow_runs/filter` | `tasks:read` |
 | POST | `/flow_runs/archive`, `/flow_runs/retry` | `tasks:schedule` |
 | POST | `/flow_runs/:id/set_state` | `tasks:schedule` |
-| GET | `/task_runs/:id` | `tasks:read` |
-| POST | `/task_runs/filter`, `/task_runs/:id/set_state` | read / schedule |
+| GET | `/task_runs/:id`, `/task_runs/:id/log`, `/task_runs/:id/output` | `tasks:read` |
+| POST | `/task_runs/filter` | `tasks:read` |
+| POST | `/task_runs/:id/retry`, `/pause`, `/resume`, `/stop`, `/set_state` | `tasks:schedule` |
+| PATCH | `/task_runs/:id` | `tasks:schedule` |
 
 Details: [endpoints.md](./endpoints.md).
 
@@ -91,8 +93,9 @@ Details: [endpoints.md](./endpoints.md).
 | 401 | Missing/invalid `e9key_` key or account header — [authentication.md](./authentication.md) |
 | 403 | Wrong account or missing scope |
 | 404 | Wrong flow slug or run id |
+| 409 | `PATCH /task_runs/:id` on a RUNNING or terminal run |
 | 410 | Removed listing path — use `POST /task_runs/filter` |
-| 422 | Missing `flow_id` (predefined flow) or `path`+`method` (on-demand task) |
+| 422 | Missing `flow_id` (predefined flow) or `path`+`method` (on-demand task); retry of a RUNNING task without `force` |
 | 503 | API or `api_key` table not configured — administrator: `e9 sqlworker createApiKey` |
 
 Full list: [errors.md](./errors.md).

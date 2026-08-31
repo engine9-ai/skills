@@ -124,9 +124,16 @@ A **task run** is one execution of one task within a flow run.
 | `parent_account_id` | First id in that account's `parent_ids` (`null` if none) |
 | `parent_ids` | Full `parent_ids` array from the account document |
 | `task_key` | Which step in the flow |
-| `state_type` | `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, … |
-| `task_inputs` | Inputs for this run (including `options` passed to the step) |
-| `state` | Full state object; see output below |
+| `bot.path`, `submodule`, `method` | Worker identity (card subtitle, e.g. `Engine9Workers.ModelWorker`) |
+| `bot_location_id` | Job server label |
+| `state_type` | `PENDING`, `RUNNING`, `PAUSED`, `COMPLETED`, `FAILED`, … |
+| `errors` | Alert banners: `{ level, message, ts }[]` |
+| `options` / `task_inputs.options` | Options as scheduled (before server-side merge) |
+| `resolved_options` | Options the worker actually ran with (on `GET /task_runs/:id`) |
+| `output` / `records` | Worker JSON result and a records count when present |
+| `expected_start_time` | Dependency/time gate ("Starting after …") |
+| `updated` | Last modification timestamp |
+| `start_time` / `end_time` | Execution window when known |
 
 ### Example task run (after completion)
 
@@ -157,6 +164,8 @@ Both flow runs and task runs use string `state_type` values.
 | `state_type` | Meaning for task runs |
 |--------------|----------------------|
 | `PENDING` | Scheduled, not yet executing |
+| `SCHEDULED` | Queued (same as pending for pause/resume) |
+| `PAUSED` | Held; will not start until resumed or retried |
 | `RUNNING` | Step is executing |
 | `COMPLETED` | Finished successfully |
 | `FAILED` | Finished with error |
@@ -164,6 +173,14 @@ Both flow runs and task runs use string `state_type` values.
 | `CRASHED` | Unexpected failure |
 
 **Typical integration pattern:** schedule (on-demand task or predefined flow) → poll `GET /task_runs/:id` until `state_type` is terminal (`COMPLETED` or `FAILED`).
+
+`POST /task_runs/:id/set_state` on **remote** runs accepts:
+
+| `state.type` | Effect |
+|--------------|--------|
+| `PAUSED` | Pause a pending/scheduled run (`POST /task_runs/:id/pause`) |
+| `SCHEDULED` or `PENDING` | Resume (`POST /task_runs/:id/resume`) |
+| `CANCELLED` | Stop (`POST /task_runs/:id/stop`) |
 
 ## Scheduling vs execution
 
@@ -182,11 +199,15 @@ There is no public REST endpoint that blocks until a task finishes. Poll or impl
 
 ## Task output
 
-Completed task output is **not** returned inline in `GET /task_runs/:id`. Instead:
+Remote (Frakture) task runs include the worker JSON `output` on `GET /task_runs/:id` and `POST /task_runs/filter`. Use `GET /task_runs/:id/output` when you only need that object. `resolved_options` (options after server-side defaults/bindings) is on `GET /task_runs/:id`.
+
+Local file/SQL runs still expose an `output_path` locator instead of inline JSON:
 
 1. Poll until `state_type` is `COMPLETED`
 2. Read `state.state_details.output_path` (or other fields your administrator documents)
-3. Retrieve the result using the mechanism your deployment provides (direct file access, signed URL, follow-up API, etc.)
+3. Retrieve the result using the mechanism your deployment provides
+
+Logs for remote task runs: `GET /task_runs/:id/log` returns `{ ok, task_run_id, log, truncated }` (and `log_url` when the job server can sign one).
 
 For the Echo on-demand smoke test (`@engine9/plugins/e9workers:EchoWorker` + `echo`), the result object echoes the task `options`:
 

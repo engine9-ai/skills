@@ -38,6 +38,11 @@ POST /task_runs/filter
 POST /flow_runs/
 GET  /flow_runs/:id
 GET  /task_runs/:id
+GET  /task_runs/:id/log
+GET  /task_runs/:id/output
+POST /task_runs/:id/retry
+POST /task_runs/:id/pause
+PATCH /task_runs/:id
 ...
 ```
 

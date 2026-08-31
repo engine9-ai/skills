@@ -9,8 +9,9 @@ How to interpret failed Task API responses. Response bodies use a `detail` field
 | **401** | Unauthorized | Send valid `e9key_` API key + account header — [authentication.md](./authentication.md) |
 | **403** | Forbidden | Unknown/disabled account, or missing `tasks:read` / `tasks:schedule` scope |
 | **404** | Not found | Wrong flow slug, flow run id, or task run id |
+| **409** | Conflict | Task run already RUNNING or terminal (`PATCH /task_runs/:id`) |
 | **410** | Gone | Removed route — use the successor in `detail` (listing is `POST /task_runs/filter`) |
-| **422** | Validation error | Fix request body (missing required field) |
+| **422** | Validation error | Fix request body (missing required field, or retry of a RUNNING run without `force`) |
 | **500** | Server error | Unexpected failure — retry or contact administrator |
 | **503** | Service unavailable | API not fully configured for your environment — contact administrator |
 
@@ -122,8 +123,34 @@ To schedule a predefined flow instead, use [`POST /flow_runs/`](./endpoints.md#p
 |--------|----------|-------|
 | 404 | `Flow run not found` / `Task run not found` | Invalid id |
 | 422 | `state.type required` | Body missing `state.type` |
+| 422 | `Unsupported state.type` | Remote runs only accept `PAUSED`, `SCHEDULED`/`PENDING`, `CANCELLED` |
+
+Remote `set_state` maps to pause / resume / stop. Prefer the first-class endpoints when the UI has a specific button.
 
 Prefect task run state updates: [Set Task Run State](https://docs.prefect.io/v3/api-ref/rest-api/server/task-runs/set-task-run-state/).
+
+### `POST /task_runs/:id/retry`
+
+| Status | Cause |
+|--------|-------|
+| 404 | Unknown task run id |
+| 422 | Task run is `RUNNING` and `force` is not set |
+| 503 | Remote retry is not configured |
+
+### `PATCH /task_runs/:id`
+
+| Status | Cause |
+|--------|-------|
+| 409 | Task run already `RUNNING` or terminal |
+| 422 | Body missing `options` object |
+| 503 | Remote update is not configured |
+
+### `GET /task_runs/:id/log`
+
+| Status | Cause |
+|--------|-------|
+| 404 | Unknown task run, or no log available |
+| 501 | Local (non-remote) task runs do not expose this route |
 
 ### `POST /flow_runs/archive` / `POST /flow_runs/retry`
 
@@ -179,6 +206,7 @@ These are not HTTP errors — handle in application logic.
 |--------|--------|
 | 401 | No — refresh token first |
 | 404 | No — fix id/slug |
+| 409 | No — task already running or finished; do not PATCH options |
 | 410 | No — switch to `POST /task_runs/filter` |
 | 422 | No — fix request body |
 | 500 | Yes — with backoff |
