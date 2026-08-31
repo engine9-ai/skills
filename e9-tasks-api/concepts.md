@@ -47,7 +47,7 @@ See also: [POST /flow_runs/](./endpoints.md#post-flow_runs) ↔ [POST /tasks/sch
 
 An on-demand task needs only plugin identifiers and the method — **no `flow_id`**. The server wraps that one task in a flow run so you can still poll `flow_run_id` / `task_run_ids`.
 
-**Built-in Engine9 Workers** use `@engine9/plugins/e9workers:<Worker>`. Echo smoke test: `path: "@engine9/plugins/e9workers:EchoWorker"`, `method: "echo"`. No plugin-id lookup. See [echo-walkthrough.md](./echo-walkthrough.md#on-demand-task-names).
+**Built-in engine9 Workers** use `@engine9/plugins/e9workers:<Worker>`. Echo smoke test: `path: "@engine9/plugins/e9workers:EchoWorker"`, `method: "echo"`. No plugin-id lookup. See [echo-walkthrough.md](./echo-walkthrough.md#on-demand-task-names).
 
 A predefined flow needs **`flow_id`** and does **not** take `path` or `method`. Worker path and method come from the flow definition.
 

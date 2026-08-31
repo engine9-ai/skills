@@ -1,6 +1,6 @@
 # Echo walkthrough
 
-Complete example: schedule **Echo** as an **on-demand task** (`path` + `method`), poll with `task_runs/filter`, and read output. Echo lives on the **built-in Engine9 Workers plugin** that every bootstrapped account already has — you do **not** need an `echo-flow` flow, and you do **not** install a separate Echo plugin.
+Complete example: schedule **Echo** as an **on-demand task** (`path` + `method`), poll with `task_runs/filter`, and read output. Echo lives on the **built-in engine9 Workers plugin** that every bootstrapped account already has — you do **not** need an `echo-flow` flow, and you do **not** install a separate Echo plugin.
 
 MCP uses the same on-demand names: `path: "@engine9/plugins/e9workers:EchoWorker"` and `method: "echo"`. See [e9-mcp](../e9-mcp/SKILL.md#on-demand-tasks).
 
@@ -44,7 +44,7 @@ You need (from your administrator — or, if you are an agent, from the user):
 
 - Running Task API at a known base URL (production default: `https://data.engine9.ai`)
 - Valid `e9key_…` API key with `tasks:read` and `tasks:schedule`
-- Account id (examples use `test`) whose Engine9 Workers plugin is installed (normal bootstrap)
+- Account id (examples use `test`) whose engine9 Workers plugin is installed (normal bootstrap)
 
 Set variables once and reuse them in every call (see [authentication.md](./authentication.md)):
 
@@ -308,7 +308,7 @@ Poll with `action: "listTasks"` and the `flow_run_id` from the schedule response
 |---------|----------------|
 | `422` on `POST /tasks/schedule` | Body missing `path` and `method`, or `flow_id` was sent (use `POST /flow_runs/` for a published flow) |
 | `Unknown engine9 worker` | Path submodule is not an Engine9Workers class (use `EchoWorker`, not a separate plugin) |
-| `could not find plugin for path @engine9/plugins/e9workers` | Account was not bootstrapped — Engine9 Workers plugin missing |
+| `could not find plugin for path @engine9/plugins/e9workers` | Account was not bootstrapped — engine9 Workers plugin missing |
 | `401` | Token or account header — [authentication.md](./authentication.md) |
 | `503` | API not configured — ask administrator |
 | Stuck `PENDING` | Background execution not running — ask administrator |

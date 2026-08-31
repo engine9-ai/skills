@@ -21,7 +21,7 @@ Two endpoints, both call `TaskWorker.scheduleTasks`. Listing belongs on `POST /t
 
 Schedule an **on-demand task** — one plugin worker method. Requires `path` and `method`. Do not send `flow_id`.
 
-Built-in Engine9 Workers (every account; no plugin lookup): `@engine9/plugins/e9workers:<Worker>`. Echo smoke test: `@engine9/plugins/e9workers:EchoWorker` + `echo`.
+Built-in engine9 Workers (every account; no plugin lookup): `@engine9/plugins/e9workers:<Worker>`. Echo smoke test: `@engine9/plugins/e9workers:EchoWorker` + `echo`.
 
 To run a published workflow instead, use [`POST /flow_runs/`](#post-flow_runs) with `flow_id`.
 

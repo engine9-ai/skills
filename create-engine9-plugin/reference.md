@@ -46,6 +46,8 @@ The middle segment must be literally `transforms` or resolution fails.
 
 Example from `person_email/segments.js`: `@engine9/interfaces/person_email:search:emails`.
 
+Handlers export optional `title`/`description`, a JSON Schema `form` (`{ title, type: 'object', properties, required? }`), and `optionsToEQL`. Account-scoped discovery: MCP `searchOptions` / `PersonWorker.searchOptions` / `GET /data/search/options`.
+
 ## Binding paths (transforms)
 
 Documented in `ServerBaseWorker.prototype.resolveBindings`:

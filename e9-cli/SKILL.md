@@ -252,7 +252,7 @@ Examples:
 
 ### Path forms (in priority order)
 
-1. **Reserved Engine9 Workers path** (no plugin lookup; every bootstrapped account):
+1. **Reserved engine9 Workers path** (no plugin lookup; every bootstrapped account):
    - `@engine9/plugins/e9workers:EchoWorker` + method `echo` (smoke test)
    - `@engine9/plugins/e9workers:SQLWorker` + method `query`
 2. **Canonical plugin path with colon submodule** (account plugins):

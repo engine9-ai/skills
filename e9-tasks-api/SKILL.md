@@ -28,7 +28,7 @@ Pick the endpoint that matches the work. They both call `scheduleTasks` and retu
 
 An on-demand task does **not** need a `flow_id`. A predefined flow does **not** need `path` or `method` — those come from the flow definition. Do not send `flow_id` to `/tasks/schedule`.
 
-**On-demand names** (REST and MCP): built-in Engine9 Workers use `@engine9/plugins/e9workers:<Worker>` — no plugin-id lookup. Echo smoke test: `path: "@engine9/plugins/e9workers:EchoWorker"`, `method: "echo"`. See [echo-walkthrough.md](./echo-walkthrough.md#on-demand-task-names).
+**On-demand names** (REST and MCP): built-in engine9 Workers use `@engine9/plugins/e9workers:<Worker>` — no plugin-id lookup. Echo smoke test: `path: "@engine9/plugins/e9workers:EchoWorker"`, `method: "echo"`. See [echo-walkthrough.md](./echo-walkthrough.md#on-demand-task-names).
 
 ## Documentation
 

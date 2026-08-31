@@ -48,7 +48,7 @@ Two mutually exclusive modes. Both enqueue via `scheduleTasks` and return `flow_
 
 ### On-demand task — plugin path and method (recommended first call)
 
-No `flow_id`. Identify the worker with `path` + `method`. Built-in Engine9 Workers use **`@engine9/plugins/e9workers:<Worker>`** — no plugin-id lookup. Echo is the smoke test:
+No `flow_id`. Identify the worker with `path` + `method`. Built-in engine9 Workers use **`@engine9/plugins/e9workers:<Worker>`** — no plugin-id lookup. Echo is the smoke test:
 
 ```bash
 curl $CURL_TLS -sS -X POST \

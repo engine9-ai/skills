@@ -193,9 +193,19 @@ Reference: `person_remote` → `transforms.appendRemotePersonId` in `person_remo
 
 ### 7. Search — UI form → EQL
 
-Named export is a map of handlers. Each handler provides `form` (JSON-Schema-style) and `optionsToEQL(options)` returning `{ text, eql }` where `eql` includes `table`, `columns?`, `conditions`, `joins?`. Conditions may be structured (`type: 'EQUALS' | 'LIKE'` with `ref` / `value`) or `{ eql: 'raw sql fragment' }`.
+Named export is a map of handlers. Each handler provides:
 
-Reference: `person_email/search.js`, `person/index.js` (mixed raw `eql` strings).
+- optional **`title`** / **`description`** (catalog labels for `searchOptions`)
+- **`form`** — canonical JSON Schema: `{ title, type: 'object', properties, required? }`
+- **`optionsToEQL(options)`** returning `{ text, eql }` where `eql` includes `table`, `columns?`, `conditions`, `joins?`
+
+Conditions may be structured (`type: 'EQUALS' | 'LIKE'` with `ref` / `value`) or `{ eql: 'raw sql fragment' }`.
+
+Prefer the canonical form shape above. Older shapes (flat property map, or a single-key wrapper like `{ emails: { type: 'object', properties } }`) are still normalized by the server `searchOptions` helper.
+
+Reference: `person_email/search.js`, `person/index.js` (mixed raw `eql` strings), `channels/email/search.js`.
+
+Account-scoped discovery: MCP tool **`searchOptions`** / `PersonWorker.searchOptions` / `GET /data/search/options` lists `standard` filters plus every installed plugin handler (`path` + normalized `form`) so a UI can build a form and submit `{ and: [{ path, options }] }` to search.
 
 ### 8. Search — `optionsToEQLContext`
 

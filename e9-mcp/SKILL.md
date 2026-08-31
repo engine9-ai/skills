@@ -152,6 +152,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Find accounts by prefix, parent, type, tags, or installed plugin | `account` with `command: "search"` (one call — do not fan out) |
 | List plugins / methods on one account | `account` with `account_id` (or `command: "plugins"`) |
 | Search people by email, phone, name, or id | `search` |
+| List available person-search form options for an account | `searchOptions` |
 | Account people / timeline / identity / model health check | `auditPeople` |
 | Person timeline + stored models (current and legacy) | `timelinePerson` |
 | Compare current `model_*_stats` (and opt-in pivot) by source code | `timelinePerson` with `command: "compareSourceCodes"` |
@@ -214,10 +215,11 @@ Plugins command is also the **discovery step** before calling `task` when no nat
 
 ### `search`
 
-Person search by metadata filters. Prefer this over ad-hoc SQL or `task` when looking up people by email, phone, name, or id. Returns person summaries with related records; each related subsection (`emails`, `phones`, `addresses`, `person_remote`, `transactions`) includes a total count and up to 100 sample records.
+Person search by metadata filters and/or a plugin search tree. Prefer this over ad-hoc SQL or `task` when looking up people by email, phone, name, or id. Returns person summaries with related records; each related subsection (`emails`, `phones`, `addresses`, `person_remote`, `transactions`) includes a total count and up to 100 sample records.
 
 - Required: `account_id`
 - Filters (string or array each): `emails`, `person_ids`, `phones`, `given_names`, `last_names`
+- Optional: `search` — plugin search tree from `searchOptions`, e.g. `{ and: [{ path: "@engine9/interfaces/person_email:search:emails", options: { emailMatch: "a@" } }] }` (merged with metadata filters using AND)
 - Optional: `limit` (max 1000, default 10)
 - Returns: `{ ok: true, result }` where `result` is the `PersonWorker.search` payload
 
@@ -227,7 +229,40 @@ Example — email lookup:
 { "account_id": "test", "emails": ["foo@bar.com"], "limit": 10 }
 ```
 
+Example — plugin clause from `searchOptions`:
+
+```json
+{
+  "account_id": "test",
+  "search": {
+    "and": [
+      {
+        "path": "@engine9/interfaces/person_email:search:emails",
+        "options": { "subscriptionStatus": "Subscribed" }
+      }
+    ]
+  },
+  "limit": 10
+}
+```
+
 For `/e9 search …` token parsing (emails vs person_ids vs names), see [e9-cli — `/e9 search` parsing rules](../e9-cli/SKILL.md#e9-search-parsing-rules).
+
+### `searchOptions`
+
+Per-account catalog of person-search options for building a UI form. Call this before constructing advanced plugin searches; submit resulting `{ path, options }` clauses to `search` (or `POST /data/search`).
+
+- Required: `account_id`
+- Returns: `{ ok: true, account_id, standard, searches, errors }`
+  - `standard` — fixed filters (`emails`, `phones`, `given_names`, `last_names`, `person_ids`, `limit`) as JSON Schema
+  - `searches` — handlers from **installed** plugins: `path`, `title`, canonical `form`, `plugin.instances`
+  - `errors` — per-plugin compile failures (does not fail the whole call)
+
+Example:
+
+```json
+{ "account_id": "test" }
+```
 
 ### `auditPeople`
 
@@ -414,7 +449,7 @@ Store and replay account-scoped conversations.
 
 MCP `task` (default `action: "schedule"`) and REST `POST /tasks/schedule` use the same **on-demand** names: **`path` + `method`** (no `flow_id`).
 
-### Built-in Engine9 Workers
+### Built-in engine9 Workers
 
 Every bootstrapped account has `@engine9/plugins/e9workers`. Pass that path plus a worker submodule. **Do not** call MCP `account` to look up a plugin id. **Do not** install a separate Echo plugin.
 
