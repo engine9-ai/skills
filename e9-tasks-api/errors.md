@@ -9,9 +9,9 @@ How to interpret failed Task API responses. Response bodies use a `detail` field
 | **401** | Unauthorized | Send valid `e9key_` API key + account header — [authentication.md](./authentication.md) |
 | **403** | Forbidden | Unknown/disabled account, or missing `tasks:read` / `tasks:schedule` scope |
 | **404** | Not found | Wrong flow slug, flow run id, or task run id |
-| **409** | Conflict | Task run already RUNNING or terminal (`PATCH /task_runs/:id`) |
+| **409** | Conflict | Action not in `allowed_actions`, or `PATCH /task_runs/:id` on a RUNNING/terminal run |
 | **410** | Gone | Removed route — use the successor in `detail` (listing is `POST /task_runs/filter`) |
-| **422** | Validation error | Fix request body (missing required field, or retry of a RUNNING run without `force`) |
+| **422** | Validation error | Fix request body (missing required field, legacy Mongo status token, or retry of a RUNNING run without `force`) |
 | **500** | Server error | Unexpected failure — retry or contact administrator |
 | **503** | Service unavailable | API not fully configured for your environment — contact administrator |
 
@@ -134,8 +134,16 @@ Prefect task run state updates: [Set Task Run State](https://docs.prefect.io/v3/
 | Status | Cause |
 |--------|-------|
 | 404 | Unknown task run id |
+| 409 | Action `retry` is not allowed in the current state (see `allowed_actions`) |
 | 422 | Task run is `RUNNING` and `force` is not set |
 | 503 | Remote retry is not configured |
+
+### `POST /task_runs/:id/pause` / `resume` / `stop`
+
+| Status | Cause |
+|--------|-------|
+| 404 | Unknown task run id |
+| 409 | Action is not allowed in the current state (Prefect-styled message lists `allowed_actions`) |
 
 ### `PATCH /task_runs/:id`
 
@@ -166,6 +174,7 @@ These mutate existing flow runs. The `result` field of the 200 body reflects whi
 | Status | Cause |
 |--------|-------|
 | 200 with `task_runs: []` | No matches (unknown ids do **not** 404) |
+| 422 | Status filter used a legacy Mongo token (`complete`, `error`, `in_progress`, …) instead of a Prefect state type |
 | 503 | API not fully configured |
 
 ### `GET /flows` / `POST /flows/filter`
@@ -206,7 +215,7 @@ These are not HTTP errors — handle in application logic.
 |--------|--------|
 | 401 | No — refresh token first |
 | 404 | No — fix id/slug |
-| 409 | No — task already running or finished; do not PATCH options |
+| 409 | No — action not allowed in this state, or task already running/finished; do not PATCH options |
 | 410 | No — switch to `POST /task_runs/filter` |
 | 422 | No — fix request body |
 | 500 | Yes — with backoff |

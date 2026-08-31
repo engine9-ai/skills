@@ -65,7 +65,9 @@ A **flow run** is one execution of a predefined flow **or** the wrapper around a
 | `parent_ids` | Full `parent_ids` array from the account document |
 | `flow_slug` | Which flow template (e.g. `nightly-sync`) |
 | `flow_id` | UUID associated with the slug |
-| `state_type` | Overall run state (`SCHEDULED`, `RUNNING`, `COMPLETED`, `FAILED`, …) |
+| `state_type` / `state.type` | `PENDING`, `RUNNING`, `PAUSED`, `COMPLETED`, `FAILED`, … |
+| `state_name` / `state.name` | Display name that refines the type (`Scheduled`, `Running`, `Cancelling`) |
+| `allowed_actions` | Commands the UI may offer (`pause`, `resume`, `retry`, `stop`, `update_options`) |
 | `last_completed` | When this flow run last finished |
 | `dataflow_last_completed` | When any run of the same dataflow last finished |
 | `completed_since` | See [Completed since](#completed-since) |
@@ -127,6 +129,9 @@ A **task run** is one execution of one task within a flow run.
 | `bot.path`, `submodule`, `method` | Worker identity (card subtitle, e.g. `Engine9Workers.ModelWorker`) |
 | `bot_location_id` | Job server label |
 | `state_type` | `PENDING`, `RUNNING`, `PAUSED`, `COMPLETED`, `FAILED`, … |
+| `state_name` / `state.name` | Display name (`Pending`, `Scheduled`, `Running`, `Cancelling`, `Paused`, …) |
+| `allowed_actions` | `pause`, `resume`, `retry`, `stop`, `update_options` — render exactly these commands |
+| `allowed_state_types` | Valid `set_state` types (`PAUSED`, `SCHEDULED`, `PENDING`, `CANCELLED`, `CANCELLING`) |
 | `errors` | Alert banners: `{ level, message, ts }[]` |
 | `options` / `task_inputs.options` | Options as scheduled (before server-side merge) |
 | `resolved_options` | Options the worker actually ran with (on `GET /task_runs/:id`) |
@@ -159,28 +164,28 @@ The `output_path` value is an opaque locator for the completed result. How you r
 
 ## Run states
 
-Both flow runs and task runs use string `state_type` values.
+Both flow runs and task runs use Prefect `state_type` / `state.type` values. Filter inputs accept **only** these tokens; legacy Mongo statuses (`complete`, `error`, `in_progress`, `kill_sent`, …) are rejected with **422**. Do not read deprecated response `status` — use `state.type`, `state.name`, and `allowed_actions`.
 
 | `state_type` | Meaning for task runs |
 |--------------|----------------------|
 | `PENDING` | Scheduled, not yet executing |
-| `SCHEDULED` | Queued (same as pending for pause/resume) |
+| `SCHEDULED` | Queued (accepted as filter/`set_state`; responses currently collapse queued work into `RUNNING` + name `Scheduled`) |
 | `PAUSED` | Held; will not start until resumed or retried |
-| `RUNNING` | Step is executing |
+| `RUNNING` | Step is executing (also reported for queued and cancelling work — use `state.name` to distinguish) |
 | `COMPLETED` | Finished successfully |
 | `FAILED` | Finished with error |
 | `CANCELLED` | Stopped before completion |
 | `CRASHED` | Unexpected failure |
 
-**Typical integration pattern:** schedule (on-demand task or predefined flow) → poll `GET /task_runs/:id` until `state_type` is terminal (`COMPLETED` or `FAILED`).
+**Typical integration pattern:** schedule (on-demand task or predefined flow) → poll `GET /task_runs/:id` until `state_type` is terminal (`COMPLETED`, `FAILED`, or `CANCELLED`). Show `state.name`; color/group by `state.type`; render exactly the commands in `allowed_actions`.
 
 `POST /task_runs/:id/set_state` on **remote** runs accepts:
 
 | `state.type` | Effect |
 |--------------|--------|
-| `PAUSED` | Pause a pending/scheduled run (`POST /task_runs/:id/pause`) |
+| `PAUSED` | Pause (`POST /task_runs/:id/pause`) |
 | `SCHEDULED` or `PENDING` | Resume (`POST /task_runs/:id/resume`) |
-| `CANCELLED` | Stop (`POST /task_runs/:id/stop`) |
+| `CANCELLED` / `CANCELLING` | Stop (`POST /task_runs/:id/stop`) |
 
 ## Scheduling vs execution
 

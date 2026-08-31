@@ -539,7 +539,7 @@ curl $CURL_TLS -sS -X POST \
 |-------|-------------|
 | `flow_run_id` / `task_runs.flow_run_id.eq_` / `flow_runs.id.eq_` | Scope to one flow run (also sets `flow_run` on the response) |
 | `task_run_ids` / `task_run_id` / `task_runs.id.any_` | Restrict to those task run ids |
-| `status` / `task_runs.state.type.any_` | Prefect state types (`FAILED`, `RUNNING`, `COMPLETED`, …) |
+| `status` / `task_runs.state.type.any_` | Prefect state types only (`FAILED`, `RUNNING`, `COMPLETED`, `PAUSED`, …). Legacy Mongo tokens (`complete`, `error`, `in_progress`) return **422** |
 | `account_ids` / `parent_account_id` | Same multi-account filters as flow-run listing |
 | `limit` | Default **500** when scoped to a flow/task run id, otherwise **20** (max 500) |
 | `offset` | Default 0 |

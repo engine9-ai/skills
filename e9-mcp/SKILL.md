@@ -165,7 +165,8 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Chat / conversation history | `chat` |
 | Run an on-demand plugin method | `task` with `path` + `method`. Built-in: `@engine9/plugins/e9workers:EchoWorker` + `echo` (no `account` lookup). Other plugins: discover via `account` first |
 | Run a published flow (predefined) | `task` with `flow_id` (slug from REST `GET /flows`) — no `path`/`method` |
-| Archive or retry flow runs / job lists | `task` with `action: "archive"` or `"retry"` |
+| Archive or retry flow runs / job lists | `task` with `action: "archive"` or bulk `"retry"` (`flow_run_ids`) |
+| Pause / resume / retry a task run, edit options, fetch log/output | `task` with `action: "pause"` / `"resume"` / `"retry"` (`task_run_id`) / `"updateOptions"` / `"log"` / `"output"` |
 
 `task` is the **catch-all** for behaviors that do not have a native MCP call. Do not reach for `task` when a native tool already covers the request with equal or better fidelity.
 
@@ -531,24 +532,30 @@ When the user asks for **all accounts**, **parent** children, or other multi-acc
 
 - Do **not** call `account` plugins (or any account-DB worker) once per child to “check access”.
 - Do **not** use the first id in a parent/all list as a required DB-connected `account_id` before the remote list.
-- Drive the request with remote multi-account filters (`parent_account_id`, `account_ids`, etc.) and status filters. Prefer Prefect `state_type` values (`FAILED`, `RUNNING`, `COMPLETED`). Legacy Mongo statuses are accepted and mapped (see below). Account database connectivity is not a prerequisite for Frakture flow-run list reads.
+- Drive the request with remote multi-account filters (`parent_account_id`, `account_ids`, etc.) and status filters. Use Prefect `state_type` values only (`FAILED`, `RUNNING`, `COMPLETED`, `PAUSED`, …). Legacy Mongo tokens (`complete`, `error`, `in_progress`) are **rejected with 422**. Account database connectivity is not a prerequisite for Frakture flow-run list reads.
 - The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `search`, `auditPeople`, `timelinePerson`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
 
 ### `task` action `list` — remote flow runs
 
 MCP `task` with `action: "list"` calls `TaskWorker.listRemoteFlowRuns` (`POST /flow_runs/filter` on the Frakture Task API). Returns **flow runs only** — nested `task_runs` are not included. Each flow run includes `account_id`, `parent_account_id` (first id in that account's `parent_ids`, or `null`), and `parent_ids`.
 
-MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listRemoteTaskRuns` (`POST /task_runs/filter` on the Frakture Task API) for a specific `flow_run_id` / `task_run_ids`. The result is `{ task_runs: [ … ], flow_run? }` — the same shape as REST `POST /task_runs/filter`. Pass `remote: false` to list local runs. Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`.
+MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listRemoteTaskRuns` (`POST /task_runs/filter` on the Frakture Task API) for a specific `flow_run_id` / `task_run_ids`. The result is `{ task_runs: [ … ], flow_run? }` — the same shape as REST `POST /task_runs/filter`. Pass `remote: false` to list local runs. Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`. Display `state.name` (aka `state_name`); color/group by `state.type` (`state_type`). Render commands from `allowed_actions` (`pause`, `resume`, `retry`, `stop`, `update_options`). Do **not** read deprecated `status` (Mongo vocabulary).
 
-MCP `task` with `action: "archive"` or `"retry"` bulk-archives or retries remote flow runs / job lists (`TaskWorker.archiveRemoteFlowRuns` / `retryRemoteFlowRuns` → Frakture `POST /flow_runs/archive` and `/flow_runs/retry`). Same Firebase / MCP session and account header as `action: "list"` — **`user_id` is not required** (listing never required it; archive/retry must not either). Do **not** send `e9key_` Task API credentials from Conductor or Cursor MCP. Do **not** ask the user for a Frakture `user_id`.
+MCP `task` per-task-run controls (Firebase / MCP session — **do not** send `e9key_` keys):
 
-| Mongo status | Prefect `state_type` |
-|--------------|----------------------|
-| `complete` | `COMPLETED` |
-| `error` | `FAILED` |
-| `in_progress` (or missing) | `RUNNING` |
+| Action | Task API | Notes |
+|--------|----------|--------|
+| `start` | `POST /task_runs/:id/retry` | Run now. Accepts `force`, `start_after: "previous"`, `start_after_task_run_id` |
+| `retry` + `task_run_id` | `POST /task_runs/:id/retry` | Same as start; required for "Run after previous job" |
+| `pause` / `resume` | `POST /task_runs/:id/pause` / `/resume` | True pause (not job kill). Offer only when `allowed_actions` contains the command |
+| `stop` | `POST /task_runs/:id/stop` | Kill. `set_state` `CANCELLED` equivalent |
+| `updateOptions` | `PATCH /task_runs/:id` `{ options }` | Pending/paused only; 409 when RUNNING/terminal |
+| `log` / `output` | `GET /task_runs/:id/log` / `/output` | Inline log when the job server cannot sign `log_url` |
+| `archive` / bulk `retry` | `POST /flow_runs/archive` / `/retry` | `flow_run_ids`. **`user_id` is not required** |
 
-Prefer Prefect values in `status` (e.g. `["FAILED"]`). Mongo values are mapped before the request is sent.
+Same account-scope auth as `action: "list"` (account header + bearer). Do **not** ask the user for a Frakture `user_id`.
+
+Status filters take Prefect types only, e.g. `{ "status": ["FAILED"] }`. `422` = invalid body, legacy status token, or retry of a RUNNING run without `force`. `409` = action not in `allowed_actions` (Prefect-styled message).
 
 Example — errored flow runs under a parent:
 

@@ -93,9 +93,9 @@ Details: [endpoints.md](./endpoints.md).
 | 401 | Missing/invalid `e9key_` key or account header — [authentication.md](./authentication.md) |
 | 403 | Wrong account or missing scope |
 | 404 | Wrong flow slug or run id |
-| 409 | `PATCH /task_runs/:id` on a RUNNING or terminal run |
+| 409 | `PATCH /task_runs/:id` on a RUNNING or terminal run; action not in `allowed_actions` |
 | 410 | Removed listing path — use `POST /task_runs/filter` |
-| 422 | Missing `flow_id` (predefined flow) or `path`+`method` (on-demand task); retry of a RUNNING task without `force` |
+| 422 | Missing `flow_id` (predefined flow) or `path`+`method` (on-demand task); retry of a RUNNING task without `force`; legacy Mongo status token in a filter |
 | 503 | API or `api_key` table not configured — administrator: `e9 sqlworker createApiKey` |
 
 Full list: [errors.md](./errors.md).

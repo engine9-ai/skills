@@ -189,7 +189,7 @@ Account/domain create and secrets: use **e9-account** (`cloud-services/e9-accoun
 Use this for requests like “list current errored tasks”, cross-account job status, or anything backed by MCP `task` `action: "list"` → `TaskWorker.listRemoteFlowRuns` / Frakture `POST /flow_runs/filter` when the user wants **parent** or **all** scope. To list tasks inside one flow run, use MCP `action: "listTasks"` → `TaskWorker.listRemoteTaskRuns` / Frakture `POST /task_runs/filter` (or REST `POST /task_runs/filter`).
 
 - Prefer remote multi-account filters: `parent_account_id` for parent scope, or the remote API’s multi-account / auth-scoped listing for all — **not** a loop of per-account MCP calls.
-- Prefer Prefect `state_type` filters (`FAILED`, `RUNNING`, `COMPLETED`, …). Legacy Mongo statuses are mapped: `complete`→`COMPLETED`, `error`→`FAILED`, `in_progress`/missing→`RUNNING`.
+- Use Prefect `state_type` filters only (`FAILED`, `RUNNING`, `COMPLETED`, `PAUSED`, …). Legacy Mongo tokens (`complete`, `error`, `in_progress`) are rejected with 422.
 - Do **not** call MCP `account` (plugins) for each child, and do **not** pick `engine9.account_id` (the first resolved id) and probe that account’s database as a gate.
 - Do **not** treat account-DB failures (`Cannot connect to the … database`) as blocking for these ops — remote flow-run listing does not need account DBs.
 - Do **not** require `engine9.plugins` for remote flow-run listing; plugin cache is for single-account plugin method scheduling.
