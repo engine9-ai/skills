@@ -20,3 +20,4 @@ Public skills for working with engine9 deployments.
 | Models | [e9-model/SKILL.md](./e9-model/SKILL.md) | Timeline long-term value in `{prefix}_*` tables (new identity). Not `source_code_summary.origin_*` (legacy) |
 | Person identity (`person_id`) | [e9-person-id/SKILL.md](./e9-person-id/SKILL.md) | How a quality `person_id` is chosen from email, phone, `remote_person_id`; `person_id_*` vs `person_identifier`; old `person_metadata` / `person_id_int` model |
 | `person_remote` | [e9-person-remote/SKILL.md](./e9-person-remote/SKILL.md) | Plugin-scoped remotes table; written by `loadPeople` / `idFiles` (not timeline); export search joins `input.plugin_id` |
+| Exports | [e9-export/SKILL.md](./e9-export/SKILL.md) | Create/run/debug export files via `e9 exportworker` (bundle dumps, person-search, inventory) |
