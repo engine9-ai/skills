@@ -63,7 +63,7 @@ Written **after** `person_id` is assigned. Unique keys allow multiple emails/pho
 | `person` | `id` | Canonical row: `given_name`, `family_name`, `created_at` |
 | `person_email` | `(email, person_id)` | Emails, subscription/confirmation, `email_hash_v1` |
 | `person_phone` | `(phone, person_id)` | Phones, SMS/call status, `phone_hash_v1` |
-| `person_remote` | `(source_input_id, remote_person_id, person_id)` | Per-plugin CRM / vendor person id |
+| `person_remote` | `(source_input_id, remote_person_id, person_id)` | Per-plugin CRM / vendor person id — when written / how exports filter: [e9-person-remote](../e9-person-remote/SKILL.md) |
 | `person_address` | (not an identity key) | Postal address; upserted in the same pipeline, never used to match |
 
 `person_hash_email` / `person_hash_phone` (optional `@engine9/interfaces/person_hash`) store hashes without plaintext. They are **not** in the default inbound chain.

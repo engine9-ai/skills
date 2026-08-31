@@ -34,7 +34,7 @@ Takes a raw input file (CSV, JSONL, parquet, …) and produces `.idv1.parquet`:
 
 ### `idFiles` and `idAllFiles`
 
-- **`idFiles`**: one or many files; resolves `inputId` / `pluginId`; calls `id`; upserts `input` (`min_timeline_ts` / `max_timeline_ts`).
+- **`idFiles`**: one or many files; resolves `inputId` / `pluginId`; calls `id`; upserts `input` (`min_timeline_ts` / `max_timeline_ts`). Each `id` batch runs `loadPeople`, which upserts `person` / `person_remote` / email / phone when rows carry those fields — see [e9-person-remote](../e9-person-remote/SKILL.md). That happens **before** any timeline table load.
 - **`idAllFiles`**: `idFiles` across accounts (serialized to avoid DB deadlocks). When `loadTimeline` is true, runs `loadTimelineTables` on the ID files.
 
 ## Loading ID files into tables
