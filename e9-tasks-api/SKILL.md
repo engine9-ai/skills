@@ -62,8 +62,8 @@ Follow [echo-walkthrough.md](./echo-walkthrough.md) end to end: **ask the user f
    - **On-demand task:** `POST /tasks/schedule` with `{ "path": "@engine9/plugins/e9workers:EchoWorker", "method": "echo", "options"? }`. Built-in workers: `@engine9/plugins/e9workers:<Worker>` (no plugin lookup). Account plugins: path from discovery, then this endpoint. See also `POST /flow_runs/`.
    - **Predefined flow:** `GET /flows` then `POST /flow_runs/` with `{ "flow_id": "<slug>" }` — `flow_id` is required. See also `POST /tasks/schedule`.
    → save `flow_run_id` / `task_run_ids`
-3. `POST /task_runs/filter` — `{ "flow_run_id": "…" }` until complete
-4. Remote output: `GET /task_runs/:id` (`output`, `resolved_options`) or `GET /task_runs/:id/output`. Logs: `GET /task_runs/:id/log`. Per-task **Run now**: `POST /task_runs/:id/retry`.
+3. `POST /task_runs/filter` — `{ "flow_run_id": "…" }` until complete (each `task_run` includes **`log_link`**)
+4. Remote output: `GET /task_runs/:id` (`output`, `resolved_options`) or `GET /task_runs/:id/output`. Logs: `GET /task_runs/:id/log` (`log`, `truncated`, optional `log_url`). Per-task **Run now**: `POST /task_runs/:id/retry`.
 
 Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
 

@@ -539,7 +539,7 @@ When the user asks for **all accounts**, **parent** children, or other multi-acc
 
 MCP `task` with `action: "list"` calls `TaskWorker.listRemoteFlowRuns` (`POST /flow_runs/filter` on the Frakture Task API). Returns **flow runs only** — nested `task_runs` are not included. Each flow run includes `account_id`, `parent_account_id` (first id in that account's `parent_ids`, or `null`), and `parent_ids`.
 
-MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listRemoteTaskRuns` (`POST /task_runs/filter` on the Frakture Task API) for a specific `flow_run_id` / `task_run_ids`. The result is `{ task_runs: [ … ], flow_run? }` — the same shape as REST `POST /task_runs/filter`. Pass `remote: false` to list local runs. Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`. Display `state.name` (aka `state_name`); color/group by `state.type` (`state_type`). Render commands from `allowed_actions` (`pause`, `resume`, `retry`, `stop`, `update_options`). Do **not** read deprecated `status` (Mongo vocabulary).
+MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listRemoteTaskRuns` (`POST /task_runs/filter` on the Frakture Task API) for a specific `flow_run_id` / `task_run_ids`. The result is `{ task_runs: [ … ], flow_run? }` — the same shape as REST `POST /task_runs/filter`. Pass `remote: false` to list local runs. Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`. Each `task_run` includes **`log_link`** (`/task_runs/{id}/log` on the Task API). Display `state.name` (aka `state_name`); color/group by `state.type` (`state_type`). Render commands from `allowed_actions` (`pause`, `resume`, `retry`, `stop`, `update_options`). Do **not** read deprecated `status` (Mongo vocabulary).
 
 MCP `task` per-task-run controls (Firebase / MCP session — **do not** send `e9key_` keys):
 
@@ -550,7 +550,7 @@ MCP `task` per-task-run controls (Firebase / MCP session — **do not** send `e9
 | `pause` / `resume` | `POST /task_runs/:id/pause` / `/resume` | True pause (not job kill). Offer only when `allowed_actions` contains the command |
 | `stop` | `POST /task_runs/:id/stop` | Kill. `set_state` `CANCELLED` equivalent |
 | `updateOptions` | `PATCH /task_runs/:id` `{ options }` | Pending/paused only; 409 when RUNNING/terminal |
-| `log` / `output` | `GET /task_runs/:id/log` / `/output` | Inline log when the job server cannot sign `log_url` |
+| `log` / `output` | `GET /task_runs/:id/log` / `/output` | `{ log_link, log, truncated }` and optional signed **`log_url`** from Frakture; prefer **`log_link`** for integrations |
 | `archive` / bulk `retry` | `POST /flow_runs/archive` / `/retry` | `flow_run_ids`. **`user_id` is not required** |
 
 Same account-scope auth as `action: "list"` (account header + bearer). Do **not** ask the user for a Frakture `user_id`.
