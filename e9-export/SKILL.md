@@ -3,11 +3,11 @@ name: e9-export
 description: >-
   Create, run, and debug engine9 export files with the e9 CLI
   (`e9 exportworker exportAll`, inventory, export, exportTables). Covers
-  bundle dumps (warehouse tables + idv1 input files), person-search plugin
-  exports (`plugin:exports:<name>`), definition_path, inventory.json5, and
-  empty/missing export debug. Use when working with ExportWorker, exportAll,
-  inventory, definition_path, hockeystick, idv1 copies, export parquet, or a
-  missing/wrong export file.
+  canonical export bundles with top-level `universe` entries, person-search
+  plugin exports (`plugin:exports:<name>`), definition_path, inventory.json5,
+  legacy bundle compatibility, and empty/missing export debug. Use when
+  working with ExportWorker, exportAll, inventory, definition_path,
+  hockeystick, idv1 copies, export parquet, or a missing/wrong export file.
 ---
 
 # engine9 exports
@@ -22,12 +22,18 @@ e9 exportworker <method> -a <account_id> --<option>=<value>
 
 Related: person-search remotes [e9-person-remote](../e9-person-remote/SKILL.md); identity [e9-person-id](../e9-person-id/SKILL.md); timeline files [e9-timeline](../e9-timeline/SKILL.md).
 
+Naming: export roots, worker options, and universe entries are canonical
+`snake_case`; JavaScript implementation variables remain camelCase. Nested
+search and transform options remain owned by their individual handlers.
+Known camelCase universe aliases are accepted only for compatibility, normalize
+to snake_case, and conflicting dual spellings are rejected.
+
 ## Methods
 
 | Method | What it does |
 |--------|----------------|
 | `inventory` | Pre-run: `COUNT(*)` per table + list `.idv1.parquet` files with record counts. Writes nothing. |
-| `exportAll` | Complete definition: bundle first, then named `:exports:` person searches. Writes `inventory.json5` when a bundle exists. |
+| `exportAll` | Complete definition: bundle artifacts plus named `:exports:` searches. Writes `inventory.json5` when a bundle exists. |
 | `export` | One person-search definition (`search` + `transforms`). |
 | `exportTables` | Warehouse tables only (standard list, or `--tables` / `--extra_tables` / `--exclude_tables`). |
 | `exportInputFiles` | Copy already-listed idv1 files into an `--export_dir` (used by `exportAll`). |
@@ -36,39 +42,39 @@ Related: person-search remotes [e9-person-remote](../e9-person-remote/SKILL.md);
 
 | Shape | Meaning |
 |-------|---------|
-| `engine9-accounts/.../export` | Bundle plugin (`tables` and/or `input_directories` on the module). No `:exports:` required. |
+| `engine9-accounts/.../export` | Bundle plugin (canonically a top-level `universe`). No `:exports:` required. |
 | `engine9-accounts/.../file.plugin.js:exports:<name>` | One named person-search export. |
 | Path to a `.json5` / `.json` file | Standalone export definition (`search` and/or bundle keys). |
 
-`exportAll` accepts a plugin path (bundle directory or `*.plugin.js`) or a standalone JSON/JSON5 bundle. Only a plugin can also contribute named person exports. `export` requires one person-search definition (`search`). `inventory` accepts a bundle path or `--tables` / `--input_directories` on the CLI.
+`exportAll` accepts a plugin path (bundle directory or `*.plugin.js`) or a standalone JSON/JSON5 bundle. Only a plugin can also contribute named person exports. `export` requires one person-search definition (`search`). `inventory` accepts a bundle path; direct CLI table/input options remain available for compatibility.
 
 ## Bundle dump (tables + idv1 files)
 
-A bundle module exports table and input-file artifacts. String table names preserve the legacy output layout; object entries can own transforms and relative paths:
+A bundle module canonically exports one top-level `universe` array. Each entry describes one source artifact set:
 
 ```
-tables: [
-  'person',
+universe: [
   {
-    name: 'transaction',
+    type: 'table',
+    table: 'person',
     relative_path: 'warehouse/{{table}}.parquet',
     transforms: [{ path: ':transforms:removePII' }]
-  }
-]
-input_directories: [
+  },
   {
+    type: 'inputs',
     input_type: 'message',
     channel: 'email',
     files: '\\.idv1\\.parquet$',
     relative_path: 'timeline/{{input_id}}/{{filename}}',
     transforms: [{ path: ':transforms:removePII' }]
   },
-  { entry_types: ['EMAIL_OPEN', 'EMAIL_CLICK'] }
+  { type: 'inputs', entry_types: ['EMAIL_OPEN', 'EMAIL_CLICK'] }
 ]
 ```
 
-- **Tables** become `{datetime_prefix}.{table}.export.parquet` unless `relative_path` is set.
-- **Input directories** copy only `.idv1.parquet` (never raw CSV/JSON). Specs filter `input` by `input_type`, `channel` (`global_message` / `message`), `plugin_id` / `plugin_path`, and/or `metadata.json` `entry_types`.
+- **Table entries** use `type: 'table'` and `table: '<warehouse_table>'`. Put one table in each universe entry. `relative_path` and file transforms belong to that entry.
+- **Input entries** use `type: 'inputs'`. Their selectors are `input_type`, `channel`, `plugin_id` / `plugin_path`, and/or `entry_types`; `files` optionally narrows the selected idv1 basenames.
+- Inputs export `.idv1.parquet` files, not raw CSV/JSON.
 - `files` is an optional regular expression applied to idv1 basenames.
 - `entry_types` uses exact names; `EMAIL_*` is not a wildcard.
 - `relative_path` is always below `export_dir`. Absolute paths, `..`, backslashes, missing template values, and duplicate targets are rejected before writing.
@@ -76,9 +82,19 @@ input_directories: [
 
 Relative-path variables are `table`, `input_id`, `input_type`, `filename`, `export_name`, `export_id`, `date`, and `datetime_prefix`, where applicable.
 
+### Legacy bundle compatibility
+
+Existing definitions may still use top-level `tables` and `input_directories`. Treat those as compatibility syntax, not the format to copy into new definitions:
+
+- `tables: ['person']` or `{ name: 'person', ... }` corresponds to a `universe` entry `{ type: 'table', table: 'person', ... }`.
+- An `input_directories` selector corresponds to `{ type: 'inputs', ...selector }`.
+- Existing `extra_tables` and `exclude_tables` belong to the legacy table-list form.
+
+When updating a bundle, prefer expressing the intended artifacts directly as top-level universe entries.
+
 ### Artifact transforms
 
-Table and input-file `transforms` are optional file-to-file plugin transforms. No transforms means the fast native table export or byte-for-byte file copy. A file transform must declare `scope: 'file'` so a person/batch transform cannot be used accidentally. Each transform receives:
+`transforms` on an individual `universe` entry are file-to-file transforms for that table or selected input file. The referenced transform definition must declare `scope: 'file'`; this distinguishes artifact transforms from searched-export row transforms. Each file transform receives:
 
 ```
 { filename, target, artifact, options, account_id, ...resolvedBindings }
@@ -96,7 +112,7 @@ transforms: {
   }
 }
 
-// On the table or input-file artifact:
+// On a type:'table' or type:'inputs' universe entry:
 transforms: [{ path: ':transforms:removePII', options: { fields: ['email', 'phone'] } }]
 ```
 
@@ -111,13 +127,24 @@ Optional: `--limit=N`, `--export_id=<uuid>`, `--start=-30d`, `--end=`.
 
 ## Person-search export
 
-A named export is `search` (EQL) + `transforms` (column mapping). Invoke the named path:
+A searched export is a definition with top-level `search` (EQL) and top-level `transforms` for row/column mapping. These are not `scope: 'file'` universe transforms:
+
+```
+exports: {
+  transactions: {
+    search: { /* EQL */ },
+    transforms: [{ /* row mapping */ }]
+  }
+}
+```
+
+Invoke the named path:
 
 ```
 e9 exportworker export -a <account_id> --definition_path=engine9-accounts/frakture/advantage_ai/index.plugin.js:exports:transactions --start=-30d
 ```
 
-`exportAll` runs the bundle first (inventory, tables, idv1 files), then every named `:exports:` entry that has `search`.
+`exportAll` runs the bundle and named `:exports:` entries that have `search`.
 
 `--person_ids=1,2,3` scopes the search. `--dedupe=false` ignores prior export files. `--add_to_input_store` writes into an input store instead of only `exports/`.
 
@@ -140,7 +167,7 @@ Default directory: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 |------|----------|
 | `*.export.parquet` | Legacy/default table dumps |
 | `inputs/{input_id}/*.idv1.parquet` | Legacy/default copied idv1 files |
-| Definition-owned `relative_path` | Custom table/input-file destination below `export_dir` |
+| Definition-owned `relative_path` | Custom universe artifact destination below `export_dir` |
 | `inventory.json5` | Bundle `exportAll`: planned `relative_path`, transforms, tables, files, directories, totals, and skipped items |
 | `{datetime_prefix}.{export_name}.export.csv` + metadata | Default named person-search output during `exportAll` |
 
@@ -148,7 +175,7 @@ Default directory: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 
 ## Authoring a bundle
 
-Put `index.js` at `engine9-accounts/<org>/<account>/export/` (or use a `*.plugin.js`) and export `tables` and/or `input_directories`. Optional `extra_tables` / `exclude_tables`. A plugin may also contain named person exports under `exports: { name: { search, transforms } }` and artifact transform implementations under `transforms`.
+Put `index.js` at `engine9-accounts/<org>/<account>/export/` (or use a `*.plugin.js`) and export a top-level `universe`. Use one `{ type: 'table', table }` entry per warehouse table and `{ type: 'inputs', ...selectors }` entries for input-store files. A plugin may also contain searched exports under `exports: { name: { search, transforms } }` and file-transform implementations under the plugin's top-level `transforms` map.
 
 `channel: 'email'` needs `global_message` or `message` with that channel. An `entry_types` selector finds stores whose `metadata.json` contains at least one exact listed type.
 
@@ -161,8 +188,8 @@ Walk **A → G**. Stop at the first gap. Use `inventory` before `exportAll`.
 ```
 Export pipeline:
 - [ ] A: definition_path resolves (bundle and/or :exports:name)
-- [ ] B: inventory tables exist (or skipped does_not_exist)
-- [ ] C: inventory directories / files list the expected idv1s
+- [ ] B: `type: 'table'` universe entries inventory the expected tables (or skipped does_not_exist)
+- [ ] C: `type: 'inputs'` selectors inventory the expected directories / idv1 files
 - [ ] D: file records are useful (not metadata zeros)
 - [ ] E: planned `relative_path` and transforms are correct and collision-free
 - [ ] F: exportAll wrote every planned artifact under exports/{id}/{date}/
@@ -171,7 +198,7 @@ Export pipeline:
 
 ### A) Path
 
-`inventory` / `exportAll` errors “No exports found” or “requires definition_path” → wrong path. Bundle directories do **not** use `:exports:`. One named person export does. A JSON5 person-search definition is for `export`; a JSON5 bundle can be used by `inventory` or `exportAll`.
+`inventory` / `exportAll` errors “No exports found” or “requires definition_path” → wrong path or no recognized bundle entries. Bundle directories do **not** use `:exports:`. One named person export does. A JSON5 person-search definition is for `export`; a JSON5 bundle can be used by `inventory` or `exportAll`.
 
 ### B) Tables
 
@@ -181,8 +208,8 @@ Export pipeline:
 
 `directories` with no nested `files`, or `files: []`:
 
-- Spec 1 `channel=email` joins `global_message` / `message` — no channel row → 0 matches. Spec 2 `entry_types` still can find stores.
-- `metadata.json` `entry_types` missing the names in the spec → store skipped (debug log).
+- A `type: 'inputs'` entry's `channel=email` selector needs matching `global_message` / `message` rows; without one it matches no stores. A separate `entry_types` selector can find stores by metadata.
+- `metadata.json` `entry_types` missing the exact names in the selector → store skipped (debug log).
 - Only raw files on disk → correctly omitted. Need `.idv1.parquet`.
 
 ### D) `records: 0`
@@ -191,7 +218,7 @@ Stale `metadata.json` / `input.records` of 0 is ignored; inventory should count 
 
 ### E) Plan
 
-Check `inventory.json5` before inspecting output. Every table and file includes its planned `relative_path` and artifact transforms. An unresolved transform, unsafe path, or duplicate target fails the run rather than writing a partial ambiguous layout.
+Check `inventory.json5` before inspecting output. Confirm that each universe entry produced the intended table or files, `relative_path`, and file transforms. An unresolved transform, unsafe path, or duplicate target fails the run rather than writing a partial ambiguous layout.
 
 ### F) Files on disk
 
