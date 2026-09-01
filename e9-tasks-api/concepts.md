@@ -51,6 +51,8 @@ An on-demand task needs only plugin identifiers and the method — **no `flow_id
 
 A predefined flow needs **`flow_id`** and does **not** take `path` or `method`. Worker path and method come from the flow definition.
 
+**Scheduling options:** On `POST /flow_runs/`, top-level **`options`** merges into every task (typical for a shared date window such as `start` / `end`). **`tasks`** with only `task_key` + `options` overrides one step. Discover slugs and task keys via `GET /flows` / `GET /flows/:id`. Alternatively, `PATCH /task_runs/:id` merges `options` onto a pending task run before it starts. Do not confuse worker `start`/`end` options with **`start_after_timestamp`** on the schedule body — the latter defers the entire run.
+
 Do not pass a server filesystem `flow_path` unless your administrator told you to; API consumers use the published slug on `/flow_runs/`.
 
 ## Flow run (instance)

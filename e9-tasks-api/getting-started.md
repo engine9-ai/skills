@@ -42,6 +42,15 @@ Pass `"remote": false` to list local runs instead.
 
 Optional: `GET /flows` lists published flow slugs (may be `[]` if none are published). On-demand Echo does not need a flow.
 
+### List published flows
+
+```bash
+curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows" \
+  | jq '[.[] | {id, name, tags, task_count: (.tasks | length)}]'
+```
+
+Use `id` as `flow_id` when scheduling. Read one definition (task keys and default options) with `GET /flows/<slug>` — see [endpoints.md — Flows](./endpoints.md#flows).
+
 ## 4. Schedule work
 
 Two mutually exclusive modes. Both enqueue via `scheduleTasks` and return `flow_run_id` / `task_run_ids`.
@@ -71,6 +80,8 @@ For a published multi-step workflow, use [`POST /flow_runs/`](#predefined-flow--
 
 Use a slug from `GET /flows`. Worker `path` and `method` come from the flow file; do not send them.
 
+**Minimal:**
+
 ```bash
 curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
@@ -78,6 +89,25 @@ curl $CURL_TLS -sS -X POST \
   -d '{"flow_id": "nightly-sync", "name": "my-first-run"}' \
   "$BASE_URL/flow_runs/" | tee /tmp/schedule.json | jq .
 ```
+
+**With a date window** (`start` / `end` and other worker options — names come from the flow definition):
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flow_id": "nightly-sync",
+    "name": "nightly-sync-jan",
+    "options": {
+      "start": "2024-01-01",
+      "end": "2024-02-01"
+    }
+  }' \
+  "$BASE_URL/flow_runs/" | tee /tmp/schedule.json | jq .
+```
+
+Top-level `options` merges into every step. Override one step with `tasks: [{ "task_key": "<from GET /flows>", "options": { … } }]`. Full examples: [endpoints.md — POST /flow_runs/](./endpoints.md#post-flow_runs).
 
 `POST /tasks/schedule` takes `path` + `method` only — it is not equivalent. Use `POST /flow_runs/` for published flows.
 

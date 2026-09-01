@@ -57,12 +57,13 @@ Follow [echo-walkthrough.md](./echo-walkthrough.md) end to end: **ask the user f
 
 ## Typical workflow
 
-1. `POST /flow_runs/filter` with `{"limit":20}` — list recent **remote** runs for the account (default `remote: true`; no `flow_run_id`)
-2. Schedule — pick the matching endpoint:
+1. **Discover flows** — `GET /flows` (or `POST /flows/filter`) lists published slugs; `GET /flows/:id` shows each step's `task_key` and default `options`
+2. `POST /flow_runs/filter` with `{"limit":20}` — list recent **remote** runs for the account (default `remote: true`; no `flow_run_id`)
+3. Schedule — pick the matching endpoint:
    - **On-demand task:** `POST /tasks/schedule` with `{ "path": "@engine9/plugins/e9workers:EchoWorker", "method": "echo", "options"? }`. Built-in workers: `@engine9/plugins/e9workers:<Worker>` (no plugin lookup). Account plugins: path from discovery, then this endpoint. See also `POST /flow_runs/`.
-   - **Predefined flow:** `GET /flows` then `POST /flow_runs/` with `{ "flow_id": "<slug>" }` — `flow_id` is required. See also `POST /tasks/schedule`.
+   - **Predefined flow:** `GET /flows` then `POST /flow_runs/` with `{ "flow_id": "<slug>", "options"? }` — optional top-level `options` (e.g. `start` / `end`) merges into every step; optional `tasks: [{ task_key, options }]` for per-step overrides. `flow_id` is required. See also `POST /tasks/schedule`.
    → save `flow_run_id` / `task_run_ids`
-3. `POST /task_runs/filter` — `{ "flow_run_id": "…" }` until complete (each `task_run` includes **`log_link`**)
+4. `POST /task_runs/filter` — `{ "flow_run_id": "…" }` until complete (each `task_run` includes **`log_link`**)
 4. Remote output: `GET /task_runs/:id` (`output`, `resolved_options`) or `GET /task_runs/:id/output`. Logs: `GET /task_runs/:id/log` (`log`, `truncated`, optional `log_url`). Per-task **Run now**: `POST /task_runs/:id/retry`.
 
 Full curl: [echo-walkthrough.md](./echo-walkthrough.md).

@@ -67,35 +67,49 @@ curl $CURL_TLS -sS -X POST \
 
 ## Flows
 
-### `GET /flows`
+Published workflows for your account. Use these endpoints to **discover which flows you can run** before calling [`POST /flow_runs/`](#post-flow_runs).
 
-List all flow definitions for your account.
+| Endpoint | Use |
+|----------|-----|
+| `GET /flows` | List every published flow (slug, name, tags, task count) |
+| `GET /flows/:id` | Full definition for one flow — task keys, worker paths, default `options` |
+| `POST /flows/filter` | Search by name or tags, paginate |
+
+**Scope:** `tasks:read` on all three.
+
+### Discover flows to run
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows"
 ```
 
+Compact summary:
+
 ```bash
-# Compact summary with jq
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows" \
   | jq '[.[] | {id, name, tags, tasks: (.tasks | length)}]'
 ```
 
-**Response:** JSON array of flow objects.
+Each object includes:
 
----
+| Field | Meaning |
+|-------|---------|
+| `id` | **Flow slug** — pass this as `flow_id` when scheduling |
+| `name` | Display name |
+| `flow_id` | Stable UUID (do **not** use for scheduling) |
+| `tags` | Optional labels for filtering |
+| `tasks[]` | Ordered steps with `task_key`, `worker_path`, `worker_method`, default `options` |
 
-### `GET /flows/:id`
+An empty array `[]` means no flows are published for this account (on-demand tasks via `POST /tasks/schedule` still work).
 
-Read one flow by **slug** (`id` from the flow file).
+Inspect one flow before scheduling — note each step's `task_key` and which `options` the workers expect (often `start` / `end` date windows):
 
 ```bash
-curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows/nightly-sync"
+curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows/nightly-sync" \
+  | jq '{id, name, tasks: [.tasks[] | {task_key, name, options}]}'
 ```
 
 **404** — no flow with that slug for your account.
-
----
 
 ### `POST /flows/filter`
 
@@ -177,11 +191,54 @@ curl $CURL_TLS -sS -X POST \
   "$BASE_URL/flow_runs/"
 ```
 
+**With options (e.g. `start` / `end` date window):**
+
+Many flows accept a time window on each worker. After `GET /flows/:id` confirms the option names, merge them at schedule time:
+
+**Shared window on every step** — top-level `options` merges into each task's options (flow defaults still apply; your values win on conflict):
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flow_id": "nightly-sync",
+    "name": "nightly-sync-jan",
+    "options": {
+      "start": "2024-01-01",
+      "end": "2024-02-01"
+    }
+  }' \
+  "$BASE_URL/flow_runs/"
+```
+
+**Per-step overrides** — `tasks` entries with only `task_key` + `options` merge onto that step (from `GET /flows/:id`). Combine with top-level `options` when some steps need different values:
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flow_id": "nightly-sync",
+    "options": { "start": "2024-01-01", "end": "2024-02-01" },
+    "tasks": [
+      { "task_key": "extract", "options": { "end": "2024-01-15" } }
+    ]
+  }' \
+  "$BASE_URL/flow_runs/"
+```
+
+**Replace the whole task list** — pass full `path` + `method` (+ `options`) per entry when you are not using the published step list. Rare for API consumers; prefer `flow_id` + option overrides above.
+
+**After schedule (alternative)** — `PATCH /task_runs/:id` merges `options` onto a **pending or paused** task run before it executes. Use when you already have a run id and the task has not started. Prefer scheduling with `options` when you know the window up front.
+
 | Field | Required | Description |
 |-------|----------|-------------|
 | `flow_id` | **Yes** | Flow slug (e.g. `nightly-sync`), not the UUID |
 | `name` / `label` | No | Display label for the run |
-| `tracking_code`, `start_after_timestamp` | No | Schedule metadata |
+| `options` | No | Merged into **every** task's `options` (e.g. shared `start` / `end`) |
+| `tasks` | No | Per-step overrides `{ task_key, options }` or a full replacement task list `{ path, method, options }` |
+| `tracking_code`, `start_after_timestamp` | No | Schedule metadata (defer entire run — not the same as worker `start`/`end` options) |
 | `remote` | No | Default `true` |
 
 **Response:** `scheduleTasks` result (`flow_run_id`, `task_run_ids`, …).
@@ -706,7 +763,7 @@ curl -X POST ... -d '{"path":"@engine9/plugins/e9workers:EchoWorker","method":"e
   "$BASE_URL/tasks/schedule"
 
 # 2. Optional: predefined flow (flow_id required)
-curl -X POST ... -d '{"flow_id":"nightly-sync"}' "$BASE_URL/flow_runs/"
+curl -X POST ... -d '{"flow_id":"nightly-sync","options":{"start":"2024-01-01","end":"2024-02-01"}}' "$BASE_URL/flow_runs/"
 
 # 3. Poll (lists tasks for the run; includes flow_run)
 curl -X POST ... -d '{"flow_run_id":"'"$FLOW_RUN_ID"'"}' \

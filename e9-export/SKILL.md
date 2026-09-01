@@ -169,6 +169,8 @@ Without `--tables`, tables-only mode uses the standard warehouse list (`plugin`,
 
 Default directory: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 
+Bundle `export` and `inventory.json5` include `source_directory`: the export root path. Strip it from any absolute output `filename` to recover the relative path under that root (same value as `export_dir` on the export result). Input file and directory entries also carry `source_directory` for the input-store root the file was copied from.
+
 | Path | Contents |
 |------|----------|
 | `tables/{table}.parquet` | Default warehouse table dumps |
@@ -177,7 +179,7 @@ Default directory: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 | `inventory.json5` | Bundle export: planned `relative_path`, transforms, tables, files, directories, totals, and skipped items |
 | `search/{export_name}.export.csv` + metadata | Default named person-search output during a bundle export |
 
-`directories[].files` is the **file list** (name, filename, records), not a count.
+`directories[].files` is the **file list** (name, filename, records, source_directory), not a count.
 
 ## Authoring a bundle
 
@@ -228,7 +230,7 @@ Check `inventory.json5` before inspecting output. Confirm that each universe ent
 
 ### F) Files on disk
 
-Bundle `export` returns `export_dir`. Every file listed by `inventory.json5` should exist at its `relative_path`. Missing copies: listing found no idv1s (C), a transform failed, or a file copy was skipped (logged).
+Bundle `export` returns `export_dir` and `source_directory` (same root). Every file listed by `inventory.json5` should exist at its `relative_path`. Missing copies: listing found no idv1s (C), a transform failed, or a file copy was skipped (logged).
 
 ### G) Person-search empty
 
