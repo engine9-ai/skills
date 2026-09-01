@@ -60,7 +60,6 @@ universe: [
   {
     type: 'table',
     table: 'person',
-    relative_path: 'warehouse/{{table}}.parquet',
     transforms: [{ path: ':transforms:removePII' }]
   },
   {
@@ -68,15 +67,19 @@ universe: [
     input_type: 'message',
     channel: 'email',
     files: '\\.idv1\\.parquet$',
-    relative_path: 'timeline/{{input_id}}/{{filename}}',
     transforms: [{ path: ':transforms:removePII' }]
   },
-  { type: 'inputs', entry_types: ['EMAIL_OPEN', 'EMAIL_CLICK'] }
+  {
+    type: 'inputs',
+    entry_types: ['EMAIL_OPEN', 'EMAIL_CLICK'],
+    relative_path: 'timeline/{{input_id}}/{{filename}}',
+    transforms: [{ path: ':transforms:removePII' }]
+  }
 ]
 ```
 
-- **Table entries** use `type: 'table'` and `table: '<warehouse_table>'`. Put one table in each universe entry. `relative_path` and file transforms belong to that entry.
-- **Input entries** use `type: 'inputs'`. Their selectors are `input_type`, `channel`, `plugin_id` / `plugin_path`, and/or `entry_types`; `files` optionally narrows the selected idv1 basenames.
+- **Table entries** use `type: 'table'` and `table: '<warehouse_table>'`. Put one table in each universe entry. `relative_path` and file transforms belong to that entry. Default: `tables/{{table}}.parquet`.
+- **Input entries** use `type: 'inputs'`. Their selectors are `input_type`, `channel`, `plugin_id` / `plugin_path`, and/or `entry_types`; `files` optionally narrows the selected idv1 basenames. Default: `{{input_type}}/{{input_id}}/{{filename}}` (unknown `input_type` → `timeline`).
 - Inputs export `.idv1.parquet` files, not raw CSV/JSON.
 - `files` is an optional regular expression applied to idv1 basenames.
 - `entry_types` uses exact names; `EMAIL_*` is not a wildcard.
@@ -168,11 +171,11 @@ Default directory: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 
 | Path | Contents |
 |------|----------|
-| `*.export.parquet` | Legacy/default table dumps |
-| `inputs/{input_id}/*.idv1.parquet` | Legacy/default copied idv1 files |
+| `tables/{table}.parquet` | Default warehouse table dumps |
+| `{input_type}/{input_id}/*.idv1.parquet` | Default copied idv1 files (`message`, `person`, `timeline`, …) |
 | Definition-owned `relative_path` | Custom universe artifact destination below `export_dir` |
 | `inventory.json5` | Bundle export: planned `relative_path`, transforms, tables, files, directories, totals, and skipped items |
-| `{datetime_prefix}.{export_name}.export.csv` + metadata | Default named person-search output during a bundle export |
+| `search/{export_name}.export.csv` + metadata | Default named person-search output during a bundle export |
 
 `directories[].files` is the **file list** (name, filename, records), not a count.
 
