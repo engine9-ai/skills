@@ -212,7 +212,7 @@ Local file/SQL runs still expose an `output_path` locator instead of inline JSON
 2. Read `state.state_details.output_path` (or other fields your administrator documents)
 3. Retrieve the result using the mechanism your deployment provides
 
-Logs for remote task runs: `GET /task_runs/:id/log` returns `{ ok, task_run_id, log, truncated }` (and `log_url` when the job server can sign one).
+Logs for remote task runs: every `task_run` has **`log_link`** (`/task_runs/{id}/log`). Call it with Task API auth; response is `{ ok, task_run_id, log_link, log, truncated }` (and optional **`log_url`** when the job server can sign a direct link).
 
 For the Echo on-demand smoke test (`@engine9/plugins/e9workers:EchoWorker` + `echo`), the result object echoes the task `options`:
 

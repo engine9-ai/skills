@@ -417,7 +417,7 @@ Task runs are created by scheduling — an on-demand task (`POST /tasks/schedule
 
 ### `GET /task_runs/:id`
 
-**Scope:** `tasks:read` — default `remote=true`. Remote responses include `resolved_options`, `output`, display fields (`bot`, `submodule`, `method`, `bot_location_id`, `errors`, `records`, `expected_start_time`, `updated`), and `log_url` when the job server can sign one.
+**Scope:** `tasks:read` — default `remote=true`. Remote responses include `resolved_options`, `output`, display fields (`bot`, `submodule`, `method`, `bot_location_id`, `errors`, `records`, `expected_start_time`, `updated`), **`log_link`** on every task run, and **`log_url`** when the job server can sign one (single-run reads only).
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
@@ -436,9 +436,12 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
     options: .task_run.options,
     resolved_options: .task_run.resolved_options,
     output: .task_run.output,
-    records: .task_run.records
+    records: .task_run.records,
+    log_link: .task_run.log_link
   }'
 ```
+
+Every `task_run` includes **`log_link`**: `/task_runs/{id}/log` — append to your Task API base URL and call with `tasks:read` auth. Prefer this over **`log_url`** (signed job-server URL, optional on single-run reads).
 
 **404** — unknown task run id.
 
@@ -461,12 +464,13 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
 {
   "ok": true,
   "task_run_id": "…",
+  "log_link": "/task_runs/…/log",
   "log": "<text>",
   "truncated": false
 }
 ```
 
-When the log cannot be fetched inline, `log` may be empty and `log_url` (signed, short-lived) is still returned. **404** — no log available.
+When the log cannot be fetched inline, `log` may be empty and **`log_url`** (signed, short-lived job-server URL) may still be returned. Prefer **`log_link`** for integrations. **404** — no log available.
 
 ---
 
