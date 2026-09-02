@@ -126,25 +126,46 @@ Reference: `message/schema.js` (views, many tables), `person_email/schema.js` (e
 
 ### 2. Transforms — inbound upsert (accumulate rows)
 
-Bind `sql.tables.upsert` and push rows onto `tablesToUpsert.<table>`.
+Bind `sql.tables.upsert` and queue rows with `mergeIntoQueue` from `@engine9/input-tools`. Do **not** push duplicate natural keys into `tablesToUpsert` in one batch — many SQL engines reject or mishandle duplicate unique keys inside a single upsert statement even when upsert is enabled. Merge semantics (field overrides, status precedence) belong in your plugin via the `merge` callback, not in a global SQL safety net.
+
+Use the table’s unique key columns (see your schema `indexes`). Example for `(email, person_id)`:
 
 ```javascript
+import { mergeIntoQueue } from "@engine9/input-tools";
+
 export const bindings = {
   tablesToUpsert: { path: "sql.tables.upsert" },
 };
+
+function mergeExampleRow(existing, incoming) {
+  return {
+    ...existing,
+    ...incoming,
+    id: existing.id ?? incoming.id ?? null,
+    // Last row in batch wins — e.g. Unsub then Sub in one file keeps Subscribed
+    status: incoming.status ?? existing.status,
+    source_input_id: existing.source_input_id ?? incoming.source_input_id,
+  };
+}
+
 export async function transform({ batch, tablesToUpsert }) {
   tablesToUpsert.example_row = tablesToUpsert.example_row || [];
   for (const row of batch) {
-    tablesToUpsert.example_row.push({
-      person_id: row.person_id,
-      status: row.status,
+    mergeIntoQueue(tablesToUpsert.example_row, { person_id: row.person_id, status: row.status, id: null }, {
+      keyFields: ["person_id"],
+      merge: mergeExampleRow,
+      label: "example_row",
     });
   }
 }
 export default { bindings, transform };
 ```
 
-Reference: `person/transforms/inbound/upsert_tables.js`.
+If two batch rows share a natural key and you omit `merge`, `mergeIntoQueue` throws at transform time so the bug surfaces during development.
+
+**Subscription status in one file:** `person_email` uses last-wins batch order. `Unsubscribed` then `Subscribed` in the same import yields `Subscribed` (possible resubscribe). `Subscribed` then `Unsubscribed` yields `Unsubscribed`. Same-timestamp rows are ambiguous — use explicit entry types or sort the source file if order matters.
+
+Reference: `person_email/transforms/inbound/upsert_tables.js`, `person/transforms/inbound/upsert_tables.js`.
 
 ### 3. Transforms — outbound enrichment (`sql.query`)
 
@@ -215,7 +236,7 @@ Reference: `segment/search.js` (`segment` handler).
 
 ### 9. Segments — saved audience presets
 
-Export **keyed** definitions (an object map, not an array): `name`, optional **`universe`** (array of MySQL EQL objects whose rows yield `input_id` values), optional `search` tree (`and` / paths / table+columns). Paths use `@engine9/interfaces/...:search:<handler>`. The export key is the last segment of `definition_path` (`<package>:segments:<key>`).
+Export **keyed** definitions (an object map, not an array): `name`, optional **`universe`** (array of EQL objects whose rows yield `input_id` values), optional `search` tree (`and` / paths / table+columns). Paths use `@engine9/interfaces/...:search:<handler>`. The export key is the last segment of `definition_path` (`<package>:segments:<key>`).
 
 The deployed `segment.plugin_id` identifies the **owning** package (often the interface). It does not have to match every plugin that supplies data: the **universe** narrows which inputs (possibly across plugins) feed timeline files for the build. Optional empty `pluginId` in search options keeps handlers universe-scoped; set it only when the search handler should filter by a specific data plugin.
 
