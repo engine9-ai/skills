@@ -2,12 +2,12 @@
 name: e9-export
 description: >-
   Create, run, and debug engine9 export files with the e9 CLI
-  (`e9 exportworker export`, inventory). Covers canonical export bundles with
-  top-level `universe` entries, person-search plugin exports
-  (`plugin:exports:<name>`), definition_path, inventory.json5, legacy bundle
-  compatibility, and empty/missing export debug. Use when working with
-  ExportWorker, export, inventory, definition_path, hockeystick, idv1 copies,
-  export parquet, or a missing/wrong export file.
+  (`e9 exportworker export`). Covers canonical export bundles with top-level
+  `universe` entries, person-search plugin exports (`plugin:exports:<name>`),
+  definition_path, inventory.json5 on bundle export, legacy bundle compatibility,
+  and empty/missing export debug. Pre-run warehouse checks: [e9-inventory](../e9-inventory/SKILL.md).
+  Use when working with ExportWorker, export, definition_path, hockeystick, idv1
+  copies, export parquet, or a missing/wrong export file.
 ---
 
 # engine9 exports
@@ -20,7 +20,7 @@ e9 exportworker <method> -a <account_id> --<option>=<value>
 
 `-a` is the account id from `accounts.d` (same as `e9 sqlworker ok`). Options are `--snake_case` flags. Complex values can be piped as JSON5 on stdin.
 
-Related: person-search remotes [e9-person-remote](../e9-person-remote/SKILL.md); identity [e9-person-id](../e9-person-id/SKILL.md); timeline files [e9-timeline](../e9-timeline/SKILL.md).
+Related: warehouse inventory [e9-inventory](../e9-inventory/SKILL.md); person-search remotes [e9-person-remote](../e9-person-remote/SKILL.md); identity [e9-person-id](../e9-person-id/SKILL.md); timeline files [e9-timeline](../e9-timeline/SKILL.md).
 
 Naming: export roots, worker options, and universe entries are canonical
 `snake_case`; JavaScript implementation variables remain camelCase. Nested
@@ -32,8 +32,8 @@ to snake_case, and conflicting dual spellings are rejected.
 
 | Method | What it does |
 |--------|----------------|
-| `inventory` | Pre-run: `COUNT(*)` per table + list `.idv1.parquet` files with record counts. Writes nothing. |
-| `export` | Unified export: infers mode from `definition_path` and options (bundle dump, one person-search CSV, or tables-only). Writes `inventory.json5` when a bundle runs. |
+| `inventory` | Same as [e9-inventory](../e9-inventory/SKILL.md) via `exportworker`. Prefer `inventoryworker` for inventory-only runs. |
+| `export` | Unified export: infers mode from `definition_path` and options (bundle dump, one person-search CSV, or tables-only). Writes `inventory.json5` (plan only) when a bundle runs. |
 
 `exportAll` and `exportTables` were removed; both error with a message to use `export`.
 
@@ -49,7 +49,7 @@ Without `definition_path`, pass `--tables` (and optionally `--extra_tables` / `-
 
 Use `--export_name=<name>` with a plugin path to run one named export without `:exports:<name>` in the path.
 
-`inventory` accepts a bundle path; direct CLI table/input options remain available for compatibility.
+Pre-run warehouse inventory: [e9-inventory](../e9-inventory/SKILL.md).
 
 ## Bundle dump (tables + idv1 files)
 
@@ -125,7 +125,7 @@ transforms: [{ path: ':transforms:removePII', options: { fields: ['email', 'phon
 Example (Hockeystick):
 
 ```
-e9 exportworker inventory -a <account_id> --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export
+e9 inventoryworker inventory -a <account_id> --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export
 e9 exportworker export -a <account_id> --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export
 ```
 
@@ -176,7 +176,7 @@ Bundle `export` and `inventory.json5` include `source_directory`: the export roo
 | `tables/{table}.parquet` | Default warehouse table dumps |
 | `{input_type}/{input_id}/*.idv1.parquet` | Default copied idv1 files (`message`, `person`, `timeline`, …) |
 | Definition-owned `relative_path` | Custom universe artifact destination below `export_dir` |
-| `inventory.json5` | Bundle export: planned `relative_path`, transforms, tables, files, directories, totals, and skipped items |
+| `inventory.json5` | Bundle export: export **plan** only (paths, counts, skipped). Monthly statistics: [e9-inventory](../e9-inventory/SKILL.md). |
 | `search/{export_name}.export.csv` + metadata | Default named person-search output during a bundle export |
 
 `directories[].files` is the **file list** (name, filename, records, source_directory), not a count.
@@ -191,7 +191,7 @@ Only idv1 files are copied. Raw files in the store are ignored even if `metadata
 
 ## Debug (A–G)
 
-Walk **A → G**. Stop at the first gap. Use `inventory` before `export`.
+Walk **A → G**. Stop at the first gap. Run [inventory](../e9-inventory/SKILL.md) before `export`.
 
 ```
 Export pipeline:
@@ -206,7 +206,7 @@ Export pipeline:
 
 ### A) Path
 
-`inventory` / bundle `export` errors “No exports found” or “requires definition_path” → wrong path or no recognized bundle entries. Bundle directories do **not** use `:exports:`. One named person export does. A JSON5 person-search definition is for a single-search `export`; a JSON5 bundle can be used by `inventory` or bundle `export`.
+`inventory` / bundle `export` errors “No exports found” or “requires definition_path” → wrong path or no recognized bundle entries. See [e9-inventory](../e9-inventory/SKILL.md). Bundle directories do **not** use `:exports:`.
 
 ### B) Tables
 
@@ -226,7 +226,7 @@ Stale `metadata.json` / `input.records` of 0 is ignored; inventory should count 
 
 ### E) Plan
 
-Check `inventory.json5` before inspecting output. Confirm that each universe entry produced the intended table or files, `relative_path`, and file transforms. An unresolved transform, unsafe path, or duplicate target fails the run rather than writing a partial ambiguous layout.
+Check `inventory.json5` before inspecting output. Inventory format and statistics: [e9-inventory](../e9-inventory/SKILL.md).
 
 ### F) Files on disk
 

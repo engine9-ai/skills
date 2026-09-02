@@ -55,7 +55,37 @@ Executable tasks must include worker routing (see `engine9/server/test/task/echo
 | `task_key` | Unique key per task; auto-generated from id/name/worker if omitted |
 | `worker_path` | Path under server `workers/` (e.g. `workers/EchoWorker`, `workers/PersonWorker`) |
 | `worker_method` | Worker method name (e.g. `echo`, `loadPeople`) |
-| `options` | Passed to the worker method (must match that method's metadata) |
+| `options` | Passed to the worker method (must match that method's metadata). May include Handlebars templates resolved at **task start** (not schedule time). |
+
+### Passing values between tasks
+
+Task management merges option templates when a task run starts (same idea as Frakture job merge / Prefect parameter resolution). Prefer `task_key` addresses:
+
+```json5
+{
+  task_key: 'inventory',
+  path: '@engine9/plugins/e9workers:RebuildWorker',
+  method: 'inventoryIdentityRebuild',
+  options: {},
+},
+{
+  task_key: 'truncate-warehouse',
+  path: '@engine9/plugins/e9workers:RebuildWorker',
+  method: 'truncatePersonIdWarehouse',
+  options: {
+    plan_path: '{{tasks.inventory.output.plan_path}}',
+    confirm_plan_hash: '{{tasks.inventory.output.plan_hash}}',
+  },
+}
+```
+
+| Template | Meaning |
+|----------|---------|
+| `{{tasks.<task_key>.output.<field>}}` | Preferred — sibling task output |
+| `{{jobs.<context_id>.output.<field>}}` | Frakture-compatible alias (same merge context) |
+| `{{account_id}}`, `{{date '…'}}`, etc. | Shared `@engine9/input-tools` Handlebars helpers |
+
+Upstream refs must be `COMPLETED` before the downstream task starts (`SQLTaskManager` / `executeTaskRun` wait or fail). Original templates stay on `task_inputs.options`; merged values are stored as `task_inputs.resolved_options` and passed to the worker.
 
 Comments and trailing commas are allowed (JSON5). String values in `options` must be valid JSON5 (no template literals or `+` concatenation); escape inner quotes or use a single line.
 
