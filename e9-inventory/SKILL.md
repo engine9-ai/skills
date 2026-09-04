@@ -14,7 +14,7 @@ description: >-
 
 **Inventory** describes what is in an account warehouse: row counts, input-store idv1 files, planned export paths, and **monthly statistics** (per-month record counts by table, plugin, entry type, message submodule, and similar). It writes a report file; it does not copy parquet or run export.
 
-Run inventory before export, before analytics DB loads, or any time you need a warehouse snapshot. For file production (parquet copies, person-search CSVs), see [e9-export](../e9-export/SKILL.md).
+Run inventory before export, before analytics DB loads, or any time you need a warehouse snapshot. What an export contains: [e9-export](../e9-export/SKILL.md). File production: [e9-export/building.md](../e9-export/building.md).
 
 ```
 e9 inventoryworker inventory -a <account_id> --definition_path=<bundle>
@@ -23,7 +23,7 @@ e9 exportworker inventory -a <account_id> --definition_path=<bundle>
 
 `-a` is the account id from `accounts.d`. Options are `--snake_case` flags. Full report path is returned as `options_filename`.
 
-Related: export bundles [e9-export](../e9-export/SKILL.md); timeline entry types [e9-timeline](../e9-timeline/SKILL.md); input metadata [inputs/timeline](../inputs/timeline/SKILL.md).
+Related: export contents [e9-export](../e9-export/SKILL.md); running an export [e9-export/building.md](../e9-export/building.md); timeline entry types [e9-timeline](../e9-timeline/SKILL.md); input metadata [inputs/timeline](../inputs/timeline/SKILL.md).
 
 ## Workers
 
@@ -146,7 +146,8 @@ Skipped statistic sources include `skipped: { reason }` on the section (e.g. `do
 |--------|------|
 | Warehouse tables | `COUNT(*)` |
 | Input idv1 files | `metadata.json` when `records > 0`; else parquet row count (may refresh metadata) |
-| Raw files in input store | Never listed — only `.idv1.parquet` |
+| Input `metadata.json` | Copied with each selected store so the export describes the input |
+| Raw files in input store | Never listed — only `.idv1.parquet` and `metadata.json` |
 
 ## Using statistics
 
@@ -170,7 +171,7 @@ Walk in order when export plan looks wrong (also applies when inventory precedes
 - [ ] E: relative_path and transforms valid, no duplicate targets
 ```
 
-Export-specific steps (F, G): [e9-export debug](../e9-export/SKILL.md#debug-ag).
+Export-specific steps (F, G): [e9-export debug](../e9-export/building.md#debug-ag).
 
 ### Common plan gaps
 

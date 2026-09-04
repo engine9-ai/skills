@@ -1,239 +1,259 @@
 ---
 name: e9-export
 description: >-
-  Create, run, and debug engine9 export files with the e9 CLI
-  (`e9 exportworker export`). Covers canonical export bundles with top-level
-  `universe` entries, person-search plugin exports (`plugin:exports:<name>`),
-  definition_path, inventory.json5 on bundle export, legacy bundle compatibility,
-  and empty/missing export debug. Pre-run warehouse checks: [e9-inventory](../e9-inventory/SKILL.md).
-  Use when working with ExportWorker, export, definition_path, hockeystick, idv1
-  copies, export parquet, or a missing/wrong export file.
+  Explains engine9 export packages for receivers: directory layout,
+  inventory.json5, warehouse table parquet, input-store .idv1.parquet files,
+  metadata.json fields, common entry_type_ids, person-search CSVs, and how to
+  join the pieces. Use when reading or consuming an export, interpreting
+  metadata.json or inventory.json5, joining person / transaction / timeline
+  files, or asking what is in an export. Create, run, and debug with the e9
+  CLI: [building.md](building.md).
 ---
 
 # engine9 exports
 
-Exports write account data out of the warehouse: **table parquet**, **idv1 file copies**, and/or **person-search CSVs**. Run them with the **e9 CLI**. Do not show JavaScript `exportWorker.export({...})` with legacy method names (`exportAll`, `exportTables`).
+An **export** is a self-contained snapshot of one account’s warehouse data. A receiver gets files — not a live database. Typical contents are **table parquet**, **idv1 file copies** with each store’s **`metadata.json`**, and sometimes **person-search CSVs**.
 
-```
-e9 exportworker <method> -a <account_id> --<option>=<value>
-```
+This document is for **reading** an export. Creating, running, and debugging one is [building.md](building.md).
 
-`-a` is the account id from `accounts.d` (same as `e9 sqlworker ok`). Options are `--snake_case` flags. Complex values can be piped as JSON5 on stdin.
+Related: warehouse inventory [e9-inventory](../e9-inventory/SKILL.md); person identity [e9-person-id](../e9-person-id/SKILL.md); remotes [e9-person-remote](../e9-person-remote/SKILL.md); timeline entries [e9-timeline](../e9-timeline/SKILL.md); source codes [e9-source-code](../e9-source-code/SKILL.md).
 
-Related: warehouse inventory [e9-inventory](../e9-inventory/SKILL.md); person-search remotes [e9-person-remote](../e9-person-remote/SKILL.md); identity [e9-person-id](../e9-person-id/SKILL.md); timeline files [e9-timeline](../e9-timeline/SKILL.md).
+## What’s in the package
 
-Naming: export roots, worker options, and universe entries are canonical
-`snake_case`; JavaScript implementation variables remain camelCase. Nested
-search and transform options remain owned by their individual handlers.
-Known camelCase universe aliases are accepted only for compatibility, normalize
-to snake_case, and conflicting dual spellings are rejected.
+Default root: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 
-## Methods
-
-| Method | What it does |
-|--------|----------------|
-| `inventory` | Same as [e9-inventory](../e9-inventory/SKILL.md) via `exportworker`. Prefer `inventoryworker` for inventory-only runs. |
-| `export` | Unified export: infers mode from `definition_path` and options (bundle dump, one person-search CSV, or tables-only). Writes `inventory.json5` (plan only) when a bundle runs. |
-
-`exportAll` and `exportTables` were removed; both error with a message to use `export`.
-
-## `definition_path`
-
-| Shape | Meaning |
-|-------|---------|
-| `engine9-accounts/.../export` | Bundle plugin (canonically a top-level `universe`). No `:exports:` required. Runs bundle tables/files plus named plugin exports. |
-| `engine9-accounts/.../file.plugin.js:exports:<name>` | One named person-search export. |
-| Path to a `.json5` / `.json` file | Standalone export definition (`search` and/or bundle keys). |
-
-Without `definition_path`, pass `--tables` (and optionally `--extra_tables` / `--exclude_tables`) for a tables-only dump.
-
-Use `--export_name=<name>` with a plugin path to run one named export without `:exports:<name>` in the path.
-
-Pre-run warehouse inventory: [e9-inventory](../e9-inventory/SKILL.md).
-
-## Bundle dump (tables + idv1 files)
-
-A bundle module canonically exports one top-level `universe` array. Each entry describes one source artifact set:
-
-```
-universe: [
-  {
-    type: 'table',
-    table: 'person',
-    transforms: [{ path: ':transforms:removePII' }]
-  },
-  {
-    type: 'inputs',
-    input_type: 'message',
-    channel: 'email',
-    files: '\\.idv1\\.parquet$',
-    transforms: [{ path: ':transforms:removePII' }]
-  },
-  {
-    type: 'inputs',
-    entry_types: ['EMAIL_OPEN', 'EMAIL_CLICK'],
-    relative_path: 'timeline/{{input_id}}/{{filename}}',
-    transforms: [{ path: ':transforms:removePII' }]
-  }
-]
-```
-
-- **Table entries** use `type: 'table'` and `table: '<warehouse_table>'`. Put one table in each universe entry. `relative_path` and file transforms belong to that entry. Default: `tables/{{table}}.parquet`.
-- **Input entries** use `type: 'inputs'`. Their selectors are `input_type`, `channel`, `plugin_id` / `plugin_path`, and/or `entry_types`; `files` optionally narrows the selected idv1 basenames. Default: `{{input_type}}/{{input_id}}/{{filename}}` (unknown `input_type` → `timeline`).
-- Inputs export `.idv1.parquet` files, not raw CSV/JSON.
-- `files` is an optional regular expression applied to idv1 basenames.
-- `entry_types` uses exact names; `EMAIL_*` is not a wildcard.
-- `relative_path` is always below `export_dir`. Absolute paths, `..`, backslashes, missing template values, and duplicate targets are rejected before writing.
-- Record counts: `metadata.json` when `> 0`; otherwise parquet `COUNT(*)`.
-
-Relative-path variables are `table`, `input_id`, `input_type`, `filename`, `export_name`, `export_id`, `date`, and `datetime_prefix`, where applicable.
-
-### Legacy bundle compatibility
-
-Existing definitions may still use top-level `tables` and `input_directories`. Treat those as compatibility syntax, not the format to copy into new definitions:
-
-- `tables: ['person']` or `{ name: 'person', ... }` corresponds to a `universe` entry `{ type: 'table', table: 'person', ... }`.
-- An `input_directories` selector corresponds to `{ type: 'inputs', ...selector }`.
-- Existing `extra_tables` and `exclude_tables` belong to the legacy table-list form.
-
-When updating a bundle, prefer expressing the intended artifacts directly as top-level universe entries.
-
-### Artifact transforms
-
-`transforms` on an individual `universe` entry are file-to-file transforms for that table or selected input file. The referenced transform definition must declare `scope: 'file'`; this distinguishes artifact transforms from searched-export row transforms. Each file transform receives:
-
-```
-{ filename, target, artifact, options, account_id, ...resolvedBindings }
-```
-
-It must write `target` and may return `{ filename: target }`. Transform chains feed each returned file into the next step. Put the implementation in the definition plugin's `transforms` map and reference it as `:transforms:<name>` or `@self:transforms:<name>`; full plugin paths also work. Artifact transforms fail closed: a transform error aborts the run and the original file is not copied to that target.
-
-`removePII` is intentionally not built yet. Once available, add it without server changes:
-
-```
-transforms: {
-  removePII: {
-    scope: 'file',
-    transform: removePII
-  }
-}
-
-// On a type:'table' or type:'inputs' universe entry:
-transforms: [{ path: ':transforms:removePII', options: { fields: ['email', 'phone'] } }]
-```
-
-Example (Hockeystick):
-
-```
-e9 inventoryworker inventory -a <account_id> --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export
-e9 exportworker export -a <account_id> --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export
-```
-
-Optional: `--limit=N`, `--export_id=<uuid>`, `--start=-30d`, `--end=`.
-
-## Person-search export
-
-A searched export is a definition with top-level `search` (EQL) and top-level `transforms` for row/column mapping. These are not `scope: 'file'` universe transforms:
-
-```
-exports: {
-  transactions: {
-    search: { /* EQL */ },
-    transforms: [{ /* row mapping */ }]
-  }
-}
-```
-
-Invoke the named path:
-
-```
-e9 exportworker export -a <account_id> --definition_path=engine9-accounts/frakture/advantage_ai/index.plugin.js:exports:transactions --start=-30d
-```
-
-A bundle `export` also runs named `:exports:` entries that have `search`.
-
-`--person_ids=1,2,3` scopes the search. `--dedupe=false` ignores prior export files. `--add_to_input_store` writes into an input store instead of only `exports/`.
-
-Empty “remote people for plugin X” audiences: [e9-person-remote](../e9-person-remote/SKILL.md) — filter is `person_remote` ⋈ `input.plugin_id`, not `{prefix}person`.
-
-## Tables-only
-
-```
-e9 exportworker export -a <account_id> --tables=person,transaction --limit=100
-e9 exportworker export -a <account_id> --extra_tables=custom --exclude_tables=setting
-```
-
-Without `--tables`, tables-only mode uses the standard warehouse list (`plugin`, `input`, `person*`, `source_code_dictionary`, `global_message`, `transaction`, …).
-
-## Output
-
-Default directory: `{store_path}/{account_id}/exports/{export_id}/{date}/`
-
-Bundle `export` and `inventory.json5` include `source_directory`: the export root path. Strip it from any absolute output `filename` to recover the relative path under that root (same value as `export_dir` on the export result). Input file and directory entries also carry `source_directory` for the input-store root the file was copied from.
+Start with **`inventory.json5`**. It is the catalog of what was written. A definition may relocate artifacts with `relative_path`; trust the inventory, not assumed paths.
 
 | Path | Contents |
 |------|----------|
-| `tables/{table}.parquet` | Default warehouse table dumps |
-| `{input_type}/{input_id}/*.idv1.parquet` | Default copied idv1 files (`message`, `person`, `timeline`, …) |
-| Definition-owned `relative_path` | Custom universe artifact destination below `export_dir` |
-| `inventory.json5` | Bundle export: export **plan** only (paths, counts, skipped). Monthly statistics: [e9-inventory](../e9-inventory/SKILL.md). |
-| `search/{export_name}.export.csv` + metadata | Default named person-search output during a bundle export |
+| `tables/{table}.parquet` | One warehouse table dump |
+| `{input_type}/{input_id}/*.idv1.parquet` | Activity rows for one input (`message`, `person`, `timeline`, …) |
+| `{input_type}/{input_id}/metadata.json` | Descriptor for that input store |
+| `search/{export_name}.export.csv` + `.metadata.json5` | Named person-search extract |
+| `inventory.json5` | Export **plan**: paths, counts, skipped items |
+
+**Not included**
+
+- Raw CSV/JSON from the source input store (even when `metadata.json` lists them)
+- Monthly warehouse **statistics** — those live on a standalone [inventory](../e9-inventory/SKILL.md) run, not in the export’s `inventory.json5`
+- The `setting` table (credentials / config)
+
+`inventory.json5` and the export result both carry `source_directory`: the export root. Strip that prefix from any absolute `filename` to recover the path under the root.
+
+## `inventory.json5`
+
+Bundle exports write this at the export root (`format_version` **2**). It is a **plan**, not monthly statistics.
+
+| Key | Purpose |
+|-----|---------|
+| `definition_path`, `plugin_path`, `source_directory` | Which bundle ran, and the export root |
+| `universe` | Resolved bundle entries |
+| `tables[]` | `{ table, relative_path, records }` |
+| `files[]`, `directories[]` | Planned idv1 copies and `metadata.json` |
+| `skipped_tables[]`, `skipped_files[]` | Omitted items (`does_not_exist`, selector mismatch, …) |
+| `table_records`, `file_records`, `records` | Plan totals |
 
 `directories[].files` is the **file list** (name, filename, records, source_directory), not a count.
 
-## Authoring a bundle
+Use it to confirm every expected parquet exists, to recover relative paths, and to see why a table or store was omitted.
 
-Put `index.js` at `engine9-accounts/<org>/<account>/export/` (or use a `*.plugin.js`) and export a top-level `universe`. Use one `{ type: 'table', table }` entry per warehouse table and `{ type: 'inputs', ...selectors }` entries for input-store files. A plugin may also contain searched exports under `exports: { name: { search, transforms } }` and file-transform implementations under the plugin's top-level `transforms` map.
+## Warehouse tables
 
-`channel: 'email'` needs `global_message` or `message` with that channel. An `entry_types` selector finds stores whose `metadata.json` contains at least one exact listed type.
+Table parquet is a dump of the named warehouse table at export time. Columns match the live table; `DESCRIBE` / parquet schema is the authority. Bundles choose a subset — Hockeystick and Authentic typically include people, messages, source codes, and transactions, not every warehouse table.
 
-Only idv1 files are copied. Raw files in the store are ignored even if `metadata.json` lists them.
+| Table | Role | Join |
+|-------|------|------|
+| `plugin` | Installed integration (`id`, `path`, `name`) | `input.plugin_id` |
+| `input` | One stream (message, form, extract): `id`, `plugin_id`, `remote_input_id`, `remote_input_name`, `input_type`, `min_timeline_ts`, `max_timeline_ts`, `records` | Folder `{input_id}`; `timeline.input_id`; `transaction.input_id` |
+| `person` | Canonical person. `id` **is** `person_id` (`given_name`, `family_name`) | Every other `person_id` |
+| `person_email` | Emails on a person (`email`, `subscription_status`, `email_hash_v1`) | `person_id` |
+| `person_phone` | Phones (`phone`, `sms_status`, `call_status`) | `person_id` |
+| `person_address` | Postal addresses | `person_id` |
+| `person_remote` | Vendor/CRM id for a plugin (`remote_person_id`, `source_input_id`) | `source_input_id` → `input.id` → `plugin` — [e9-person-remote](../e9-person-remote/SKILL.md) |
+| `transaction` | Payments: `id`, `ts`, `person_id`, `input_id`, `amount`, `entry_type_id`, `source_code_id`, `recommended_message_id` | Person, input, source code, message |
+| `source_code_dictionary` | One row per code (`source_code_id`, `source_code`) | `transaction.source_code_id`, timeline `source_code_id` |
+| `source_code_summary` / `_by_date` | Per-code rollups (attributed revenue/transactions; `origin_*` is **legacy**) | `source_code_id` — [e9-source-code](../e9-source-code/SKILL.md) |
+| `global_message` / `message` | Message identity (`channel`, `publish_date`, primary source code) | `input.id` for a message input is often the message id |
+| `global_message_summary` / `_by_date` | Per-message rollups (sends, attributed revenue; daily spend/impressions) | Message / plugin |
+| `timeline` | Warehouse entry log (when the bundle includes it): `id`, `ts`, `person_id`, `entry_type_id`, `input_id` | Same keys as idv1 rows |
 
-## Debug (A–G)
+Identity: [e9-person-id](../e9-person-id/SKILL.md). One person may have many emails, phones, and remotes. Do not treat `email` as a person key.
 
-Walk **A → G**. Stop at the first gap. Run [inventory](../e9-inventory/SKILL.md) before `export`.
+Say **transaction**, never donation. Revenue questions use `transaction` (and summary tables), not timeline `TRANSACTION_*` rows.
+
+Say **entry**, never event. A timeline / idv1 row is an **entry**.
+
+## Input stores: `metadata.json` + idv1
+
+Each selected **input** is one stream — usually one message, one form, or one named extract. The export copies:
+
+1. Every `.idv1.parquet` in that store
+2. That store’s `metadata.json`
+
+Default layout: `{input_type}/{input_id}/{filename}`. Unknown `input_type` is stored as `timeline`. The folder name `{input_id}` is the same UUID as `input.id` and as `timeline.input_id` / `transaction.input_id`.
+
+### `metadata.json`
+
+Snake_case on disk. Older files may still use camelCase (`inputId`, `pluginId`, `entryTypes`); prefer snake_case.
+
+```json
+{
+  "input_id": "c8ec58a6-a9d7-5277-a12a-030cc01d037f",
+  "plugin_id": "a1b2c3d4-0000-4000-8000-000000000001",
+  "input_type": "message",
+  "remote_input_id": "msg-123",
+  "remote_input_name": "April Appeal",
+  "min_timeline_ts": "2024-06-01T10:00:00.000Z",
+  "max_timeline_ts": "2024-12-31T23:59:59.000Z",
+  "records": 152340,
+  "distinct_people": 89000,
+  "distinct_records": 152340,
+  "files": [
+    { "filename": "email-sends.idv1.parquet", "records": 152340 }
+  ],
+  "entry_types": {
+    "EMAIL_SEND": {
+      "min_timeline_ts": "2024-06-01T10:00:00.000Z",
+      "max_timeline_ts": "2024-12-31T23:59:59.000Z",
+      "records": 152340,
+      "distinct_people": 89000,
+      "distinct_records": 152340
+    }
+  }
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `input_id` | Store / `input.id` (matches the folder name) |
+| `plugin_id` | Owning plugin (`plugin.id`) |
+| `input_type` | `message`, `person`, `timeline`, form type, … |
+| `remote_input_id` / `remote_input_name` | Vendor id and human name (message title, form name) |
+| `min_timeline_ts` / `max_timeline_ts` | Timestamp span across idv1 rows |
+| `records` | Row count across idv1 files |
+| `distinct_people` | Distinct `person_id` |
+| `distinct_records` | Distinct timeline entry `id` |
+| `files[]` | `{ filename, records }` for files **in the source store**. Only `.idv1.parquet` names in this list were copied. Legacy entries may be a bare string. |
+| `entry_types` | Map keyed by **string name** (not an array). Each value has `min_timeline_ts`, `max_timeline_ts`, `records`, `distinct_people`, `distinct_records`. |
+
+`entry_types` names are exact (`EMAIL_OPEN`, not `EMAIL_*`). That map is how a bundle selected the store; it is also how a receiver knows which activity kinds are in the parquet.
+
+`records: 0` in metadata can be stale. Prefer parquet `COUNT(*)` when the count matters.
+
+### `.idv1.parquet` rows
+
+These are **Timeline ID** files: already resolved to `person_id` and a stable entry `id`. They are ready to load or query. Shape: [inputs/timeline](../inputs/timeline/SKILL.md).
+
+| Column | Meaning |
+|--------|---------|
+| `id` | Stable UUID for this entry (reload upserts; not a person key) |
+| `ts` | When it happened (not when engine9 loaded it) |
+| `person_id` | Canonical person (`person.id`) |
+| `entry_type_id` | Integer type (names below) |
+| `input_id` | Present on warehouse `timeline`; often implicit from the folder on a copied store |
+| `source_code_id` | Optional last-click / origin code |
+| `email_domain` | Optional lowercased domain |
+
+Extra columns (URL, amount, user agent, …) are plugin **detail** fields. They vary by file.
+
+A click is not automatically an open. Filter on `entry_type_id`; do not infer one type from another.
+
+## Entry types
+
+Parquet stores **`entry_type_id` (integer)**. `metadata.json` `entry_types` uses the **string name**. Full catalog: [e9-timeline](../e9-timeline/SKILL.md#entry-types).
+
+| Group | Name | Id | Typical meaning |
+|-------|------|----|-----------------|
+| Origin | `CRM_ORIGIN` | 1 | Person’s origin in the CRM |
+| Origin | `ACQUISITION` | 2 | Acquisition |
+| Signup | `SIGNUP` / `SIGNUP_INITIAL` / `SIGNUP_SUBSEQUENT` | 3 / 4 / 5 | List / form signup |
+| Signup | `UNSUBSCRIBE` | 6 | Channel-agnostic unsubscribe |
+| Money | `TRANSACTION` | 10 | Generic payment; prefer a specific type |
+| Money | `TRANSACTION_ONE_TIME` | 11 | One-time payment |
+| Money | `TRANSACTION_INITIAL` / `TRANSACTION_SUBSEQUENT` / `TRANSACTION_RECURRING` | 12 / 13 / 14 | Recurring series |
+| Money | `TRANSACTION_REFUND` | 15 | Refund |
+| Message | `MESSAGE_CONVERSION` / `_ADVOCACY` / `_TRANSACTION` | 20 / 21 / 22 | Conversion credited to a message |
+| SMS | `SMS_SEND` / `SMS_DELIVERED` / `SMS_CLICK` | 30 / 31 / 33 | SMS lifecycle |
+| SMS | `SMS_UNSUBSCRIBE` / `SMS_BOUNCE` / `SMS_SPAM` / `SMS_REPLY` | 34 / 37 / 38 / 39 | SMS negative / reply |
+| Email | `EMAIL_SEND` / `EMAIL_DELIVERED` | 40 / 41 | Send / delivery |
+| Email | `EMAIL_OPEN` / `EMAIL_CLICK` | 42 / 43 | Engagement |
+| Email | `EMAIL_UNSUBSCRIBE` / `EMAIL_SOFT_BOUNCE` / `EMAIL_HARD_BOUNCE` / `EMAIL_BOUNCE` / `EMAIL_SPAM` / `EMAIL_REPLY` | 44 / 45 / 46 / 47 / 48 / 49 | Email negative / reply |
+| Forms | `FORM_SUBMIT` / `FORM_PETITION` / `FORM_ADVOCACY` / `FORM_SURVEY` | 60 / 61 / 66 / 67 | Actions |
+
+`SOURCE_CODE_OVERRIDE` (0) is a dictionary override marker, not a person action.
+
+Email bundles (Hockeystick) typically ship stores whose `entry_types` include `EMAIL_*`. SMS bundles (Authentic) ship `SMS_*`.
+
+## How the pieces join
 
 ```
-Export pipeline:
-- [ ] A: definition_path resolves (bundle and/or :exports:name)
-- [ ] B: `type: 'table'` universe entries inventory the expected tables (or skipped does_not_exist)
-- [ ] C: `type: 'inputs'` selectors inventory the expected directories / idv1 files
-- [ ] D: file records are useful (not metadata zeros)
-- [ ] E: planned `relative_path` and transforms are correct and collision-free
-- [ ] F: export wrote every planned artifact under exports/{id}/{date}/
-- [ ] G: person-search file has rows (search, remotes, dates)
+plugin.id  =  input.plugin_id
+input.id   =  folder {input_id}
+           =  metadata.json input_id
+           =  timeline.input_id / transaction.input_id
+           =  person_remote.source_input_id   (for remotes written by that stream)
+
+person.id  =  person_email.person_id
+           =  person_phone.person_id
+           =  person_remote.person_id
+           =  transaction.person_id
+           =  idv1 / timeline.person_id
+
+source_code_dictionary.source_code_id  =  transaction.source_code_id
+                                       =  idv1 / timeline.source_code_id
 ```
 
-### A) Path
+Plugin scope for remotes is **not** a column on `person_remote`. Join `person_remote.source_input_id` → `input.id` → `input.plugin_id`.
 
-`inventory` / bundle `export` errors “No exports found” or “requires definition_path” → wrong path or no recognized bundle entries. See [e9-inventory](../e9-inventory/SKILL.md). Bundle directories do **not** use `:exports:`.
+A message input’s `input.id` is the handle for that send. Opens and clicks for that send live in stores whose `metadata.json` `input_id` (or `entry_types`) points at that activity; they share `person_id` with `person` / `transaction`.
 
-### B) Tables
+## Person-search CSVs
 
-`inventory.skipped_tables` with `does_not_exist` → that table is not deployed (summaries often need a stats job). Table export skips the same way. Confirm with `e9 sqlworker query -a <account_id>` / `DESCRIBE`.
+A named search export is one CSV plus a sidecar:
 
-### C) Files missing from inventory
+- `search/{export_name}.export.csv` (or `.export.csv.gz`)
+- `search/{export_name}.export.csv.metadata.json5`
 
-`directories` with no nested `files`, or `files: []`:
+Columns are whatever the search and its row transforms selected — not a fixed warehouse schema.
 
-- A `type: 'inputs'` entry's `channel=email` selector needs matching `global_message` / `message` rows; without one it matches no stores. A separate `entry_types` selector can find stores by metadata.
-- `metadata.json` `entry_types` missing the exact names in the selector → store skipped (debug log).
-- Only raw files on disk → correctly omitted. Need `.idv1.parquet`.
+The sidecar records how the file was built:
 
-### D) `records: 0`
+| Field | Meaning |
+|-------|---------|
+| `configuration` | Options used for the run |
+| `sql` | Compiled search SQL (also pasted as a trailing `/* … */` comment) |
+| `records` | Row count |
+| `people_searched` | People in the search universe |
+| `sample_person_ids` | Sample of matched ids |
+| `deduplicated` / `deduplicated_against` | Present when prior export files were used as a dedupe set |
 
-Stale `metadata.json` / `input.records` of 0 is ignored; inventory should count parquet. If still 0 after that, the idv1 is empty. Check `inventory.json5` `directories[].files[].records` and `file_records`.
+## Reading the files
 
-### E) Plan
+Parquet is the native format. DuckDB example:
 
-Check `inventory.json5` before inspecting output. Inventory format and statistics: [e9-inventory](../e9-inventory/SKILL.md).
+```sql
+-- Catalog
+-- (open inventory.json5 next to the files)
 
-### F) Files on disk
+SELECT id, given_name, family_name
+FROM read_parquet('tables/person.parquet')
+LIMIT 20;
 
-Bundle `export` returns `export_dir` and `source_directory` (same root). Every file listed by `inventory.json5` should exist at its `relative_path`. Missing copies: listing found no idv1s (C), a transform failed, or a file copy was skipped (logged).
+SELECT id, ts, person_id, amount, source_code_id
+FROM read_parquet('tables/transaction.parquet')
+WHERE person_id = 12345
+ORDER BY ts DESC
+LIMIT 20;
 
-### G) Person-search empty
+-- One input store (entry_type_id 42 = EMAIL_OPEN)
+SELECT id, ts, person_id, entry_type_id
+FROM read_parquet('timeline/*/opens.idv1.parquet')
+WHERE entry_type_id = 42
+LIMIT 20;
+```
 
-`search` too tight (`start`/`end`, plugin filter). “Remotes for plugin X” with no rows → [e9-person-remote](../e9-person-remote/SKILL.md). `limit` on a bundle export applies per named export **and** per bundle table.
+Resolve email → `person_id` via `person_email`, then join other files on `person_id`. Do not treat timeline `id` as a person key.
 
-Record the first failing step.
+## Building and debugging
+
+Create, run, and debug with `e9 exportworker export`: [building.md](building.md). Pre-run warehouse snapshot: [e9-inventory](../e9-inventory/SKILL.md).
