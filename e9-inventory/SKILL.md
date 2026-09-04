@@ -50,21 +50,21 @@ Examples: [examples.md](examples.md).
 With a bundle definition:
 
 ```
-e9 inventoryworker inventory -a liftoff \
-  --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export
+e9 inventoryworker inventory -a <account_id> \
+  --definition_path=engine9-accounts/<org>/<account>/export
 ```
 
 Without `definition_path`, inventory uses the **default definition**: person* tables, `segment`, `source_code_dictionary`, `transaction`, `timeline`, and **all input stores** (`input` EQL):
 
 ```
-e9 inventoryworker inventory -a liftoff
+e9 inventoryworker inventory -a <account_id>
 ```
 
 ### Plan-only (faster, no monthly statistics)
 
 ```
-e9 inventoryworker inventory -a liftoff \
-  --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export \
+e9 inventoryworker inventory -a <account_id> \
+  --definition_path=engine9-accounts/<org>/<account>/export \
   --statistics=false
 ```
 
@@ -73,7 +73,7 @@ Legacy alias: `--coverage=false` (deprecated).
 ### Tables-only override (no bundle definition)
 
 ```
-e9 inventoryworker inventory -a liftoff \
+e9 inventoryworker inventory -a <account_id> \
   --tables=person,transaction \
   --extra_tables=global_message_summary \
   --exclude_tables=setting
@@ -84,8 +84,8 @@ When `--tables` (or `universe` / `input_directories`) is set without `definition
 ### Override input selectors (with a bundle)
 
 ```
-e9 inventoryworker inventory -a liftoff \
-  --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export \
+e9 inventoryworker inventory -a <account_id> \
+  --definition_path=engine9-accounts/<org>/<account>/export \
   --input_directories='[{"entry_types":["EMAIL_OPEN"],"files":"^opens\\.idv1\\.parquet$"}]'
 ```
 

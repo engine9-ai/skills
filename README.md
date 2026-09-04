@@ -4,6 +4,8 @@ Public skills for working with engine9 deployments.
 
 **MCP rule:** When using an engine9 MCP server, discover plugins, methods, and tool parameters from MCP responses only — not from local workspace code. See [e9-mcp — MCP-only discovery](./e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code).
 
+**Client names:** Skills must not name specific clients or accounts. Use placeholders (`<account_id>`, `engine9-accounts/<org>/<account>/export`). Plugin and product names are fine.
+
 | Skill | Path | Purpose |
 |-------|------|---------|
 | Create plugin / interface | [create-engine9-plugin/SKILL.md](./create-engine9-plugin/SKILL.md) | Implement `@engine9/interfaces/*` packages and `@engine9/plugins/*` native plugins |

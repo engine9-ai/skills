@@ -59,7 +59,7 @@ Use it to confirm every expected parquet exists, to recover relative paths, and 
 
 ## Warehouse tables
 
-Table parquet is a dump of the named warehouse table at export time. Columns match the live table; `DESCRIBE` / parquet schema is the authority. Bundles choose a subset — Hockeystick and Authentic typically include people, messages, source codes, and transactions, not every warehouse table.
+Table parquet is a dump of the named warehouse table at export time. Columns match the live table; `DESCRIBE` / parquet schema is the authority. Bundles choose a subset — a typical dump includes people, messages, source codes, and transactions, not every warehouse table.
 
 | Table | Role | Join |
 |-------|------|------|
@@ -182,7 +182,7 @@ Parquet stores **`entry_type_id` (integer)**. `metadata.json` `entry_types` uses
 
 `SOURCE_CODE_OVERRIDE` (0) is a dictionary override marker, not a person action.
 
-Email bundles (Hockeystick) typically ship stores whose `entry_types` include `EMAIL_*`. SMS bundles (Authentic) ship `SMS_*`.
+Email-oriented bundles typically ship stores whose `entry_types` include `EMAIL_*`. SMS-oriented bundles ship `SMS_*`.
 
 ## How the pieces join
 

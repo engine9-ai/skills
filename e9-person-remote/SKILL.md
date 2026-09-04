@@ -88,8 +88,8 @@ For `@engine9/interfaces/person_remote:search:all` with `pluginId = <Tatango uui
 ```js
 await inputWorker.idFiles({
   filename: '/path/to/people.csv', // or file_array: [{ filename, input_id, ... }]
-  input_id: '<uuid of a Tatango-owned input>',
-  plugin_id: '6a894a22-0d71-5cca-8cb9-ab4d9541565c', // Tatango on foe
+  input_id: '<uuid of an input owned by that plugin>',
+  plugin_id: '<plugin uuid>',
   // optional: remote_input_id / remote_input_name / input_type when creating/healing input metadata
 });
 ```
@@ -101,8 +101,8 @@ Equivalent without writing an ID parquet (people only):
 ```js
 await personWorker.loadPeople({
   filename: '/path/to/people.csv', // or stream: [{ remote_person_id, email, ... }]
-  plugin_id: '6a894a22-0d71-5cca-8cb9-ab4d9541565c',
-  default_input_id: '<Tatango-owned input uuid>'
+  plugin_id: '<plugin uuid>',
+  default_input_id: '<uuid of an input owned by that plugin>'
 });
 ```
 

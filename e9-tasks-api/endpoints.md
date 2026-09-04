@@ -335,14 +335,14 @@ curl $CURL_TLS -sS -X POST \
   -H "$AUTH" -H "$ACCOUNT" \
   -H "Content-Type: application/json" \
   -d '{
-    "parent_account_id": "frakture_master",
+    "parent_account_id": "<parent_account_id>",
     "status": ["FAILED"],
     "limit": 50
   }' \
   "$BASE_URL/flow_runs/filter"
 ```
 
-Use `"parent_account_id": "none"` for accounts with no parent. Prefect-shaped alias: `"flow_runs": { "parent_account_id": { "eq_": "frakture_master" } }`.
+Use `"parent_account_id": "none"` for accounts with no parent. Prefect-shaped alias: `"flow_runs": { "parent_account_id": { "eq_": "<parent_account_id>" } }`.
 
 **Filter by `completed_since`:**
 

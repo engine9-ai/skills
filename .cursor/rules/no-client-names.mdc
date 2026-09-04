@@ -1,0 +1,25 @@
+---
+description: Skills must not name specific clients or accounts
+globs: "**/*.md"
+alwaysApply: true
+---
+
+# No client names in skills
+
+Public skills are product documentation. Do not name specific **clients** or **accounts**.
+
+Use placeholders: `<account_id>`, `<parent_account_id>`, `<prefix>`, `engine9-accounts/<org>/<account>/export`.
+
+Fine to name: engine9 product terms, plugin/vendor integrations (paths, `plugin_id`), and table/column identifiers.
+
+```
+# ❌ BAD
+e9 exportworker export -a liftoff \
+  --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export
+Email bundles (Hockeystick) typically ship EMAIL_* stores.
+
+# ✅ GOOD
+e9 exportworker export -a <account_id> \
+  --definition_path=engine9-accounts/<org>/<account>/export
+Email-oriented bundles typically ship EMAIL_* stores.
+```

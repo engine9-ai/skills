@@ -96,13 +96,13 @@ When **any** of these is true, **stop the current workflow immediately** and rep
 Database unreachable (`status: timeout`):
 
 ```
-Cannot connect to the liftoff_maggie_hassan database
+Cannot connect to the <account_id> database
 ```
 
 Unauthorized account (`status: unauthorized`):
 
 ```
-Not authorized for account liftoff_hassan
+Not authorized for account <account_id>
 ```
 
 Plugin metadata missing (`account` plugins or `task` schedule):
@@ -200,16 +200,16 @@ Two commands:
 - `plugins` filter matches installed plugin `path` / `name` / `table_prefix` substrings (e.g. `["acoustic"]`). Apply `prefix`/`parents` first so DB probes stay bounded.
 - Per-account DB failures go into `warnings` (do not fail the whole search).
 
-Example — Authentic accounts with Acoustic:
+Example — accounts matching a prefix with a plugin installed:
 
 ```json
-{ "command": "search", "prefixes": ["authentic"], "plugins": ["acoustic"] }
+{ "command": "search", "prefixes": ["<prefix>"], "plugins": ["acoustic"] }
 ```
 
 Example — direct children of a parent:
 
 ```json
-{ "command": "search", "parents": ["frakture_master"] }
+{ "command": "search", "parents": ["<parent_account_id>"] }
 ```
 
 Plugins command is also the **discovery step** before calling `task` when no native tool matches (see fallback workflow below).
@@ -562,8 +562,8 @@ Example — errored flow runs under a parent:
 ```json
 {
   "action": "list",
-  "account_id": "frakture_master",
-  "parent_account_id": "frakture_master",
+  "account_id": "<parent_account_id>",
+  "parent_account_id": "<parent_account_id>",
   "status": ["FAILED"],
   "limit": 300
 }

@@ -110,11 +110,11 @@ transforms: {
 transforms: [{ path: ':transforms:removePII', options: { fields: ['email', 'phone'] } }]
 ```
 
-Example (Hockeystick):
+Example:
 
 ```
-e9 inventoryworker inventory -a <account_id> --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export
-e9 exportworker export -a <account_id> --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export
+e9 inventoryworker inventory -a <account_id> --definition_path=engine9-accounts/<org>/<account>/export
+e9 exportworker export -a <account_id> --definition_path=engine9-accounts/<org>/<account>/export
 ```
 
 Optional: `--limit=N`, `--export_id=<uuid>`, `--start=-30d`, `--end=`.
@@ -135,7 +135,7 @@ exports: {
 Invoke the named path:
 
 ```
-e9 exportworker export -a <account_id> --definition_path=engine9-accounts/frakture/advantage_ai/index.plugin.js:exports:transactions --start=-30d
+e9 exportworker export -a <account_id> --definition_path=engine9-accounts/<org>/<account>/index.plugin.js:exports:transactions --start=-30d
 ```
 
 A bundle `export` also runs named `:exports:` entries that have `search`.

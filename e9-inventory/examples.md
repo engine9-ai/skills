@@ -4,31 +4,31 @@
 
 ```bash
 # Default warehouse inventory (no definition_path)
-e9 inventoryworker inventory -a liftoff
+e9 inventoryworker inventory -a <account_id>
 
 # Full report with a bundle definition
-e9 inventoryworker inventory -a liftoff \
-  --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export
+e9 inventoryworker inventory -a <account_id> \
+  --definition_path=engine9-accounts/<org>/<account>/export
 
 # Plan only — skip monthly statistics (faster)
-e9 inventoryworker inventory -a liftoff --statistics=false
+e9 inventoryworker inventory -a <account_id> --statistics=false
 
 # Explicit table list only (defaults not applied)
-e9 inventoryworker inventory -a liftoff --tables=person,transaction
+e9 inventoryworker inventory -a <account_id> --tables=person,transaction
 ```
 
 Read the full report from `options_filename` in the command output:
 
 ```bash
-e9 fileworker json -a liftoff --filename=/path/from/options_filename
+e9 fileworker json -a <account_id> --filename=/path/from/options_filename
 ```
 
 ## Summary return value
 
 ```json
 {
-  "definition_path": "engine9-accounts/frakture/liftoff/hockeystick/export",
-  "plugin_path": "engine9-accounts/frakture/liftoff/hockeystick/export",
+  "definition_path": "engine9-accounts/<org>/<account>/export",
+  "plugin_path": "engine9-accounts/<org>/<account>/export",
   "format_version": 2,
   "table_count": 12,
   "file_count": 14,
@@ -53,7 +53,7 @@ e9 fileworker json -a liftoff --filename=/path/from/options_filename
       "records": 2
     }
   ],
-  "options_filename": "/stored_inputs/liftoff/temp/2026-09-02/….inventory.json"
+  "options_filename": "/stored_inputs/<account_id>/temp/2026-09-02/….inventory.json"
 }
 ```
 
@@ -64,8 +64,8 @@ Tables omit empty `transforms`. Files carry export paths and source store roots.
 ```json
 {
   "format_version": 2,
-  "definition_path": "engine9-accounts/frakture/liftoff/hockeystick/export",
-  "plugin_path": "engine9-accounts/frakture/liftoff/hockeystick/export",
+  "definition_path": "engine9-accounts/<org>/<account>/export",
+  "plugin_path": "engine9-accounts/<org>/<account>/export",
   "table_records": 125000,
   "file_records": 45000,
   "records": 170000,
@@ -91,7 +91,7 @@ Tables omit empty `transforms`. Files carry export paths and source store roots.
       "name": "email-sends.idv1.parquet",
       "records": 2,
       "relative_path": "message/c8ec58a6-a9d7-5277-a12a-030cc01d037f/email-sends.idv1.parquet",
-      "source_directory": "/stored_inputs/liftoff/message/c8ec/…"
+      "source_directory": "/stored_inputs/<account_id>/message/c8ec/…"
     }
   ],
   "directories": [
@@ -234,8 +234,8 @@ Each month with data gets a bucket. Use `month_range` for timeline axis bounds.
 During `e9 exportworker export`, the written `inventory.json5` contains the **plan** only (`statistics` omitted). Collect statistics separately:
 
 ```bash
-e9 inventoryworker inventory -a liftoff \
-  --definition_path=engine9-accounts/frakture/liftoff/hockeystick/export
+e9 inventoryworker inventory -a <account_id> \
+  --definition_path=engine9-accounts/<org>/<account>/export
 ```
 
 ## Programmatic use (server)
@@ -244,7 +244,7 @@ e9 inventoryworker inventory -a liftoff \
 import { buildInventoryReport } from '../utilities/inventoryReport.js';
 
 const report = await buildInventoryReport(worker, {
-  definition_path: 'engine9-accounts/frakture/liftoff/hockeystick/export',
+  definition_path: 'engine9-accounts/<org>/<account>/export',
   statistics: true
 });
 // report.statistics.inputs.by_plugin_entry_type_month

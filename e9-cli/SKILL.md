@@ -119,13 +119,13 @@ Primary command forms:
 - `/e9a parent <parent_id>` — active child accounts of `<parent_id>` (comma-separated parent ids allowed)
 - `/e9a all` — all active accounts
 
-Examples: `/e9a test`, `/e9a engine9`, `/e9a parent frakture_master`, `/e9a all`
+Examples: `/e9a <account_id>`, `/e9a parent <parent_account_id>`, `/e9a all`
 
 The CLI bin script (`server/bin/e9a`) writes `.e9_parameters` for subsequent **local `e9` worker CLI runs only**. For `parent` and `all`, it resolves account ids from server account config and writes `-a id1,id2,...`. For a single lookup it writes `-a <lookup>` as before.
 
 **Do not use leftover CLI files for MCP / Cursor session scope.** Never read `.e9_parameters`, `.e9_config.json5`, or similar local CLI state to infer `account_id` for `/e9` or MCP tools. Those files are often stale from an unrelated terminal session and will silently scope the wrong account. If chat session `engine9.account_id` is unset, **ask the user** (or suggest `/e9a <account_id>`) — do not invent scope from disk.
 
-**Discovering accounts (MCP):** when the user asks which accounts match a prefix, parent, type, tags, or installed plugin, call MCP `account` with `command: "search"` in **one** request — do not use `/e9a all` plus per-account plugin loads. Example: `{ "command": "search", "prefixes": ["authentic"], "plugins": ["acoustic"] }`. Use `/e9a <id>` afterward to pin a single primary account and cache its plugins.
+**Discovering accounts (MCP):** when the user asks which accounts match a prefix, parent, type, tags, or installed plugin, call MCP `account` with `command: "search"` in **one** request — do not use `/e9a all` plus per-account plugin loads. Example: `{ "command": "search", "prefixes": ["<prefix>"], "plugins": ["acoustic"] }`. Use `/e9a <id>` afterward to pin a single primary account and cache its plugins.
 
 ### Required behavior
 
