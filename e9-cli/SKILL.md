@@ -207,7 +207,8 @@ Use this for requests like “list current errored tasks”, cross-account job s
    - Parse search terms into MCP `search` arguments.
    - Call `search` with mapped filters and `account_id`.
 3. `/e9 task ...`:
-   - Require `engine9.account_id` and `engine9.plugins` (run `/e9a` first if missing).
+   - **Multi-step flow** (user asks to deploy/schedule a flow such as identity rebuild): use MCP `task` with `flow_id` (e.g. `identity-rebuild`) — see [e9-tasks-api/deploy-flow.md](../e9-tasks-api/deploy-flow.md). Do not expand steps into on-demand path/method calls. If MCP returns flow-not-found and you have a local `engine9/server` checkout with the flow file, fall back to `e9 task runFlow -a <account> --flow=rebuild/identity-rebuild.flow.json5`.
+   - **On-demand method**: require `engine9.account_id` and (for non-`e9workers` paths) `engine9.plugins` (run `/e9a` first if missing).
    - If `/e9a` or MCP `account` failed for this account, **stop** — do not call `task`.
    - Resolve the plugin path from cached plugins before calling MCP `task`.
    - Pass the canonical **plugin path** (colon submodule form), not legacy Frakture dotted paths.

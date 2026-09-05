@@ -6,12 +6,15 @@ description: >-
   required); POST /tasks/schedule schedules an on-demand task (plugin path + method).
   Built-in workers use `@engine9/plugins/e9workers:<Worker>` (e.g. EchoWorker + echo).
   Scheduling uses the same scheduleTasks path as MCP task. MCP itself stays on Firebase
-  OAuth — do not mix credentials.
+  OAuth — do not mix credentials. For deploying a built-in flow to an account (e.g.
+  identity-rebuild), see deploy-flow.md.
 ---
 
 # engine9 Task API
 
 Use this skill when calling the Task API from scripts, curl, or integrations — or when troubleshooting auth, account scoping, and run state.
+
+**Deploy / schedule a multi-step flow for one account (identity rebuild, etc.):** follow [deploy-flow.md](./deploy-flow.md) — MCP `task` with `flow_id` (or local `e9 task runFlow` fallback).
 
 When the user is working through **MCP** (not REST/curl), use MCP `account` and MCP `task` per [e9-mcp](../e9-mcp/SKILL.md). This skill is for direct HTTP against the Task API.
 
@@ -37,6 +40,7 @@ An on-demand task does **not** need a `flow_id`. A predefined flow does **not** 
 | [concepts.md](./concepts.md) | Terminology: flows, runs, IDs, async execution, `completed_since` |
 | [authentication.md](./authentication.md) | **API keys (`e9key_…`), scopes (`tasks:read` / `tasks:schedule`), account header** |
 | [getting-started.md](./getting-started.md) | First requests in five minutes |
+| [**deploy-flow.md**](./deploy-flow.md) | **Check + schedule a built-in/account flow for one account (MCP or CLI) — start here for identity rebuild etc.** |
 | [echo-walkthrough.md](./echo-walkthrough.md) | **Agent-runnable** end-to-end Echo demo: schedule → poll → completion, with expected responses |
 | [endpoints.md](./endpoints.md) | Every route with curl examples |
 | [errors.md](./errors.md) | HTTP status codes |

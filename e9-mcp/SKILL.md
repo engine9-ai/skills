@@ -450,6 +450,8 @@ Store and replay account-scoped conversations.
 
 MCP `task` (default `action: "schedule"`) and REST `POST /tasks/schedule` use the same **on-demand** names: **`path` + `method`** (no `flow_id`).
 
+For **multi-step flows** (identity rebuild, etc.), prefer `flow_id` / `flow_path` — see [e9-tasks-api/deploy-flow.md](../e9-tasks-api/deploy-flow.md). Do not hand-expand flow steps into on-demand schedules.
+
 ### Built-in engine9 Workers
 
 Every bootstrapped account has `@engine9/plugins/e9workers`. Pass that path plus a worker submodule. **Do not** call MCP `account` to look up a plugin id. **Do not** install a separate Echo plugin.
@@ -481,7 +483,7 @@ When the user's request does not map cleanly to a native tool:
 
 1. **Ensure account scope** — `account_id` must be known from **this chat session** (`engine9.account_id` after `/e9a`), an explicit user statement, or MCP `account` search when the user asked you to find matching accounts. If missing, **ask the user** or suggest `/e9a <account_id>` and stop — do not read leftover CLI files (`.e9_parameters`, `.e9_config.json5`, etc.) for scope. If you only know org/prefix/plugin constraints and the user wants discovery, call `account` with `command: "search"` first, then confirm which `account_id` to use.
 2. **Pick the schedule mode:**
-   - **Predefined flow** (`flow_id` slug from REST `GET /flows` or the user): call `task` with `flow_id` only. Skip plugin discovery.
+   - **Predefined / built-in flow** (`flow_id` such as `identity-rebuild`, or account-published slug): call `task` with `flow_id` only (optional `label`). First task is **paused** by default — resume `paused_task_run_id` to start. See [e9-tasks-api deploy-flow.md](../e9-tasks-api/deploy-flow.md).
    - **On-demand built-in** (`@engine9/plugins/e9workers:<Worker>` such as Echo): call `task` with `path` + `method`. Skip plugin discovery.
    - **On-demand account plugin**: continue with steps 3–4.
 3. **Call `account`** immediately with `{ "account_id": "<account_id>" }` (plugins command). If this fails (including `getPluginMetadata`), **stop** — do not call `task`. That metadata load must be fixed before scheduling a non-`engine9` on-demand task can continue.
