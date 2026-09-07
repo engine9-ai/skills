@@ -88,7 +88,7 @@ List those task runs with **`POST /task_runs/filter`** (`{ "flow_run_id": "…" 
 | `parent_account_id` | First id in `account.parent_ids`, or `null` if the account has no parent |
 | `parent_ids` | Full `parent_ids` array (an account can have more than one parent) |
 
-`POST /flow_runs/filter` also accepts `parent_account_id` as a **filter** (default **remote** listing via Frakture): it selects runs whose account contains that id anywhere in `parent_ids` (`"none"` = accounts with no parent). That filter is "has this parent", which is not always the same as "this is the first parent" on the response. Pass `"remote": false` to list local runs instead.
+`POST /flow_runs/filter` also accepts `parent_account_id` as a **filter** (default **remote-legacy** listing): it selects runs whose account contains that id anywhere in `parent_ids` (`"none"` = accounts with no parent). That filter is "has this parent", which is not always the same as "this is the first parent" on the response. Pass `"remote": false` to list local runs instead.
 
 ### Completed since
 
@@ -206,7 +206,7 @@ There is no public REST endpoint that blocks until a task finishes. Poll or impl
 
 ## Task output
 
-Remote (Frakture) task runs include the worker JSON `output` on `GET /task_runs/:id` and `POST /task_runs/filter`. Use `GET /task_runs/:id/output` when you only need that object. `resolved_options` (options after server-side defaults/bindings) is on `GET /task_runs/:id`.
+Remote-legacy task runs include the worker JSON `output` on `GET /task_runs/:id` and `POST /task_runs/filter`. Use `GET /task_runs/:id/output` when you only need that object. `resolved_options` (options after server-side defaults/bindings) is on `GET /task_runs/:id`.
 
 Local file/SQL runs still expose an `output_path` locator instead of inline JSON:
 

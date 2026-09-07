@@ -27,8 +27,10 @@ Normal engine9 users and API integrators should use [e9-tasks-api](../e9-tasks-a
 - Scheduling plugin jobs via MCP → [e9-mcp](../e9-mcp/SKILL.md) / [e9-cli](../e9-cli/SKILL.md)
 - Deploying or operating the Task API → `engine9/server/api/task/docs/admin/`
 
+**Task names:** every step must have a unique `task_key` **and** a unique `name`. Do not reuse the worker method (`echo`, `query`, …) as `name` on more than one task — remote merge indexes by `task_key`, `context_id`, and `label`/`name`, and duplicates collide.
+
 ## Documentation
 
 | Doc | Use when |
 |-----|----------|
-| [flow-authoring.md](./flow-authoring.md) | JSON5 format, TaskWorker, SQLTaskManager, MCP `task` with `flow_path` |
+| [flow-authoring.md](./flow-authoring.md) | JSON5 format, unique `task_key`/`name` per task, TaskWorker, SQLTaskManager, MCP `task` with `flow_path` |

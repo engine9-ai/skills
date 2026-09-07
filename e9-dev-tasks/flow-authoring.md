@@ -4,7 +4,7 @@ Use this when **authoring or editing flow definitions** (`.json5` files), **star
 
 For REST API usage (listing flows, creating runs, polling state), see [e9-tasks-api](../e9-tasks-api/SKILL.md) and [concepts.md](../e9-tasks-api/concepts.md). For operator deployment setup, see `engine9/server/api/task/docs/admin/`.
 
-A **Flow** is a Prefect-style workflow definition: one JSON5 file per flow, containing metadata and an ordered list of **tasks**. Each task names a server **worker** (`worker_path`) and **method** (`worker_method`) plus an `options` object passed to that method. Tasks are a subset of a flow — flows are the orchestration unit, tasks are the executable unit. **TaskWorker** (`manager/TaskWorker.js`) stores definitions and run metadata, **executes tasks locally** via `runFlow()` / `executeTaskRun()`, creates pending task runs for SQLTaskManager, and **schedules** work via `scheduleTasks` (local `createFlowRun` or remote Frakture job-list). **SQLTaskManager** polls SQL-backed `task_run` rows and executes pending tasks through **Manager** (forked WorkerRunner processes).
+A **Flow** is a Prefect-style workflow definition: one JSON5 file per flow, containing metadata and an ordered list of **tasks**. Each task names a server **worker** (`worker_path`) and **method** (`worker_method`) plus an `options` object passed to that method. Tasks are a subset of a flow — flows are the orchestration unit, tasks are the executable unit. **TaskWorker** (`manager/TaskWorker.js`) stores definitions and run metadata, **executes tasks locally** via `runFlow()` / `executeTaskRun()`, creates pending task runs for SQLTaskManager, and **schedules** work via `scheduleTasks` (local `createFlowRun` or remote-legacy job-list). **SQLTaskManager** polls SQL-backed `task_run` rows and executes pending tasks through **Manager** (forked WorkerRunner processes).
 
 This document is based on `manager/TaskWorker.js`, `manager/SQLTaskManager.js`, and the examples in `engine9/server/test/task/*.json5`. The Prefect-compatible REST routes for these flows are mounted on the **main API** (`api/index.js` via `api/mcp/mount.js`) so they share the same Firebase OAuth pipeline as `/mcp` — see [e9-tasks-api README](../e9-tasks-api/README.md) (API consumers) and `engine9/server/api/task/docs/admin/README.md` (operators).
 
@@ -15,6 +15,8 @@ Flow run JSON is written under `TASK_API_RUNS_DIR` (default: OS temp `task-api-r
 ## Naming (Prefect-style)
 
 Prefect uses **snake_case** for variables, parameters, and task names in Python (PEP 8), and Prefect **Variables** names are restricted to lowercase letters, digits, and underscores. engine9 flow JSON follows the same style: `task_key`, `worker_path`, `worker_method`, `flow_run_id`, etc. Use snake_case in flow files and in `options` keys unless a specific worker method documents otherwise.
+
+**Every task needs a unique `task_key` and a unique `name`.** Do not reuse the worker method (`echo`, `query`, …) as `name` on more than one step. Remote-legacy merge indexes siblings by `task_key`, `context_id`, and `label`/`name` — duplicate names collide (last write wins) and `{{tasks.<name>.output.*}}` can resolve to the wrong step.
 
 ## Flow file format (JSON5)
 
@@ -48,28 +50,31 @@ Executable tasks must include worker routing (see `engine9/server/test/task/echo
 | Field | Purpose |
 |-------|---------|
 | `id` | Flow slug (filename stem if omitted). Stable `flow_id` UUID is derived via `uuidv5(id, FLOW_ID_NAMESPACE)`. |
-| `name` | Display name |
+| `name` | Flow display name (top-level) |
 | `tags`, `labels` | Optional metadata |
 | `schedule` | Optional scheduling overrides for `TaskWorker.scheduleTasks` / MCP `task`: `{ label, tracking_code, start_after_timestamp }` |
 | `tasks[]` | Ordered steps |
-| `task_key` | Unique key per task; auto-generated from id/name/worker if omitted |
+| `task_key` | Unique key per task (required in practice). Address for `{{tasks.<task_key>.output.*}}`. Auto-generated from id/name/worker if omitted. |
+| `name` (per task) | Unique display name per task. **Must differ from every other task in the flow.** Do not set this to the worker method when two steps share a method. |
 | `worker_path` | Path under server `workers/` (e.g. `workers/EchoWorker`, `workers/PersonWorker`) |
 | `worker_method` | Worker method name (e.g. `echo`, `loadPeople`) |
 | `options` | Passed to the worker method (must match that method's metadata). May include Handlebars templates resolved at **task start** (not schedule time). |
 
 ### Passing values between tasks
 
-Task management merges option templates when a task run starts (same idea as Frakture job merge / Prefect parameter resolution). Prefer `task_key` addresses:
+Task management merges option templates when a task run starts (same idea as remote-legacy job merge / Prefect parameter resolution). Prefer `task_key` addresses:
 
 ```json5
 {
   task_key: 'inventory',
+  name: 'Inventory identity rebuild impact',
   path: '@engine9/plugins/e9workers:RebuildWorker',
   method: 'inventoryIdentityRebuild',
   options: {},
 },
 {
   task_key: 'truncate-warehouse',
+  name: 'Truncate person_id warehouse tables',
   path: '@engine9/plugins/e9workers:RebuildWorker',
   method: 'truncatePersonIdWarehouse',
   options: {
@@ -82,7 +87,7 @@ Task management merges option templates when a task run starts (same idea as Fra
 | Template | Meaning |
 |----------|---------|
 | `{{tasks.<task_key>.output.<field>}}` | Preferred — sibling task output |
-| `{{jobs.<context_id>.output.<field>}}` | Frakture-compatible alias (same merge context) |
+| `{{jobs.<context_id>.output.<field>}}` | Remote-legacy alias (same merge context) |
 | `{{account_id}}`, `{{date '…'}}`, etc. | Shared `@engine9/input-tools` Handlebars helpers |
 
 Upstream refs must be `COMPLETED` before the downstream task starts (`SQLTaskManager` / `executeTaskRun` wait or fail). Original templates stay on `task_inputs.options`; merged values are stored as `task_inputs.resolved_options` and passed to the worker.
@@ -103,10 +108,10 @@ Comments and trailing commas are allowed (JSON5). String values in `options` mus
 ### Starting a run (execute immediately)
 
 ```javascript
-const taskWorker = new TaskWorker({ accountId: 'frakture' });
+const taskWorker = new TaskWorker({ accountId: '<account_id>' });
 const flowRun = await taskWorker.runFlow({
   flow: '/path/to/personId.json5',
-  body: { account_id: 'frakture' },
+  body: { account_id: '<account_id>' },
 });
 // flowRun.state_type === 'COMPLETED' when all tasks succeed
 // flowRun.task_runs[] — each task run with final state and output artifacts
@@ -117,7 +122,7 @@ const flowRun = await taskWorker.runFlow({
 ```javascript
 const flowRun = await taskWorker.createFlowRun({
   flow: '/path/to/personId.json5',
-  body: { account_id: 'frakture' },
+  body: { account_id: '<account_id>' },
 });
 // flowRun.task_runs[] — PENDING rows for SQLTaskManager to pick up
 ```
@@ -203,11 +208,28 @@ Each key in `options.queries` is a label; each value is a SQL string or `{ sql, 
 
 Tasks in the `tasks` array are created in order when using `createFlowRun({ flow: filePath })`. SQLTaskManager does not enforce dependencies automatically; later tasks should assume earlier tables/artifacts exist, or you should gate runs manually until prior task runs reach `COMPLETED`.
 
-### Task keys
+### Task keys and names
 
-If `task_key` is omitted, TaskWorker generates:
+Give every task an explicit **`task_key` and `name`, both unique within the flow.**
 
-`{flowId}.{taskName}.{worker}.{method}` (sanitized). Prefer explicit `task_key` values for stable logs and reruns.
+| Field | Must be unique | Used for |
+|-------|----------------|----------|
+| `task_key` | Yes | `{{tasks.<task_key>.output.*}}`, remote `context_id` |
+| `name` | Yes | Display and remote job `label`. Never reuse the worker method (`echo`, `query`, …) across steps. |
+
+```json5
+// ❌ BAD — three EchoWorker steps, same name; remote-legacy indexes tasks.echo last-write-wins
+{ task_key: 'xyz', name: 'echo', method: 'echo' },
+{ task_key: 'read-xyz', name: 'echo', method: 'echo' },
+{ task_key: 'chain', name: 'echo', method: 'echo' },
+
+// ✅ GOOD — unique task_key and unique name
+{ task_key: 'xyz', name: 'Seed xyz output', method: 'echo' },
+{ task_key: 'read-xyz', name: 'Read tasks.xyz.output', method: 'echo' },
+{ task_key: 'chain', name: 'Chain xyz and read-xyz outputs', method: 'echo' },
+```
+
+If `task_key` is omitted, TaskWorker generates `{flowId}.{taskName}.{worker}.{method}` (sanitized). Prefer explicit `task_key` values for stable logs, merge templates, and reruns.
 
 ## Repair / patch flows (example pattern)
 
@@ -223,7 +245,7 @@ The blank SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b
 ## Checklist for a new flow
 
 1. Choose `id`, `name`, and tags.
-2. List tasks in execution order with `task_key`, `name`, `worker_path`, `worker_method`, `options`.
+2. List tasks in execution order with unique `task_key`, unique `name`, `worker_path`/`path`, `worker_method`/`method`, `options`. Reject any two tasks that share a `name` or `task_key`.
 3. Save the `.json5` file wherever it fits your repo layout; pass that path to `createFlowRun`.
 4. Run `createFlowRun` with `account_id` for the target account.
 5. Call `taskWorker.runFlow(...)` to execute inline, or ensure SQLTaskManager is running to execute `PENDING` task runs from `createFlowRun`.

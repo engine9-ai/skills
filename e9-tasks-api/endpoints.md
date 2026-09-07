@@ -605,7 +605,7 @@ curl $CURL_TLS -sS -X POST \
 | `limit` | Default **500** when scoped to a flow/task run id, otherwise **20** (max 500) |
 | `offset` | Default 0 |
 | `sort` | `ID_DESC` (default) or `ID_ASC` |
-| `remote` | Default `true` (Frakture). Pass `false` for local SQL task runs |
+| `remote` | Default `true` (remote-legacy). Pass `false` for local SQL task runs |
 
 Does **not** 404 when ids are missing — unmatched filters return `task_runs: []` (`flow_run: null` if a single unknown `flow_run_id` was sent).
 

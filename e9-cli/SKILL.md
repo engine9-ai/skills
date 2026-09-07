@@ -144,7 +144,7 @@ The CLI bin script (`server/bin/e9a`) writes `.e9_parameters` for subsequent **l
 1. Resolve account ids from server account config (active = `disabled` not true; parent mode matches `parent_ids`).
 2. Set `engine9.account_ids` to the full list; set `engine9.account_id` to the first id (label only — not a DB probe target).
 3. Do **not** load plugins for every account (or for the first id). Do **not** call MCP `account` / open account databases to “check access” across children. Report the resolved ids and count.
-4. For **remote task listing** and other Frakture job-list ops under parent/all scope, see [Multi-account remote tasks](#multi-account-remote-tasks-parent--all) — those calls must not fan out per-child DB access.
+4. For **remote task listing** and other remote-legacy job-list ops under parent/all scope, see [Multi-account remote tasks](#multi-account-remote-tasks-parent--all) — those calls must not fan out per-child DB access.
 
 ### Session persistence
 
@@ -186,7 +186,7 @@ Account/domain create and secrets: use **e9-account** (`cloud-services/e9-accoun
 
 ### Multi-account remote flow runs (parent / all)
 
-Use this for requests like “list current errored tasks”, cross-account job status, or anything backed by MCP `task` `action: "list"` → `TaskWorker.listRemoteFlowRuns` / Frakture `POST /flow_runs/filter` when the user wants **parent** or **all** scope. To list tasks inside one flow run, use MCP `action: "listTasks"` → `TaskWorker.listRemoteTaskRuns` / Frakture `POST /task_runs/filter` (or REST `POST /task_runs/filter`).
+Use this for requests like “list current errored tasks”, cross-account job status, or anything backed by MCP `task` `action: "list"` → `TaskWorker.listRemoteFlowRuns` / remote-legacy `POST /flow_runs/filter` when the user wants **parent** or **all** scope. To list tasks inside one flow run, use MCP `action: "listTasks"` → `TaskWorker.listRemoteTaskRuns` / remote-legacy `POST /task_runs/filter` (or REST `POST /task_runs/filter`).
 
 - Prefer remote multi-account filters: `parent_account_id` for parent scope, or the remote API’s multi-account / auth-scoped listing for all — **not** a loop of per-account MCP calls.
 - Use Prefect `state_type` filters only (`FAILED`, `RUNNING`, `COMPLETED`, `PAUSED`, …). Legacy Mongo tokens (`complete`, `error`, `in_progress`) are rejected with 422.
@@ -211,7 +211,7 @@ Use this for requests like “list current errored tasks”, cross-account job s
    - **On-demand method**: require `engine9.account_id` and (for non-`e9workers` paths) `engine9.plugins` (run `/e9a` first if missing).
    - If `/e9a` or MCP `account` failed for this account, **stop** — do not call `task`.
    - Resolve the plugin path from cached plugins before calling MCP `task`.
-   - Pass the canonical **plugin path** (colon submodule form), not legacy Frakture dotted paths.
+   - Pass the canonical **plugin path** (colon submodule form), not remote-legacy dotted paths.
    - If MCP `task` returns `isError: true` or a fatal error message, **stop** — do not retry or call other account tools.
 4. `/e9 segment list`:
    - Ensure active `account_id` exists (or request it / suggest `/e9a`).
@@ -293,4 +293,4 @@ Account: `bfred_lambda_legal` (from `/e9a`)
 }
 ```
 
-Use `action: "listTasks"` with `flow_run_id` and optional `task_run_ids` from the schedule response to poll status. That MCP action calls Frakture `POST /task_runs/filter`.
+Use `action: "listTasks"` with `flow_run_id` and optional `task_run_ids` from the schedule response to poll status. That MCP action calls remote-legacy `POST /task_runs/filter`.
