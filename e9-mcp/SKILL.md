@@ -72,7 +72,7 @@ When diagnosing timeline or model results, read `sql` first. Do not re-invent th
 
 ### Hard stop — do not continue
 
-When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `auditPeople`, `timelinePerson`, `chat`, etc.).
+When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `auditPeople`, `timelinePerson`, `chat`, `file`, etc.).
 
 1. Tool result has **`isError: true`**
 2. Response text matches a fatal pattern (even when only plain text is visible):
@@ -163,6 +163,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Describe tables, indexes, list tables, histo | `sql` with `command: "describe"` / `"indexes"` / `"tables"` / `"histo"` |
 | Compute plugin or input UUIDs | `plugin_id`, `input_id` |
 | Chat / conversation history | `chat` |
+| Read a small slice of an account file (S3 / local) | `file` |
 | Run an on-demand plugin method | `task` with `path` + `method`. Built-in: `@engine9/plugins/e9workers:EchoWorker` + `echo` (no `account` lookup). Other plugins: discover via `account` first |
 | Run a published flow (predefined) | `task` with `flow_id` (slug from REST `GET /flows`) — no `path`/`method` |
 | Archive or retry flow runs / job lists | `task` with `action: "archive"` or bulk `"retry"` (`flow_run_ids`) |
@@ -446,6 +447,21 @@ Store and replay account-scoped conversations.
 - Required: `account_id`
 - Actions: `send` (default), `history`, `list`, `sample`, `list_samples`
 
+### `file`
+
+Read a small slice of an account file via `FileWorker.stream` (local, `s3://`, `r2://`, `gs://`). Hard-locked to the scoped `account_id`.
+
+- Required: `account_id`, `filename` (or `path`)
+- `filename` may be relative (`export/inventory.json5`) or rooted (`s3://engine9-accounts/<account_id>/…`). Relative paths resolve under `ENGINE9_STORED_INPUT_PATH/<account_id>`. Paths outside the account, other accounts, or `..` escapes are rejected.
+- Optional: `start` / `end` (inclusive byte offsets, same idea as `GET /log`). Default is the first 300KB. Window is capped at 300KB. Negative `start` tails from the end.
+- Returns `{ ok, filename, content, start, end, bytes, size, truncated }`
+
+Example:
+
+```json
+{ "account_id": "test", "filename": "export/inventory.json5" }
+```
+
 ## On-demand tasks
 
 MCP `task` (default `action: "schedule"`) and REST `POST /tasks/schedule` use the same **on-demand** names: **`path` + `method`** (no `flow_id`).
@@ -526,7 +542,7 @@ User: "List custom fields on RENxt people for account bfred_lambda_legal"
 
 ## Account-scoped calls
 
-All tools except `ok`, `plugin_id`, and `input_id` require authentication. Account-scoped tools require an `account_id` the signed-in user can access. Do not guess account ids. Do not infer them from leftover local CLI state (`.e9_parameters` and similar) — that is for the `e9` / `e9a` bin scripts only; for MCP, ask for scope or require `/e9a`.
+All tools except `ok`, `plugin_id`, and `input_id` require authentication. Account-scoped tools (including `file`) require an `account_id` the signed-in user can access. Do not guess account ids. Do not infer them from leftover local CLI state (`.e9_parameters` and similar) — that is for the `e9` / `e9a` bin scripts only; for MCP, ask for scope or require `/e9a`.
 
 ### Parent / all scope — do not fan out DB access
 

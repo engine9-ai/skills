@@ -66,24 +66,25 @@ Task management merges option templates when a task run starts (same idea as rem
 
 ```json5
 {
-  task_key: 'inventory',
-  name: 'Inventory identity rebuild impact',
+  task_key: 'createIdentityRebuildPlan',
+  name: 'Create identity rebuild plan',
   path: '@engine9/plugins/e9workers:RebuildWorker',
-  method: 'inventoryIdentityRebuild',
+  method: 'createIdentityRebuildPlan',
   options: {},
 },
 {
-  task_key: 'truncate-warehouse',
+  task_key: 'truncatePersonIdWarehouse',
   name: 'Truncate person_id warehouse tables',
   path: '@engine9/plugins/e9workers:RebuildWorker',
   method: 'truncatePersonIdWarehouse',
   options: {
-    plan_path: '{{tasks.inventory.output.plan_path}}',
-    confirm_plan_hash: '{{tasks.inventory.output.plan_hash}}',
+    plan_path: '{{tasks.createIdentityRebuildPlan.output.plan_path}}',
+    confirm_plan_hash: '{{tasks.createIdentityRebuildPlan.output.plan_hash}}',
   },
 }
 ```
 
+For remote schedules, keep `task_key` equal to `method` so Frakture merge context keys match the job label/method.
 | Template | Meaning |
 |----------|---------|
 | `{{tasks.<task_key>.output.<field>}}` | Preferred — sibling task output |
