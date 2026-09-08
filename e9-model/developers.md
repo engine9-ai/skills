@@ -30,7 +30,7 @@ await model.summarizePeople({ emails: 'a@example.com' });
 | `summarizeSourceCodes({ model })` | — | Read `{prefix}_person_stats` and `{prefix}_transaction_stats` (rollup by source code). Alias: `summarize` |
 | `summarizePeople({ emails / person_ids })` | — | UI inspect: timeline + stored rows from every available `model_*` table. Does **not** run models |
 | `inspectPerson({ emails / person_ids })` | — | Conductor / MCP `timelinePerson`: **current** `timeline` / `model_*` only. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` (opt-in; future deployments will drop this). SQL lives in `workers/model` |
-| `compareSourceCodes({ source_codes? })` | — | All current `model_*_stats` by source code. Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` |
+| `compareSourceCodes({ source_codes? })` | — | All current `model_*_stats` by source code. Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` (custom legacy models when present) |
 | `loadStats({ model })` | Rebuilds those stats tables | After a manual SQL edit |
 | `summarizePeopleLegacy` / `comparePeopleLegacy` / `summarizeSourceCodesLegacy` / `compareSourceCodesLegacy` | — | Legacy identity only — see [Legacy (old identity)](#legacy-old-identity) |
 
@@ -279,7 +279,10 @@ artifact. It reads **every** current `model_*_person_stats` /
 
 When `source_codes` is omitted, each model contributes its **top 10 source codes
 by `person_count` and top 10 by `revenue`**; the comparison uses the union.
-Tokens containing `%` use SQL `LIKE`.
+Tokens containing `%` use SQL `LIKE`. Pass `legacy: true` to also read
+`transaction_model_pivot`. That table always has the three shipped stems;
+**custom legacy models** appear as extra `{stem}_*` columns on some accounts
+and are included only when present.
 
 ```javascript
 const auto = await model.compareSourceCodes();
@@ -321,7 +324,8 @@ equality (empty ≡ missing). Missing legacy tables are skipped.
 `summarizeSourceCodesLegacy({ source_codes })` returns `transaction_model_pivot`
 rows only. `compareSourceCodesLegacy({ source_codes })` is the older same-stem
 pivot-vs-current **delta** (`{ legacy, current, delta, match }` per metric) for
-the `first_touch`, `crm_origin`, and `last_acquisition` stems; `source_codes` is
+the shipped `first_touch`, `crm_origin`, and `last_acquisition` stems plus any
+**custom legacy models** present as extra `{stem}_*` columns; `source_codes` is
 required there. Comma-delimited, `%` is `LIKE`. Future deployments will drop the
 pivot table.
 

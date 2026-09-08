@@ -72,7 +72,7 @@ When diagnosing timeline or model results, read `sql` first. Do not re-invent th
 
 ### Hard stop — do not continue
 
-When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `auditPeople`, `timelinePerson`, `chat`, `file`, etc.).
+When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `inventory`, `auditPeople`, `timelinePerson`, `chat`, `file`, `apiKey`, etc.).
 
 1. Tool result has **`isError: true`**
 2. Response text matches a fatal pattern (even when only plain text is visible):
@@ -135,7 +135,7 @@ Local code is an **unreliable** source for MCP work because:
 | Analyze / summarize / profile table contents | MCP `analyze` (uses `tables` then `analyze`) |
 | Account people / identity / timeline / model health | MCP `auditPeople` |
 | Person timeline + models (current and legacy) | MCP `timelinePerson` (`command: inspect`) |
-| Compare current (and opt-in legacy) model scores by source code | MCP `timelinePerson` (`command: compareSourceCodes`) |
+| Compare current (and opt-in legacy, including custom legacy models) model scores by source code | MCP `timelinePerson` (`command: compareSourceCodes`) |
 | Date histogram on indexed datetime column | MCP `sql` with `command: "histo"` |
 | List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
 
@@ -155,8 +155,9 @@ If a path, method, or option is not present in MCP responses, report that to the
 | List available person-search form options for an account | `searchOptions` |
 | Account people / timeline / identity / model health check | `auditPeople` |
 | Person timeline + stored models (current and legacy) | `timelinePerson` |
-| Compare current `model_*_stats` (and opt-in pivot) by source code | `timelinePerson` with `command: "compareSourceCodes"` |
+| Compare current `model_*_stats` (and opt-in pivot, including custom legacy models) by source code | `timelinePerson` with `command: "compareSourceCodes"` |
 | List segments, load segment detail, or schedule segment builds | `segment` |
+| Read or schedule account warehouse inventory | `inventory` (`get` first; `build` only if not ready) |
 | Create accounts / manage domains or domain secrets | e9-account Worker (`cloud-services/e9-account`) — not MCP |
 | Run a SQL/EQL query | `eql` / `sql` (`command: "query"` or omit when `sql` is set) |
 | Analyze / summarize / profile a table | `analyze` |
@@ -164,6 +165,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Compute plugin or input UUIDs | `plugin_id`, `input_id` |
 | Chat / conversation history | `chat` |
 | Read a small slice of an account file (S3 / local) | `file` |
+| Create / list / update / rotate / revoke API keys and scopes | `apiKey` — see [e9-api-key](../e9-api-key/SKILL.md). Never via `task` |
 | Run an on-demand plugin method | `task` with `path` + `method`. Built-in: `@engine9/plugins/e9workers:EchoWorker` + `echo` (no `account` lookup). Other plugins: discover via `account` first |
 | Run a published flow (predefined) | `task` with `flow_id` (slug from REST `GET /flows`) — no `path`/`method` |
 | Archive or retry flow runs / job lists | `task` with `action: "archive"` or bulk `"retry"` (`flow_run_ids`) |
@@ -294,9 +296,9 @@ Person-level **current-identity** timeline + model inspect (`ModelWorker.inspect
 
 - Required: `account_id`
 - **command: inspect** (default) — `emails` and/or `person_ids`. `person_ids` is a number, string, or array of either (warehouse `person.id` is an integer — do not stringify). Returns `{ queried, tables[], person_ids, emails, sql }` for current `timeline` / `model_*` only. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` (opt-in; future deployments will drop this). Missing tables are skipped. Do not join `person.id` to `person_id_int`.
-- **command: compareSourceCodes** — all current `model_*_stats` by source code (`person_count`, `revenue`, `transactions`). Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` stems. Optional `models` subset. Returns `sql` for top-N selection and per-model stats.
-- **command: compareSourceCodesLegacy** — same-stem pivot vs current delta. `source_codes` required (comma-delimited; `%` is LIKE).
-- **command: summarizeSourceCodesLegacy** — pivot rows only. `source_codes` required.
+- **command: compareSourceCodes** — all current `model_*_stats` by source code (`person_count`, `revenue`, `transactions`). Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` stems (first_touch, crm_origin, last_acquisition, plus **custom legacy models** when those `{stem}_*` columns exist). Optional `models` subset. Returns `sql` for top-N selection and per-model stats.
+- **command: compareSourceCodesLegacy** — same-stem pivot vs current delta. `source_codes` required (comma-delimited; `%` is LIKE). Custom legacy models are included when present on the pivot table.
+- **command: summarizeSourceCodesLegacy** — pivot rows only. `source_codes` required. Same custom-legacy discovery as compare.
 
 All commands include top-level **`sql`**: `[{ id, sql, error, table? }]` — the statements executed for this request. Use that log when debugging inspect/compare results.
 
@@ -365,6 +367,26 @@ Example build by definition path:
   "account_id": "test",
   "definition_path": "@engine9/interfaces/channels/email:segments:email_openers_30d"
 }
+```
+
+### `inventory`
+
+Account warehouse inventory cache at `{account root}/cache/inventory.json`. Prefer this over `task` for inventory. Reports take a long time to build — **always `get` first**.
+
+- Required: `account_id`
+- **command: get** (default) — `InventoryWorker.inventory`. If the cache exists: `ready: true`, summary (including the `statistics` block when the cache has monthly stats), and the same path as `options_filename` and `inventory_path`. If not: `ready: false` (do not retry get as a workaround — offer `build`). Full report: MCP `file` with `filename: cache/inventory.json`.
+- **command: build** — schedule `InventoryWorker.buildInventoryReport` via TaskWorker. Optional: `definition_path`, `tables`, `extra_tables`, `exclude_tables`, `input_directories`, `statistics`, `label`, `remote`. Does not wait for the report.
+
+Example get:
+
+```json
+{ "account_id": "test" }
+```
+
+Example build:
+
+```json
+{ "command": "build", "account_id": "test" }
 ```
 
 ### Account / domain management (e9-account)
@@ -462,6 +484,37 @@ Example:
 { "account_id": "test", "filename": "export/inventory.json5" }
 ```
 
+### `apiKey`
+
+Create and manage engine9 API keys (`e9key_` / `e9publickey_`) and their scopes. Storage is `@engine9/core` `SqlApiKeyStore` (account `api_key` table, hash only). Prefer this over CLI or MCP `task`. Full contract and UI notes: [e9-api-key](../e9-api-key/SKILL.md).
+
+- **catalog** (default when `account_id` omitted) — known scopes and form fields. No database.
+- **list** (default when `account_id` set) — keys for the account (no plaintext)
+- **get** — one key by `id` (no plaintext)
+- **create** — plaintext returned once (`shown_once: true`). Required: `scopes`
+- **update** — name / scopes / `default_role_id` / `expires_at` / `active` without rotating
+- **revoke** — deactivate
+- **rotate** — new plaintext once; old id revoked
+
+Do not schedule `createApiKey` via `task`. Do not send `e9key_` credentials to MCP.
+
+Example catalog:
+
+```json
+{ "command": "catalog" }
+```
+
+Example create:
+
+```json
+{
+  "command": "create",
+  "account_id": "test",
+  "name": "partner-tasks",
+  "scopes": ["tasks:read", "tasks:schedule"]
+}
+```
+
 ## On-demand tasks
 
 MCP `task` (default `action: "schedule"`) and REST `POST /tasks/schedule` use the same **on-demand** names: **`path` + `method`** (no `flow_id`).
@@ -477,6 +530,7 @@ Every bootstrapped account has `@engine9/plugins/e9workers`. Pass that path plus
 | `@engine9/plugins/e9workers:EchoWorker` | `echo` (smoke test) |
 | `@engine9/plugins/e9workers:SQLWorker` | `query` |
 | `@engine9/plugins/e9workers:SegmentWorker` | `list`, `detail`, `build`, `buildSegmentPersonFile` |
+| `@engine9/plugins/e9workers:InventoryWorker` | `inventory` (cache lookup), `buildInventoryReport` |
 
 Echo smoke test:
 
@@ -542,7 +596,7 @@ User: "List custom fields on RENxt people for account bfred_lambda_legal"
 
 ## Account-scoped calls
 
-All tools except `ok`, `plugin_id`, and `input_id` require authentication. Account-scoped tools (including `file`) require an `account_id` the signed-in user can access. Do not guess account ids. Do not infer them from leftover local CLI state (`.e9_parameters` and similar) — that is for the `e9` / `e9a` bin scripts only; for MCP, ask for scope or require `/e9a`.
+All tools except `ok`, `plugin_id`, and `input_id` require authentication. Account-scoped tools (including `file` and `apiKey` except `command: catalog`) require an `account_id` the signed-in user can access. Do not guess account ids. Do not infer them from leftover local CLI state (`.e9_parameters` and similar) — that is for the `e9` / `e9a` bin scripts only; for MCP, ask for scope or require `/e9a`.
 
 ### Parent / all scope — do not fan out DB access
 

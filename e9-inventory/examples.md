@@ -3,30 +3,34 @@
 ## CLI
 
 ```bash
-# Default warehouse inventory (no definition_path)
+# Read the cached inventory (does not generate)
 e9 inventoryworker inventory -a <account_id>
 
+# Build or refresh {account root}/cache/inventory.json
+e9 inventoryworker buildInventoryReport -a <account_id>
+
 # Full report with a bundle definition
-e9 inventoryworker inventory -a <account_id> \
+e9 inventoryworker buildInventoryReport -a <account_id> \
   --definition_path=engine9-accounts/<org>/<account>/export
 
 # Plan only — skip monthly statistics (faster)
-e9 inventoryworker inventory -a <account_id> --statistics=false
+e9 inventoryworker buildInventoryReport -a <account_id> --statistics=false
 
 # Explicit table list only (defaults not applied)
-e9 inventoryworker inventory -a <account_id> --tables=person,transaction
+e9 inventoryworker buildInventoryReport -a <account_id> --tables=person,transaction
 ```
 
-Read the full report from `options_filename` in the command output:
+Read the full report from `inventory_path` / `options_filename` (same path when ready):
 
 ```bash
-e9 fileworker json -a <account_id> --filename=/path/from/options_filename
+e9 fileworker json -a <account_id> --filename=/path/from/inventory_path
 ```
 
 ## Summary return value
 
 ```json
 {
+  "ready": true,
   "definition_path": "engine9-accounts/<org>/<account>/export",
   "plugin_path": "engine9-accounts/<org>/<account>/export",
   "format_version": 2,
@@ -36,10 +40,14 @@ e9 fileworker json -a <account_id> --filename=/path/from/options_filename
   "table_records": 125000,
   "file_records": 45000,
   "records": 170000,
+  "options_filename": "<store>/<account_id>/cache/inventory.json",
+  "inventory_path": "<store>/<account_id>/cache/inventory.json",
+  "cached_at": "2026-09-08T12:00:00.000Z",
   "statistics": {
+    "version": 1,
     "month_range": { "min": "2020-04", "max": "2026-09" },
-    "input_records": 890000,
-    "message_records": 1200
+    "inputs": { "records": 890000, "by_plugin_entry_type_month": ["…"] },
+    "tables": ["…"]
   },
   "tables": [
     { "table": "person", "records": 50000 },
@@ -52,8 +60,7 @@ e9 fileworker json -a <account_id> --filename=/path/from/options_filename
       "file_count": 1,
       "records": 2
     }
-  ],
-  "options_filename": "/stored_inputs/<account_id>/temp/2026-09-02/….inventory.json"
+  ]
 }
 ```
 
@@ -231,10 +238,10 @@ Each month with data gets a bucket. Use `month_range` for timeline axis bounds.
 
 ## Bundle export `inventory.json5`
 
-During `e9 exportworker export`, the written `inventory.json5` contains the **plan** only (`statistics` omitted). Collect statistics separately:
+During `e9 exportworker export`, the written `inventory.json5` contains the **plan** only (`statistics` omitted). Collect statistics into the account cache separately:
 
 ```bash
-e9 inventoryworker inventory -a <account_id> \
+e9 inventoryworker buildInventoryReport -a <account_id> \
   --definition_path=engine9-accounts/<org>/<account>/export
 ```
 

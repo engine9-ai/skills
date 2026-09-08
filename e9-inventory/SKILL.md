@@ -2,26 +2,28 @@
 name: e9-inventory
 description: >-
   Run and interpret engine9 warehouse inventory with the e9 CLI
-  (`e9 inventoryworker inventory`, `e9 exportworker inventory`). Covers
-  inventory.json5 format (export plan + monthly statistics), InventoryWorker,
-  input-store idv1 counts, table/message statistics, plan-only runs, and using
-  inventory outside export. Use when working with inventory, inventory.json5,
-  warehouse statistics, monthly counts, InventoryWorker, or pre-flight checks
-  before export or analytics loads.
+  (`e9 inventoryworker inventory`, `e9 inventoryworker buildInventoryReport`).
+  Covers the account cache at cache/inventory.json, inventory.json5 export plans,
+  InventoryWorker, input-store idv1 counts, table/message statistics, plan-only
+  runs, and using inventory outside export. Use when working with inventory,
+  inventory.json / inventory.json5, warehouse statistics, monthly counts,
+  InventoryWorker, or pre-flight checks before export or analytics loads.
 ---
 
 # engine9 inventory
 
 **Inventory** describes what is in an account warehouse: row counts, input-store idv1 files, planned export paths, and **monthly statistics** (per-month record counts by table, plugin, entry type, message submodule, and similar). It writes a report file; it does not copy parquet or run export.
 
-Run inventory before export, before analytics DB loads, or any time you need a warehouse snapshot. What an export contains: [e9-export](../e9-export/SKILL.md). File production: [e9-export/building.md](../e9-export/building.md).
+Inventories take a while, so each account caches the last full report at **`{account root}/cache/inventory.json`**. `inventory` only reads that cache. `buildInventoryReport` generates it.
+
+Run inventory before export, before analytics DB loads, or any time you need a warehouse snapshot. What an export contains: [e9-export](../e9-export/SKILL.md). File production: [e9-export/building.md](../e9-export/building.md). MCP: [e9-mcp](../e9-mcp/SKILL.md) `inventory` tool.
 
 ```
-e9 inventoryworker inventory -a <account_id> --definition_path=<bundle>
-e9 exportworker inventory -a <account_id> --definition_path=<bundle>
+e9 inventoryworker inventory -a <account_id>
+e9 inventoryworker buildInventoryReport -a <account_id>
 ```
 
-`-a` is the account id from `accounts.d`. Options are `--snake_case` flags. Full report path is returned as `options_filename`.
+`-a` is the account id from `accounts.d`. Options are `--snake_case` flags. When the cache exists, both `options_filename` and `inventory_path` are `{store_path}/{account_id}/cache/inventory.json`.
 
 Related: export contents [e9-export](../e9-export/SKILL.md); running an export [e9-export/building.md](../e9-export/building.md); timeline entry types [e9-timeline](../e9-timeline/SKILL.md); input metadata [inputs/timeline](../inputs/timeline/SKILL.md).
 
@@ -29,41 +31,53 @@ Related: export contents [e9-export](../e9-export/SKILL.md); running an export [
 
 | Worker | Alias | When to use |
 |--------|-------|-------------|
-| `@engine9/plugins/e9workers:InventoryWorker` | `inventoryworker` | **Preferred** for inventory-only runs (no export coupling). |
-| `@engine9/plugins/e9workers:ExportWorker` | `exportworker` | Same `inventory` method; use when already in an export workflow. |
-
-Both call the same `buildInventoryReport` utility. Bundle **export** still writes `inventory.json5` but passes `statistics: false` so export stays fast (plan only).
+| `@engine9/plugins/e9workers:InventoryWorker` | `inventoryworker` | **Preferred.** `inventory` reads the cache; `buildInventoryReport` writes it. |
+| `@engine9/plugins/e9workers:ExportWorker` | `exportworker` | `inventory` delegates to InventoryWorker (cache lookup only). Bundle **export** still builds a plan-only `inventory.json5` in the export dir (`statistics: false`) and does not overwrite the account cache. |
 
 ## What inventory produces
 
 Two logical parts in one JSON report (`format_version` **2**):
 
 1. **Plan** — what an export *would* write: tables, idv1 files, `relative_path`, transforms, skipped items, totals.
-2. **Statistics** — account-wide **monthly** counts for warehouse timeline views and analytics iteration (standalone inventory only by default).
+2. **Statistics** — account-wide **monthly** counts for warehouse timeline views and analytics iteration (standalone `buildInventoryReport` only by default).
 
-Examples: [examples.md](examples.md).
+Account cache: `{account root}/cache/inventory.json`. Bundle export plan: `{export_dir}/inventory.json5` (statistics omitted). Examples: [examples.md](examples.md).
 
 ## CLI
 
-### Full inventory (plan + statistics)
+### Read the cached inventory
 
-With a bundle definition:
-
-```
-e9 inventoryworker inventory -a <account_id> \
-  --definition_path=engine9-accounts/<org>/<account>/export
-```
-
-Without `definition_path`, inventory uses the **default definition**: person* tables, `segment`, `source_code_dictionary`, `transaction`, `timeline`, and **all input stores** (`input` EQL):
+Does **not** generate a report. Completes immediately.
 
 ```
 e9 inventoryworker inventory -a <account_id>
 ```
 
+If `{account root}/cache/inventory.json` exists, the return value includes `ready: true` and the same path as `options_filename` and `inventory_path`. If it does not, `ready: false` with a message to run `buildInventoryReport`.
+
+`e9 exportworker inventory` is the same cache lookup.
+
+### Build (or refresh) the cache
+
+This is the long-running job. Writes `{account root}/cache/inventory.json`.
+
+With a bundle definition:
+
+```
+e9 inventoryworker buildInventoryReport -a <account_id> \
+  --definition_path=engine9-accounts/<org>/<account>/export
+```
+
+Without `definition_path`, uses the **default definition**: person* tables, `segment`, `source_code_dictionary`, `transaction`, `timeline`, and **all input stores** (`input` EQL):
+
+```
+e9 inventoryworker buildInventoryReport -a <account_id>
+```
+
 ### Plan-only (faster, no monthly statistics)
 
 ```
-e9 inventoryworker inventory -a <account_id> \
+e9 inventoryworker buildInventoryReport -a <account_id> \
   --definition_path=engine9-accounts/<org>/<account>/export \
   --statistics=false
 ```
@@ -73,7 +87,7 @@ Legacy alias: `--coverage=false` (deprecated).
 ### Tables-only override (no bundle definition)
 
 ```
-e9 inventoryworker inventory -a <account_id> \
+e9 inventoryworker buildInventoryReport -a <account_id> \
   --tables=person,transaction \
   --extra_tables=global_message_summary \
   --exclude_tables=setting
@@ -84,16 +98,32 @@ When `--tables` (or `universe` / `input_directories`) is set without `definition
 ### Override input selectors (with a bundle)
 
 ```
-e9 inventoryworker inventory -a <account_id> \
+e9 inventoryworker buildInventoryReport -a <account_id> \
   --definition_path=engine9-accounts/<org>/<account>/export \
   --input_directories='[{"entry_types":["EMAIL_OPEN"],"files":"^opens\\.idv1\\.parquet$"}]'
 ```
 
+## MCP
+
+Prefer the native **`inventory`** tool over `task`:
+
+1. **`command: get`** (default) — same as `InventoryWorker.inventory`. Returns `ready` plus paths/summary.
+2. If `ready: false` (or the user asked to refresh), **`command: build`** — schedules `InventoryWorker.buildInventoryReport` (does not wait). Poll with MCP `task` list/output, then `get` again.
+
+Full report: MCP `file` with `filename: cache/inventory.json` (byte-capped; use `start`/`end` to sample).
+
 ## Return value vs full report
 
-The CLI return value is a **summary** (counts, per-table totals, statistics month range). The **full** inventory is at `options_filename` (under `{store_path}/{account_id}/temp/{date}/`).
+`inventory` and `buildInventoryReport` return a **summary** (counts, per-table totals) plus:
 
-Bundle export embeds the plan in `{export_dir}/inventory.json5` (statistics omitted).
+| Field | Meaning |
+|-------|---------|
+| `ready` | `true` when the cache file exists (or was just written). |
+| `inventory_path` | `{store_path}/{account_id}/cache/inventory.json` |
+| `options_filename` | Same as `inventory_path` when ready; `null` when not ready. |
+| `statistics` | Warehouse monthly statistics when the cache includes them (same block as the file: `tables`, `inputs.by_plugin_entry_type_month`, …). |
+
+The **full** inventory is that cache file. Bundle export still embeds a plan-only copy in `{export_dir}/inventory.json5`.
 
 ## Default definition (no `definition_path`)
 
@@ -107,13 +137,16 @@ Override with `--tables`, `--extra_tables`, `--exclude_tables`, `--input_directo
 
 Implementation: `server/utilities/defaultInventoryDefinition.js`.
 
-## Inventory file format (`inventory.json5`)
+## Inventory file format (`cache/inventory.json` and export `inventory.json5`)
+
+The account cache is JSON. Bundle export still writes JSON5. Same object shape (`format_version` **2**).
 
 ### Top level
 
 | Key | Purpose |
 |-----|---------|
 | `format_version` | Schema version (`2`). |
+| `cached_at` | ISO timestamp when the account cache was written (`buildInventoryReport` only). |
 | `definition_path`, `plugin_path`, `source_directory` | Run context. |
 | `universe` | Resolved bundle universe. |
 | `tables[]` | `{ table, relative_path, records }` plus `transforms` only when non-empty. |
@@ -185,7 +218,8 @@ Export-specific steps (F, G): [e9-export debug](../e9-export/building.md#debug-a
 ## Implementation notes
 
 - Core logic: `server/utilities/inventoryReport.js`, `inventoryStatistics.js`.
-- `InventoryWorker` is registered on `@engine9/plugins/e9workers`.
-- Export bundle runs reuse the plan builder; they do not collect statistics by default.
+- `InventoryWorker.inventory` reads `{account root}/cache/inventory.json`; `InventoryWorker.buildInventoryReport` writes it.
+- `ExportWorker.inventory` delegates to InventoryWorker. Bundle export calls the plan builder with `statistics: false` and writes `{export_dir}/inventory.json5` without touching the account cache.
+- MCP `inventory` `get` / `build` wraps those two methods.
 
 More JSON examples: [examples.md](examples.md).

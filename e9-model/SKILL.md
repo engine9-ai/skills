@@ -132,7 +132,11 @@ supported way to hand-correct one person without changing the model.
 
 Accounts can ship additional models of their own with the same contract and the
 same `model_<name>` prefix rule; they appear alongside these in every read and
-comparison.
+comparison. Some accounts also keep **custom legacy models** as extra
+`{stem}_*` columns on `transaction_model_pivot` (beyond first_touch,
+crm_origin, and last_acquisition). Those stems are discovered from the table
+and omitted when absent; `timelinePerson` `compareSourceCodes` with
+`legacy: true` includes them.
 
 ## 5. The effective date of an entry
 
@@ -270,7 +274,9 @@ LIMIT 20;
 `{prefix}_person_count` / `_revenue` / `_transactions` columns for each model
 that has been run, so disagreement between models is visible in one grid. With
 no arguments it picks each model's top codes by people and by revenue. Available
-over MCP as `timelinePerson` with `command: compareSourceCodes`.
+over MCP as `timelinePerson` with `command: compareSourceCodes`. With
+`legacy: true`, extra `{stem}_*` columns on `transaction_model_pivot` are
+included as custom legacy models when present.
 
 ## 8. Checking one person
 

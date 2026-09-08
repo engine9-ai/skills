@@ -20,8 +20,8 @@ to snake_case, and conflicting dual spellings are rejected.
 
 | Method | What it does |
 |--------|----------------|
-| `inventory` | Same as [e9-inventory](../e9-inventory/SKILL.md) via `exportworker`. Prefer `inventoryworker` for inventory-only runs. |
-| `export` | Unified export: infers mode from `definition_path` and options (bundle dump, one person-search CSV, or tables-only). Writes `inventory.json5` (plan only) when a bundle runs. |
+| `inventory` | Delegates to InventoryWorker: returns the cached `{account root}/cache/inventory.json` if present (`ready: true`), otherwise `ready: false`. Prefer `inventoryworker`. Generate/refresh with `e9 inventoryworker buildInventoryReport`. |
+| `export` | Unified export: infers mode from `definition_path` and options (bundle dump, one person-search CSV, or tables-only). Writes `inventory.json5` (plan only) when a bundle runs; does not write the account inventory cache. |
 
 `exportAll` and `exportTables` were removed; both error with a message to use `export`.
 
@@ -113,7 +113,7 @@ transforms: [{ path: ':transforms:removePII', options: { fields: ['email', 'phon
 Example:
 
 ```
-e9 inventoryworker inventory -a <account_id> --definition_path=engine9-accounts/<org>/<account>/export
+e9 inventoryworker buildInventoryReport -a <account_id> --definition_path=engine9-accounts/<org>/<account>/export
 e9 exportworker export -a <account_id> --definition_path=engine9-accounts/<org>/<account>/export
 ```
 

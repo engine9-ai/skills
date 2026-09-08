@@ -39,7 +39,7 @@ Project `.cursor/mcp.json` may define `engine9.local_noauth` with `Authorization
 
 ## MCP-only discovery
 
-When handling `/e9` or `/e9a` requests, **do not read local workspace code** to discover plugins, worker methods, paths, or options. Local source does not reliably match the connected MCP server or the account's installed plugins. Use MCP tool schemas, MCP `account` (cached as `engine9.plugins`), and MCP `task` / `sql` / `analyze` / `auditPeople` / `timelinePerson` / `file` only. See [e9-mcp — MCP-only discovery](../e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code).
+When handling `/e9` or `/e9a` requests, **do not read local workspace code** to discover plugins, worker methods, paths, or options. Local source does not reliably match the connected MCP server or the account's installed plugins. Use MCP tool schemas, MCP `account` (cached as `engine9.plugins`), and MCP `task` / `sql` / `analyze` / `auditPeople` / `timelinePerson` / `file` / `apiKey` only. See [e9-mcp — MCP-only discovery](../e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code).
 
 ## What this skill covers
 
@@ -173,6 +173,7 @@ Supported forms:
 - `/e9 search foo@bar.com`
 - `/e9 segment list` — MCP `segment` with `command: list`
 - `/e9 segment build <segment_id|definition_path>` — MCP `segment` with `command: build`
+- `/e9 apiKey list` / `/e9 apiKey create …` — MCP `apiKey` (see [e9-api-key](../e9-api-key/SKILL.md))
 - `/e9 task <plugin-path-or-alias> <method> [options...]`
 
 Account/domain create and secrets: use **e9-account** (`cloud-services/e9-account`), not MCP `/e9 domain`.
@@ -219,6 +220,9 @@ Use this for requests like “list current errored tasks”, cross-account job s
 5. `/e9 segment build ...`:
    - Ensure active `account_id` exists.
    - Call MCP `segment` with `command: build` and either `segment_id` or `definition_path` from the user args.
+6. `/e9 apiKey …`:
+   - Catalog needs no account. Other commands need `account_id`.
+   - Call MCP `apiKey`. Never schedule `createApiKey` via `task`. Show plaintext `key` to the user immediately on create/rotate.
 ## `/e9 search` parsing rules
 
 For tokenized arguments after `search`:

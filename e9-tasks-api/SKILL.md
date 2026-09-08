@@ -16,7 +16,7 @@ Use this skill when calling the Task API from scripts, curl, or integrations —
 
 **Deploy / schedule a multi-step flow for one account (identity rebuild, etc.):** follow [deploy-flow.md](./deploy-flow.md) — MCP `task` with `flow_id` (or local `e9 task runFlow` fallback).
 
-When the user is working through **MCP** (not REST/curl), use MCP `account` and MCP `task` per [e9-mcp](../e9-mcp/SKILL.md). This skill is for direct HTTP against the Task API.
+When the user is working through **MCP** (not REST/curl), use MCP `account` and MCP `task` per [e9-mcp](../e9-mcp/SKILL.md). To **create or manage** Task API keys and scopes, use MCP `apiKey` ([e9-api-key](../e9-api-key/SKILL.md)). This skill is for direct HTTP against the Task API.
 
 For designing and building flow JSON5 files (developers only), see [e9-dev-tasks](../e9-dev-tasks/SKILL.md).
 
@@ -101,6 +101,6 @@ Details: [endpoints.md](./endpoints.md).
 | 409 | `PATCH /task_runs/:id` on a RUNNING or terminal run; action not in `allowed_actions` |
 | 410 | Removed listing path — use `POST /task_runs/filter` |
 | 422 | Missing `flow_id` (predefined flow) or `path`+`method` (on-demand task); retry of a RUNNING task without `force`; legacy Mongo status token in a filter |
-| 503 | API or `api_key` table not configured — administrator: `e9 sqlworker createApiKey` |
+| 503 | API or `api_key` table not configured — administrator: MCP `apiKey` create, or `e9 sqlworker createApiKey` |
 
 Full list: [errors.md](./errors.md).

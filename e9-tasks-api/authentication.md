@@ -68,14 +68,16 @@ tasks:read,tasks:schedule
 
 Your administrator creates a key against the account database (plaintext shown once).
 
-**engine9 server (preferred):** `SQLWorker.createApiKey` deploys `api_key` if missing, then inserts the hashed key. Account id comes from `accounts.d` (same as `e9 sqlworker ok`):
+**engine9 server (preferred):** MCP `apiKey` with `command: create` — see [e9-api-key](../e9-api-key/SKILL.md). That path uses `@engine9/core` `SqlApiKeyStore` (hash only) and returns the plaintext once.
+
+CLI equivalent: `SQLWorker.createApiKey` deploys `api_key` if missing, then inserts the hashed key. Account id comes from `accounts.d` (same as `e9 sqlworker ok`):
 
 ```bash
 e9 sqlworker createApiKey -a <account_id> \
   --name partner-tasks --scopes tasks:read,tasks:schedule
 ```
 
-Do not schedule this method via MCP `task` — the plaintext key must not land in task run output.
+Do not schedule this method via MCP `task` — the plaintext key must not land in task run output. Use MCP `apiKey` instead.
 
 **Core-only / D1 sites** (no `e9` CLI):
 
