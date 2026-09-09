@@ -82,14 +82,16 @@ When **any** of these is true, **stop the current workflow immediately** and rep
    - `getPluginMetadata` (e.g. `worker.getPluginMetadata is not a function`)
 3. MCP **`account`** did not return parseable `{ ok: true, plugins: [...] }`
 4. **`structuredContent.safeToRetryAutomatically`** is `false`
+5. An **account or parent is not found** in MCP: `user.accounts` is empty, `account` search `count` is `0` for that id/parent/prefix, or plugins says the account is unknown/unauthorized. **Stop.** Do **not** dig deeper into compiled account catalogs, etc. Account discovery when using MCP should only be through that MCP, not through any other mechanisms.
 
 ### What to do on stop
 
-1. Report the MCP error message verbatim to the user.
+1. Report the MCP error message verbatim to the user (or that MCP `user` / `account` search did not find the account or parent).
 2. Do **not** retry automatically or call downstream tools as a workaround.
 3. Do **not** guess plugin paths or methods when `account` failed — plugin discovery did not succeed.
-4. For **`Cannot connect to the <account_id> database`**: the account database is unreachable; every account-scoped operation will fail the same way until connectivity is restored.
-5. For **`getPluginMetadata`**: plugin metadata loading is broken on this server. **Abort.** That must be fixed before continuing — do not schedule via local `TaskWorker`, SQL `plugin` / `bot_metadata` lookups, guessed `bot_id/submodule` paths, or the REST Task API as a workaround. `account` plugins and `task` schedule both depend on it.
+4. Do **not** open `accounts.d/`, `accounts.compiled.json5`, `account-config.json`, `account.<id>.json5`, `.e9_parameters`, or any other local catalog to “find” ids MCP did not return.
+5. For **`Cannot connect to the <account_id> database`**: the account database is unreachable; every account-scoped operation will fail the same way until connectivity is restored.
+6. For **`getPluginMetadata`**: plugin metadata loading is broken on this server. **Abort.** That must be fixed before continuing — do not schedule via local `TaskWorker`, SQL `plugin` / `bot_metadata` lookups, guessed `bot_id/submodule` paths, or the REST Task API as a workaround. `account` plugins and `task` schedule both depend on it.
 
 ### Examples
 
@@ -115,7 +117,7 @@ In all cases: stop. Do not call `task` or other account tools afterward. For `ge
 
 ## MCP-only discovery — do not use local code
 
-When interacting with an engine9 MCP server, **discover capabilities exclusively from the MCP server**. Do not search, read, or infer behavior from local workspace code (`server/workers/`, `plugins/`, `interfaces/`, etc.).
+When interacting with an engine9 MCP server, **discover capabilities and accounts exclusively from the MCP server**. Do not search, read, or infer behavior from local workspace code (`server/workers/`, `plugins/`, `interfaces/`, etc.).
 
 Local code is an **unreliable** source for MCP work because:
 
@@ -124,11 +126,24 @@ Local code is an **unreliable** source for MCP work because:
 - Worker allowlists, tool schemas, and routing (`remote`, `workers/...` vs plugin paths) are enforced by the **running server**, not by files in the repo.
 - Method names, option keys, and paths in local source may be deprecated, renamed, or not exposed via MCP at all.
 
+### Accounts and parents — MCP only
+
+Account discovery when using MCP should only be through that MCP, not through any other mechanisms.
+
+| Need | MCP source |
+|------|------------|
+| Who am I / which accounts can I use? | `user` (`accounts` map) |
+| Find accounts by prefix, parent, name, type, tags, plugin | `account` `command: "search"` (one call) |
+| One account’s plugins / methods | `account` `command: "plugins"` |
+
+When an account or parent is not found, do NOT dig deeper into compiled account catalogs, etc. Do **not** read `accounts.d/`, `accounts.compiled.json5`, `account-config.json`, `account.<slug>.json5`, `.e9_parameters`, `.e9_config.json5`, or account trees on disk. Report that MCP did not return the account or parent, and stop.
+
 **Use these sources instead:**
 
 | Need | Source |
 |------|--------|
 | Available MCP tools and parameters | MCP tool schemas (client tool descriptors for the connected server) |
+| Account ids, names, parents | MCP `user` / MCP `account` search only |
 | Installed plugins, submodules, methods | MCP `account` → `plugins[].metadata` |
 | Schema / tables / indexes / raw SQL | MCP `sql` (`command`: query, describe, indexes, tables, info, histo, compile_eql) |
 | Schedule or check async work | MCP `task`: on-demand = `path`+`method` (`@engine9/plugins/e9workers:EchoWorker` needs no `account` lookup); predefined flow = `flow_id` slug |
@@ -202,6 +217,7 @@ Two commands:
 - Returns: `{ ok: true, command: "search", count, accounts: [...], warnings, filters, truncated* }`
 - `plugins` filter matches installed plugin `path` / `name` / `table_prefix` substrings (e.g. `["acoustic"]`). Apply `prefix`/`parents` first so DB probes stay bounded.
 - Per-account DB failures go into `warnings` (do not fail the whole search).
+- `count: 0` is the answer. Do **not** fall back to compiled account catalogs to find ids MCP omitted.
 
 Example — accounts matching a prefix with a plugin installed:
 
@@ -551,7 +567,7 @@ For account-specific bots (RENxt, …), discover `path` + `method` from MCP `acc
 
 When the user's request does not map cleanly to a native tool:
 
-1. **Ensure account scope** — `account_id` must be known from **this chat session** (`engine9.account_id` after `/e9a`), an explicit user statement, or MCP `account` search when the user asked you to find matching accounts. If missing, **ask the user** or suggest `/e9a <account_id>` and stop — do not read leftover CLI files (`.e9_parameters`, `.e9_config.json5`, etc.) for scope. If you only know org/prefix/plugin constraints and the user wants discovery, call `account` with `command: "search"` first, then confirm which `account_id` to use.
+1. **Ensure account scope** — `account_id` must be known from **this chat session** (`engine9.account_id` after `/e9a`), an explicit user statement, or MCP `account` search when the user asked you to find matching accounts. If missing, **ask the user** or suggest `/e9a <account_id>` and stop — do not read leftover CLI files or compiled account catalogs for scope. If you only know org/prefix/plugin constraints and the user wants discovery, call `account` with `command: "search"` first. If search returns no accounts, **stop** — do not look up ids on disk.
 2. **Pick the schedule mode:**
    - **Predefined / built-in flow** (`flow_id` such as `identity-rebuild`, or account-published slug): call `task` with `flow_id` only (optional `label`). First task is **paused** by default — resume `paused_task_run_id` to start. See [e9-tasks-api deploy-flow.md](../e9-tasks-api/deploy-flow.md).
    - **On-demand built-in** (`@engine9/plugins/e9workers:<Worker>` such as Echo): call `task` with `path` + `method`. Skip plugin discovery.
@@ -596,7 +612,7 @@ User: "List custom fields on RENxt people for account bfred_lambda_legal"
 
 ## Account-scoped calls
 
-All tools except `ok`, `plugin_id`, and `input_id` require authentication. Account-scoped tools (including `file` and `apiKey` except `command: catalog`) require an `account_id` the signed-in user can access. Do not guess account ids. Do not infer them from leftover local CLI state (`.e9_parameters` and similar) — that is for the `e9` / `e9a` bin scripts only; for MCP, ask for scope or require `/e9a`.
+All tools except `ok`, `plugin_id`, and `input_id` require authentication. Account-scoped tools (including `file` and `apiKey` except `command: catalog`) require an `account_id` the signed-in user can access. Do not guess account ids. Do not infer them from leftover local CLI state or compiled account catalogs — those are for the `e9` / `e9a` bin scripts or the MCP host, not the agent. For MCP, ask for scope, require `/e9a`, or use MCP `account` search. If MCP does not return the account or parent, stop.
 
 ### Parent / all scope — do not fan out DB access
 
@@ -646,6 +662,6 @@ Example — errored flow runs under a parent:
 After [Step 0 — Log in](#step-0--log-in-always-first):
 
 1. Call `user` to confirm signed-in identity and account access.
-2. If account id is unknown, call `account` with `command: "search"` and the known filters (prefix/parent/plugin). Otherwise set scope via `/e9a <account_id>` or call `account` plugins to cache methods.
+2. If account id is unknown, call `account` with `command: "search"` and the known filters (prefix/parent/plugin). If `count` is `0`, **stop** — do not read compiled catalogs. Otherwise set scope via `/e9a <account_id>` or call `account` plugins to cache methods.
 3. Call `search` with a known email to validate account-scoped data access.
 4. For parent/all **remote flow-run** requests, skip step 2–3 per-child probes — use multi-account remote filters only.
