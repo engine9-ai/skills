@@ -205,8 +205,13 @@ So `model_first_touch_person`, `model_first_touch_transaction`,
 
 Amounts and dates stay on `transaction`; the readable code string lives in
 `source_code_dictionary`. There is no shared cross-model table — one set per
-model, on purpose, so models never overwrite each other. Column types:
-[schema.md](schema.md).
+model, on purpose, so models never overwrite each other.
+
+For `source_code_summary` work: join the **stats** tables on `source_code_id`
+when they exist (models are optional per account). Do not replace attributed
+`revenue` with model revenue. Full DDL, shipped prefixes, and optional-join
+rules for developers: [schema.md](schema.md) and
+[developers.md](developers.md#optional-use-from-source_code_summary).
 
 ## 7. Reading the answers
 
@@ -273,10 +278,13 @@ LIMIT 20;
 **Every model, one source code per row:** `compareSourceCodes` returns
 `{prefix}_person_count` / `_revenue` / `_transactions` columns for each model
 that has been run, so disagreement between models is visible in one grid. With
-no arguments it picks each model's top codes by people and by revenue. Available
-over MCP as `timelinePerson` with `command: compareSourceCodes`. With
-`legacy: true`, extra `{stem}_*` columns on `transaction_model_pivot` are
-included as custom legacy models when present.
+no arguments it picks each model's top codes by people and by revenue. When both
+the current first-touch model and legacy first touch are deployed, that auto set
+also includes the top 10 source codes by absolute person_count difference
+(revenue if only transaction stats exist). Available over MCP as
+`timelinePerson` with `command: compareSourceCodes`. With `legacy: true`, extra
+`{stem}_*` columns on `transaction_model_pivot` are included as custom legacy
+models when present.
 
 ## 8. Checking one person
 

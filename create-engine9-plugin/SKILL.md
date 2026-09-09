@@ -77,9 +77,9 @@ Reference: `person_email/README.md`, `person_phone/README.md`, `transaction/core
 
 A **stack** is a metadata-only interface: `name`, `description`, `include`, `exclude`. Core **PluginWorker** (not SchemaWorker) installs stacks: it deploys the plugin table, records the stack as a plugin row, walks `include`, and refuses any path that an already-installed plugin's `metadata.exclude` forbids. SchemaWorker only installs one plugin's schema/row.
 
-`installStandard({ path })` is a convenience whose default `path` is `defaultStackPath` (typically `@engine9/interfaces/stacks/standard`). Pass a different stack (for example `@engine9/interfaces/stacks/limited-pii`) instead of baking stack names into SchemaWorker. Installing limited-pii and then the standard stack without Server must throw.
+`installStandard({ path })` is a convenience whose default `path` is the account default stack (typically `@engine9/interfaces/stacks/standard`). Pass a different stack (for example `@engine9/interfaces/stacks/limited-pii`) instead of baking stack names into SchemaWorker. Installing limited-pii and then the standard stack without Server must throw.
 
-Server `accounts.d` `defaultStack` / `stacks[]` are options fed into PluginWorker; they do not live in core.
+Server `accounts.d` `defaultStack` / `stacks[]` are options fed into PluginWorker; they do not live in core. Server `settings.exclude_pii` (inherited child-first) forces the default stack to limited-pii when it would otherwise be standard, and refuses installing the standard stack or `person_email` / `person_phone` / `person_address` even if those plugins are already installed.
 
 Reference: `stacks/standard/index.js`, `stacks/limited-pii/index.js`.
 
@@ -123,6 +123,25 @@ export default { tables };
 ```
 
 Reference: `message/schema.js` (views, many tables), `person_email/schema.js` (enums), `job/schema.js` (`type: 'enum'`).
+
+### 1b. Join the inbound people pipeline — `metadata.inbound`
+
+Core weaves the people pipeline from the plugins **installed** in an account; it never lists plugin paths. To take part, declare which slot each inbound transform runs in. Values are keys of your `transforms` export:
+
+```javascript
+const metadata = {
+  name: "@engine9/interfaces/example",
+  version: "1.0.0",
+  inbound: {
+    id: ["extractLoyaltyNumber"], // push identifiers[] before person_id assignment
+    upsert: ["upsertMembership"], // queue table rows after person_id assignment
+  },
+};
+```
+
+Slots: `normalize` (field cleanup), `id` (identifier extraction), `upsert` (table writes). Core owns the `assign` phase between `id` and `upsert`. `install` validates the keys exist and that a transform's `type` (`'id'` / `'upsert'`) matches its slot, then snapshots the spec onto the `plugin` row. Nothing else is needed: install the plugin and its steps appear. Verify with `personWorker.getInboundTransforms({ pluginId, describe: true })`.
+
+Reference: `person_email/index.js`, `person_hash/index.js` (PII-free peer of email/phone). Full explanation of slots, the weaver, overrides, and debugging: `@engine9/core/lib/peoplePipeline/README.md`.
 
 ### 2. Transforms — inbound upsert (accumulate rows)
 

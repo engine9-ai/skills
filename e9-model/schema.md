@@ -4,40 +4,118 @@ Read [SKILL.md](SKILL.md) for concepts and [developers.md](developers.md) for th
 
 These tables are the **current** identity-aware model output (`person_id` bigint, `transaction_id` UUID). They are not `source_code_summary.origin_*` — those columns are the legacy origin implementation (old identity).
 
-`ModelWorker.run` deploys these via SchemaWorker (`prefix: false` on each table so PluginWorker’s install counter is not applied).
+`ModelWorker.run` deploys them via SchemaWorker (`prefix: false` on each table so PluginWorker’s install counter is not applied). DDL source: `server/workers/model/schema.js` (`modelResultTables`). Stats are rebuilt from the detail tables by `replaceModelStats` in `server/workers/model/output.js`.
+
+## Shipped prefixes
+
+| Plugin | `metadata.prefix` | Tables created |
+| --- | --- | --- |
+| `@engine9/plugins/models/first_touch` | `model_first_touch` | `model_first_touch_{person,transaction,person_stats,transaction_stats}` |
+| `@engine9/plugins/models/crm_origin` | `model_crm_origin` | `model_crm_origin_{person,transaction,person_stats,transaction_stats}` |
+| `@engine9/plugins/models/last_acquisition` | `model_last_acquisition` | `model_last_acquisition_{person,transaction,person_stats,transaction_stats}` |
+
+Account-specific models use the same `model_<name>` prefix rule and the same four suffixes. Tables exist only after that model has been `run` on the account — probe before joining.
+
+## Four tables per prefix
+
+| Table | Grain | Built when |
+| --- | --- | --- |
+| `{prefix}_person` | one row per `person_id` | `run` (person transform) |
+| `{prefix}_transaction` | one row per `transaction_id` | `run` (transaction transform or person inheritance) |
+| `{prefix}_person_stats` | one row per `source_code_id` | `run` / `loadStats` — `COUNT(*)` from `{prefix}_person` |
+| `{prefix}_transaction_stats` | one row per `source_code_id` | `run` / `loadStats` — rollup of `{prefix}_transaction` (+ `transaction.amount` / refunds when present) |
+
+No shared cross-model table. Join `source_code_dictionary` (or `source_code_summary`) for the code string; join `transaction` on `id = transaction_id` for amount / `ts`.
 
 ## `{prefix}_person`
 
-One model source code per person.
+One model source code per person. Unique on `person_id`; indexed on `source_code_id`.
 
-| Column | Type |
-| --- | --- |
-| `person_id` | `person_id` (bigint), unique |
-| `source_code_id` | `source_code_id` |
-| `date_of_source` | datetime |
-| `reason` | text |
+| Column | Type | Notes |
+| --- | --- | --- |
+| `person_id` | `person_id` (bigint) | = `person.id`, unique |
+| `source_code_id` | `source_code_id` | chosen entry’s code |
+| `date_of_source` | datetime | chosen entry’s effective date (`timeline.ts`) |
+| `reason` | text, nullable | why the rule chose this code |
+| `created_at` | datetime | row write time |
+| `modified_at` | datetime | row write time |
 
 ## `{prefix}_transaction`
 
-One model source code per transaction.
+One model source code per transaction. Unique on `transaction_id`; indexed on `person_id` and `source_code_id`.
 
-| Column | Type |
-| --- | --- |
-| `transaction_id` | UUID = `transaction.id`, unique |
-| `person_id` | bigint |
-| `source_code_id` | `source_code_id` |
-| `date_of_source` | datetime |
-| `reason` | text |
+| Column | Type | Notes |
+| --- | --- | --- |
+| `transaction_id` | UUID | = `transaction.id` (same as `timeline.id` for transaction entries) |
+| `person_id` | `person_id` (bigint) | owner of the transaction |
+| `source_code_id` | `source_code_id` | credit for this transaction (often inherited from the person row) |
+| `date_of_source` | datetime | date of the credited entry |
+| `reason` | text, nullable | why this code was chosen |
+| `created_at` | datetime | row write time |
+| `modified_at` | datetime | row write time |
 
-Amount / `ts` / recurring fields stay on `transaction`.
+Amount / `ts` / recurring fields stay on `transaction` — not duplicated here.
 
-## Stats
+## `{prefix}_person_stats`
 
-`{prefix}_person_stats`: `source_code_id` → `person_count`.
+People acquired per source code. Unique on `source_code_id`.
 
-`{prefix}_transaction_stats`: `source_code_id` → `transactions`, `revenue`, `refund_count`, `refund_amount`, `transaction_unique_person`.
+| Column | Type | Notes |
+| --- | --- | --- |
+| `source_code_id` | `source_code_id` | unique |
+| `person_count` | int | `COUNT(*)` from `{prefix}_person` for this code |
+| `created_at` | datetime | stats rebuild time |
+| `modified_at` | datetime | stats rebuild time |
 
-## Joins
+Closest conceptual replacement for legacy `source_code_summary.origin_people` (when using first-touch / CRM-origin models), but current-identity and per-model — do not overwrite `origin_*` from these without an explicit product decision.
+
+## `{prefix}_transaction_stats`
+
+Lifetime giving of people (or transactions) credited to each source code. Unique on `source_code_id`.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `source_code_id` | `source_code_id` | unique |
+| `transactions` | int | row count in `{prefix}_transaction` for this code |
+| `revenue` | currency | `SUM(transaction.amount)` for those rows (0 if `transaction` is missing) |
+| `refund_count` | int | rows with non-zero `refund_amount` |
+| `refund_amount` | currency | `SUM(transaction.refund_amount)` |
+| `transaction_unique_person` | int | `COUNT(DISTINCT person_id)` among credited transactions |
+| `created_at` | datetime | stats rebuild time |
+| `modified_at` | datetime | stats rebuild time |
+
+Closest conceptual replacement for legacy `source_code_summary.origin_revenue` (and related origin transaction rollups). Again: per-model, current identity, optional when the tables exist.
+
+## Optional use from `source_code_summary`
+
+`source_code_summary` remains the hub for **attribution** (last-click `revenue` / transactions / spend) and dictionary labels. Model LTV / acquisition counts live in `{prefix}_*_stats`. When enriching or reading summary rows, join stats **only if the tables exist** on the account (models are not live and may not have been run).
+
+Join key: `source_code_id`. Prefer the **stats** tables for per-code rollups — do not re-aggregate `{prefix}_person` / `{prefix}_transaction` inside the summary builder unless you need a metric stats does not store.
+
+```sql
+-- Example: first-touch model people + revenue beside attributed revenue
+SELECT
+  scs.source_code_id,
+  scs.source_code,
+  scs.revenue AS attributed_revenue,
+  ft_p.person_count AS model_first_touch_person_count,
+  ft_t.revenue AS model_first_touch_revenue,
+  ft_t.transactions AS model_first_touch_transactions
+FROM source_code_summary scs
+LEFT JOIN model_first_touch_person_stats ft_p
+  ON ft_p.source_code_id = scs.source_code_id
+LEFT JOIN model_first_touch_transaction_stats ft_t
+  ON ft_t.source_code_id = scs.source_code_id;
+```
+
+Rules for that work:
+
+- Probe table presence (or catch missing-table) per prefix; skip missing models.
+- Never treat model revenue as a substitute for attributed `scs.revenue` — different question ([SKILL.md §3](SKILL.md#3-attribution-is-not-a-model)).
+- Do not write into legacy `origin_*` from current `{prefix}_*` unless product explicitly maps one model (usually first touch or CRM origin) into those columns for backward compatibility.
+- After a manual SQL edit of detail tables, call `ModelWorker.loadStats({ model })` (or `prefix`) before trusting stats joins.
+
+## Joins (detail grain)
 
 ```sql
 SELECT p.person_id, d.source_code, p.date_of_source, p.reason
@@ -141,7 +219,7 @@ Legacy `model_id` 1, 2, and 8 map to `model_first_touch`, `model_crm_origin`, an
 
 ## compareSourceCodes (all current models)
 
-`ModelWorker.compareSourceCodes` (`server/workers/model/compare.js`) lists every `model_*_stats` table and returns one row per source code with that model's person_count / revenue / transactions. MCP **`timelinePerson` `command: compareSourceCodes`**. Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` stems (opt-in; conductor currently sets `MODEL_COMPARE_INCLUDE_LEGACY = true`). Custom legacy models are extra `{stem}_*` columns on that table and are included only when present. Returns top-level **`sql`** for the top-N selection queries and each model's stats SELECT.
+`ModelWorker.compareSourceCodes` (`server/workers/model/compare.js`) lists every `model_*_stats` table and returns one row per source code with that model's person_count / revenue / transactions. MCP **`timelinePerson` `command: compareSourceCodes`**. Omit `source_codes` to union each model's top 10 by people and by revenue. When both the current first-touch model and legacy first touch are deployed, also unions the top 10 codes by absolute person_count difference (`top` key `first_touch_vs_legacy`). Pass `legacy: true` to also include `transaction_model_pivot` stems (opt-in; conductor currently sets `MODEL_COMPARE_INCLUDE_LEGACY = true`). Custom legacy models are extra `{stem}_*` columns on that table and are included only when present. Returns top-level **`sql`** for the top-N selection queries and each model's stats SELECT.
 
 ## transaction_model_pivot vs model_*_stats
 

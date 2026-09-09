@@ -82,7 +82,7 @@ Do not schedule this method via MCP `task` — the plaintext key must not land i
 **Core-only / D1 sites** (no `e9` CLI):
 
 ```bash
-npx e9core create-api-key \
+npx e9 create-api-key \
   --db "<account database_connection>" \
   --name "partner-tasks" \
   --scopes tasks:read,tasks:schedule
@@ -91,7 +91,7 @@ npx e9core create-api-key \
 Or print SQL for D1 / migrations:
 
 ```bash
-npx e9core create-api-key --print-sql --name "partner-tasks" --scopes tasks:read,tasks:schedule
+npx e9 create-api-key --print-sql --name "partner-tasks" --scopes tasks:read,tasks:schedule
 ```
 
 Keys are SHA-256 hashed at rest (`api_key` table). Rotate with `SqlApiKeyStore.rotate({ id })` (or recreate + revoke).

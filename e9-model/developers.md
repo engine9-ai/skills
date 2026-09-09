@@ -26,11 +26,12 @@ await model.summarizePeople({ emails: 'a@example.com' });
 | --- | --- | --- |
 | `runPeople` | Result **file** (csv) | Test the person transform |
 | `runTransactions` | Result **file** (csv) | Test the transaction transform. Pass `person_filename` if there is no `transforms.transaction` |
-| `run` | Files **and** `{prefix}_*` tables + stats | Production / account load. Installs the plugin row, then deploys tables from `metadata.prefix` (not the plugin counter prefix) |
+| `run` | Files **and** `{prefix}_*` tables + stats | Production / account load. Installs the plugin row, then deploys tables from `metadata.prefix` (not the plugin counter prefix). Returns `people` / `transactions` / `revenue` totals |
+| `runMany({ models })` | Same as `run`, once per path | Comma-delimited model paths, run in series; returns `{ results }` |
 | `summarizeSourceCodes({ model })` | — | Read `{prefix}_person_stats` and `{prefix}_transaction_stats` (rollup by source code). Alias: `summarize` |
 | `summarizePeople({ emails / person_ids })` | — | UI inspect: timeline + stored rows from every available `model_*` table. Does **not** run models |
 | `inspectPerson({ emails / person_ids })` | — | Conductor / MCP `timelinePerson`: **current** `timeline` / `model_*` only. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` (opt-in; future deployments will drop this). SQL lives in `workers/model` |
-| `compareSourceCodes({ source_codes? })` | — | All current `model_*_stats` by source code. Omit `source_codes` to union each model's top 10 by people and by revenue. Pass `legacy: true` to also include `transaction_model_pivot` (custom legacy models when present) |
+| `compareSourceCodes({ source_codes? })` | — | All current `model_*_stats` by source code. Omit `source_codes` to union each model's top 10 by people and by revenue. When both current first touch and legacy first touch are deployed, also unions the top 10 codes by absolute first-touch difference. Pass `legacy: true` to also include `transaction_model_pivot` (custom legacy models when present) |
 | `loadStats({ model })` | Rebuilds those stats tables | After a manual SQL edit |
 | `summarizePeopleLegacy` / `comparePeopleLegacy` / `summarizeSourceCodesLegacy` / `compareSourceCodesLegacy` | — | Legacy identity only — see [Legacy (old identity)](#legacy-old-identity) |
 
@@ -140,8 +141,26 @@ transaction file).
 No shared `person_model` interface table and no `@engine9/interfaces/model`.
 Join `source_code_dictionary` for the code string; join `transaction` on `id`
 for amount / `ts`. `run` deploys these through SchemaWorker with `prefix: false`
-per table so PluginWorker's install counter is not applied. Columns:
-[schema.md](schema.md).
+per table so PluginWorker's install counter is not applied. Full column DDL,
+indexes, and how stats are computed: [schema.md](schema.md).
+
+### Optional use from `source_code_summary`
+
+`source_code_summary` owns **attribution** rollups and dictionary labels. Model
+acquisition / LTV rollups live in `{prefix}_person_stats` and
+`{prefix}_transaction_stats`. When updating summary builders or readers to
+surface model numbers:
+
+1. Probe whether each model's stats tables exist (they appear only after
+   `ModelWorker.run` for that prefix).
+2. `LEFT JOIN` on `source_code_id` — prefer stats over re-aggregating detail.
+3. Keep attributed `revenue` / transactions separate from model `revenue` /
+   `person_count`; never sum them.
+4. Do not fill legacy `origin_*` from `{prefix}_*` unless product explicitly
+   maps one model into those columns for compatibility.
+
+Concrete table list, column types, and a join example:
+[schema.md § Optional use from source_code_summary](schema.md#optional-use-from-source_code_summary).
 
 ## Writing a model
 
@@ -279,8 +298,12 @@ artifact. It reads **every** current `model_*_person_stats` /
 
 When `source_codes` is omitted, each model contributes its **top 10 source codes
 by `person_count` and top 10 by `revenue`**; the comparison uses the union.
-Tokens containing `%` use SQL `LIKE`. Pass `legacy: true` to also read
-`transaction_model_pivot`. That table always has the three shipped stems;
+When both `model_first_touch_*` and `transaction_model_pivot.first_touch_*` are
+deployed (and `legacy: true`), the union also includes the **top 10 source codes
+by absolute first-touch difference** (`person_count`, or `revenue` if only
+transaction stats exist). Tokens containing `%` use SQL `LIKE`. Pass
+`legacy: true` to also read `transaction_model_pivot`. That table always has the
+three shipped stems;
 **custom legacy models** appear as extra `{stem}_*` columns on some accounts
 and are included only when present.
 

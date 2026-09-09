@@ -29,7 +29,7 @@ For the element catalog, see [elements.md](elements.md). For conversion-tracking
 | `source_code_dictionary` | One row per unique source code; parsed elements, format match, last used |
 | `message_source_code` | Source codes extracted from loaded messages (links / primary code), with `publish_date` |
 | `source_code_summary` | Per-code rollups: last-click attributed transactions/revenue (attribution), spend. Also **legacy** `origin_*` (old identity) — current models are `{prefix}_*` ([e9-model](../e9-model/SKILL.md)) |
-| `global_message_summary` | Per-message rollups including `attributed_revenue` and `attributed_transactions` |
+| `global_message_summary` | Per-message rollups including `attributed_revenue` and `attributed_transactions` — how to read the views: [e9-global-message](../e9-global-message/SKILL.md) |
 | `transaction_summary` | Loaded transactions with `transaction_source_code`, `ts`, `amount`, `recommended_message_id` |
 | `transaction` | Base conversion rows; `source_code_id`, overrides, `recommended_message_id` / `final_message_id` |
 | `message` | `primary_source_code`, `primary_source_code_override`, `final_primary_source_code`, `publish_date` |

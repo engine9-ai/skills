@@ -12,7 +12,7 @@ These examples follow `assignPersonIds` in `@engine9/core/lib/id/index.js` after
 { email: 'alice@example.com', given_name: 'Alicia' }
 ```
 
-**Extract** (`person_email:transforms:id`): trim, lowercase for hashing only (`alice@example.com`), SHA-256 → `email_hash_v1`. The stored `person_email.email` keeps the original trimmed spelling on first insert.
+**Extract** (`person_email:transforms:extractEmailHashes`): trim, lowercase for hashing only (`alice@example.com`), SHA-256 → `email_hash_v1`. The stored `person_email.email` keeps the original trimmed spelling on first insert.
 
 **First load:** no store hit → insert `person` (say `id = 41`) → insert lookup `email_hash_v1` → 41 → insert `person_email`.
 
@@ -38,7 +38,7 @@ Emails shorter than 5 characters are not identifiers. The SHA-256 of an empty st
 { cell: '12025550143', given_name: 'Patricia' }  // same person, later file
 ```
 
-**Extract** (`person_phone:transforms:id`):
+**Extract** (`person_phone:transforms:extractPhoneHashes`):
 
 - Prefer `cell` / `mobile` / `mobile_phone` when `phone` is empty.
 - Strip to digits/`+`. Length 10 → `+12025550143`. Length 11 starting with `1` → `+12025550143`.
@@ -66,7 +66,7 @@ Two inbound rows in the **same batch** with the same normalized phone share a `t
 { remote_person_id: 'aaaaaa', email: 'aaaaa@aaaaa.com' }     // same remote, case
 ```
 
-**Extract** (`person_remote:transforms:id`): value becomes `{pluginId}.{remote_person_id}` lowercased, unless the inbound value already starts with a UUID + `.`.
+**Extract** (`person_remote:transforms:extractRemotePersonIds`): value becomes `{pluginId}.{remote_person_id}` lowercased, unless the inbound value already starts with a UUID + `.`.
 
 `aaaaaaaa-…eeee.123425385` is one lookup key. Both email rows resolve to the same `person_id`. After assignment, **both** emails are upserted onto that person (`person_email` allows many emails per `person_id`). That is the current model: one CRM constituent, many addresses.
 

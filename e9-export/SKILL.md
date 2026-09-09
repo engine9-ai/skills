@@ -69,6 +69,8 @@ Table parquet is a dump of the named warehouse table at export time. Columns mat
 | `person_email` | Emails on a person (`email`, `subscription_status`, `email_hash_v1`) | `person_id` |
 | `person_phone` | Phones (`phone`, `sms_status`, `call_status`) | `person_id` |
 | `person_address` | Postal addresses | `person_id` |
+| `person_hash_email` | Email match keys only (`email_hash_v1`, `email_hash_md5`) — no plaintext | `person_id` |
+| `person_hash_phone` | Phone match keys only (`phone_hash_v1`, `phone_hash_md5`) — no plaintext | `person_id` |
 | `person_remote` | Vendor/CRM id for a plugin (`remote_person_id`, `source_input_id`) | `source_input_id` → `input.id` → `plugin` — [e9-person-remote](../e9-person-remote/SKILL.md) |
 | `transaction` | Payments: `id`, `ts`, `person_id`, `input_id`, `amount`, `entry_type_id`, `source_code_id`, `recommended_message_id` | Person, input, source code, message |
 | `source_code_dictionary` | One row per code (`source_code_id`, `source_code`) | `transaction.source_code_id`, timeline `source_code_id` |
@@ -77,7 +79,7 @@ Table parquet is a dump of the named warehouse table at export time. Columns mat
 | `global_message_summary` / `_by_date` | Per-message rollups (sends, attributed revenue; daily spend/impressions) | Message / plugin |
 | `timeline` | Warehouse entry log (when the bundle includes it): `id`, `ts`, `person_id`, `entry_type_id`, `input_id` | Same keys as idv1 rows |
 
-Identity: [e9-person-id](../e9-person-id/SKILL.md). One person may have many emails, phones, and remotes. Do not treat `email` as a person key.
+Identity: [e9-person-id](../e9-person-id/SKILL.md). One person may have many emails, phones, remotes, and hashes. Do not treat `email` as a person key. Hash-only accounts typically ship `person_hash_email` / `person_hash_phone` and omit plaintext contact tables from the default export when `settings.exclude_pii` is set (an explicit `tables` list is an operator override).
 
 Say **transaction**, never donation. Revenue questions use `transaction` (and summary tables), not timeline `TRANSACTION_*` rows.
 

@@ -73,6 +73,7 @@ A **flow run** is one execution of a predefined flow **or** the wrapper around a
 | `last_completed` | When this flow run last finished |
 | `dataflow_last_completed` | When any run of the same dataflow last finished |
 | `completed_since` | See [Completed since](#completed-since) |
+| `tags` | Prefect name for Frakture **`tracking_code`** — at most one string, as `["code"]`. See [Flow-run tags](#flow-run-tags-tracking_code) |
 | `task_runs` | Array of task runs created with this flow run (on create response) |
 
 One flow run typically creates **one task run per task** in the flow definition.
@@ -107,6 +108,22 @@ It is `true` when `dataflow_last_completed` exists and this flow run either neve
 Use it on `GET /flow_runs/:id` / `POST /task_runs/filter` responses, or as a filter on `POST /flow_runs/filter` (`{ "completed_since": true }`).
 
 Do **not** treat a stored `dataflow_completed_since_last_update` value as the source of truth.
+
+### Flow-run tags (`tracking_code`)
+
+Prefect **`tags` on a flow run** map to Frakture **`tracking_code`**: one string on the remote-legacy job list, used to group related runs. This is **not** flow-definition `tags` on `GET /flows` / `POST /flows/filter`. OrderBot / Mongo storage is unchanged — the remote-legacy Task API only aliases the Prefect name.
+
+| | Behavior |
+|--|--|
+| **Storage** | Single string. `tags: ["batch-1"]` is stored as `tracking_code: "batch-1"`. Extra tags on write are ignored. |
+| **Reads** | Flow run includes `tags: ["batch-1"]` (or `[]`) and `tracking_code`. |
+| **Schedule** | `POST /tasks/schedule` and `POST /flow_runs/` accept `tags` or `tracking_code`. Explicit `tracking_code` wins if both are sent. |
+| **Filter** | `POST /flow_runs/filter` accepts `tags` / `flow_runs.tags.any_` (OR) / `all_` (single tag) / `is_null_`, plus `tracking_code`. |
+| **Search** | `POST /flow_runs/filter` `search` / `q` — case-insensitive substring on flow name, task name, method, or plugin/bot path. |
+
+**Not supported:** tags on **task runs**; `POST /task_runs/filter` by tags; `PATCH` to change tags; multiple stored tags (`all_` with two distinct values matches nothing); mapping flow-definition tags to `tracking_code`.
+
+Third-party Prefect clients should send **one** flow-run tag. `tracking_code` remains a valid alias.
 
 ## Task (step)
 

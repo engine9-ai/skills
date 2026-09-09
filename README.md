@@ -20,6 +20,7 @@ Public skills for working with engine9 deployments.
 | Timeline files *(plugins)* | [inputs/timeline/SKILL.md](./inputs/timeline/SKILL.md) | Timeline ID vs Raw file shapes and `@engine9/input-tools` helpers |
 | Transaction mapping | [inputs/transaction-mapping/SKILL.md](./inputs/transaction-mapping/SKILL.md) | Map 3rd-party payment data into the Transaction schema |
 | Source codes | [e9-source-code/SKILL.md](./e9-source-code/SKILL.md) | Dictionary, parsing, last-click attribution (transaction ↔ message), overrides |
+| Global message tables | [e9-global-message/SKILL.md](./e9-global-message/SKILL.md) | Read/consume `global_message_summary` (+ `_by_date`): identity, plugin (`bot_*`), engagement, `attributed_*` |
 | Models | [e9-model/SKILL.md](./e9-model/SKILL.md) | Timeline long-term value in `{prefix}_*` tables (new identity). Not `source_code_summary.origin_*` (legacy) |
 | Person identity (`person_id`) | [e9-person-id/SKILL.md](./e9-person-id/SKILL.md) | How a quality `person_id` is chosen from email, phone, `remote_person_id`; `person_id_*` vs `person_identifier`; old `person_metadata` / `person_id_int` model |
 | `person_remote` | [e9-person-remote/SKILL.md](./e9-person-remote/SKILL.md) | Plugin-scoped remotes table; written by `loadPeople` / `idFiles` (not timeline); export search joins `input.plugin_id` |

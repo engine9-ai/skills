@@ -44,9 +44,9 @@ Empty export / segment for “Tatango remotes ∩ transactions” almost always 
 `person_remote` is upserted inside the **inbound people pipeline**, after `person_id` is assigned:
 
 ```
-… → person_remote:transforms:id     # extract remote_person_id → identifiers
+… → person_remote:transforms:extractRemotePersonIds  # extract remote_person_id → identifiers
   → … appendInputId / appendPersonId …
-  → person_remote:transforms:upsert # requires pluginId; needs remote_person_id + person_id + input_id
+  → person_remote:transforms:upsertPersonRemote # requires pluginId; needs remote_person_id + person_id + input_id
   → sql.tables.upsert
 ```
 
@@ -108,8 +108,8 @@ await personWorker.loadPeople({
 
 ### Extract / upsert details
 
-- **Extract** (`person_remote:transforms:id`): builds lookup key `{pluginId}.{remote_person_id}` lowercased, unless the inbound value already starts with a UUID + `.`.
-- **Upsert**: looks up existing remotes for **this `pluginId`** via `person_remote` ⨝ `input`; inserts with `source_input_id = row.input_id`, or updates the existing row for the same person+remote under that plugin.
+- **Extract** (`person_remote:transforms:extractRemotePersonIds`): builds lookup key `{pluginId}.{remote_person_id}` lowercased, unless the inbound value already starts with a UUID + `.`.
+- **Upsert** (`person_remote:transforms:upsertPersonRemote`): looks up existing remotes for **this `pluginId`** via `person_remote` ⨝ `input`; inserts with `source_input_id = row.input_id`, or updates the existing row for the same person+remote under that plugin.
 - Rows lacking `remote_person_id` or `person_id` are skipped by upsert.
 
 ## Outbound / exports

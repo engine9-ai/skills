@@ -91,23 +91,24 @@ Code: `@engine9/interfaces/person_email|person_phone|person_remote/transforms/in
 
 ## Inbound pipeline
 
-Shared by server `PersonWorker.loadPeople` (streams/files) and core `PersonWorker.processPeople` (in-memory). Built by `buildInboundTransforms` in `@engine9/core/lib/peoplePipeline/getInboundTransforms.js`.
+Shared by server `PersonWorker.loadPeople` (streams/files) and core `PersonWorker.processPeople` (in-memory). Woven by `buildInboundTransforms` in `@engine9/core/lib/peoplePipeline/getInboundTransforms.js` from the plugins **installed in the account** — core has no list of person plugins. Each people interface declares `metadata.inbound = { slot: [transformKey] }`; the snapshot is stored on `plugin.transforms` at install.
+
+Slots, in order (`assign` is core-only):
 
 ```
-beforeAll (extra)
-  → person.normalizeFieldNames          # lowercase keys, strip punctuation
-  → person_remote:transforms:id         # remote_person_id identifier
-  → person_email:transforms:id          # email_hash_v1
-  → person_phone:transforms:id          # phone_hash_v1
-  → beforeIdentity (delegate; optional person_hash)
-  → person.appendInputId
-  → person.appendPersonId               # assignPersonIds — THE identity step
-  → person.appendEntryTypeId
-  → person.validateSourceCodeAscii / appendSourceCodeId   # not person identity
-  → beforeUpsert
-  → upsert person, person_remote, person_email, person_phone, person_address
-  → afterAll
+beforeAll  extra
+normalize  person:normalizeFieldNames                       # lowercase keys, strip punctuation
+id         person_email / person_phone / person_remote :id   # identifiers[]; person_hash:id when installed
+id         core  person.extractDelegateIdentifiers           # core client only
+assign     core  appendInputId → appendPersonId → appendEntryTypeId → source code steps
+upsert     person / person_address / person_email / person_phone / person_remote :upsert
+           (+ person_custom per table_prefix, person_hash when installed)
+afterAll   extra
 ```
+
+Woven steps in a slot run in path order, then any `extraTransforms` for that slot. `omitTransforms` drops a path for one job. A limited-pii account has no `person_email` / `person_phone` / `person_address` rows, so those steps do not exist there.
+
+See the chain for an account: `personWorker.getInboundTransforms({ pluginId, describe: true })` prints one `slot source path` line per step (also logged at debug by `loadPeople` / `processPeople`).
 
 `doNotUpsert` / `do_not_upsert`: run extracts + lookup only. Existing people resolve; unknown rows stay without `person_id`; no inserts.
 

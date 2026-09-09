@@ -56,7 +56,7 @@ curl $CURL_TLS -sS -X POST \
 |-------|----------|-------------|
 | `path` + `method` | **Yes** | On-demand plugin path + worker method. Built-in: `@engine9/plugins/e9workers:EchoWorker` + `echo`. |
 | `options` | No | Options object for the worker method |
-| `label`, `tracking_code`, `start_after_timestamp` | No | Schedule metadata |
+| `label`, `tags`, `tracking_code`, `start_after_timestamp` | No | Schedule metadata. **`tags`** is the Prefect name for Frakture `tracking_code` (one string; first tag only). See [concepts.md — flow-run tags](./concepts.md#flow-run-tags-tracking_code) |
 | `remote` | No | Default `true` (remote execution); `false` for local workers |
 
 **Response:** `{ ok: true, action: "schedule", result: { flow_run_id, task_run_ids, … } }`
@@ -97,7 +97,7 @@ Each object includes:
 | `id` | **Flow slug** — pass this as `flow_id` when scheduling |
 | `name` | Display name |
 | `flow_id` | Stable UUID (do **not** use for scheduling) |
-| `tags` | Optional labels for filtering |
+| `tags` | Optional labels on the **flow definition** (template). Filter with `POST /flows/filter`. **Not** the same as flow-run tags / `tracking_code` — see [concepts.md — flow-run tags](./concepts.md#flow-run-tags-tracking_code) |
 | `tasks[]` | Ordered steps with `task_key`, `worker_path`, `worker_method`, default `options` |
 
 An empty array `[]` means no flows are published for this account (on-demand tasks via `POST /tasks/schedule` still work).
@@ -130,7 +130,7 @@ curl $CURL_TLS -sS -X POST \
   "$BASE_URL/flows/filter"
 ```
 
-**Filter by tags:**
+**Filter by tags** (flow **definition** labels — not flow-run `tracking_code`):
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -238,7 +238,7 @@ curl $CURL_TLS -sS -X POST \
 | `name` / `label` | No | Display label for the run |
 | `options` | No | Merged into **every** task's `options` (e.g. shared `start` / `end`) |
 | `tasks` | No | Per-step overrides `{ task_key, options }` or a full replacement task list `{ path, method, options }` |
-| `tracking_code`, `start_after_timestamp` | No | Schedule metadata (defer entire run — not the same as worker `start`/`end` options) |
+| `tags`, `tracking_code`, `start_after_timestamp` | No | Schedule metadata (defer entire run — not the same as worker `start`/`end` options). **`tags`** maps to Frakture `tracking_code` (one tag). Not flow-definition tags |
 | `remote` | No | Default `true` |
 
 **Response:** `scheduleTasks` result (`flow_run_id`, `task_run_ids`, …).
@@ -359,7 +359,39 @@ curl $CURL_TLS -sS -X POST \
 
 Prefect-shaped alias: `"flow_runs": { "completed_since": { "eq_": true } }`.
 
-Each flow run in the response includes `account_id`, **`parent_account_id`**, **`parent_ids`**, `completed_since`, `last_completed`, and `dataflow_last_completed`.
+**Filter by flow-run tags (`tracking_code`):**
+
+Prefect `tags` on a **run** are Frakture `tracking_code` (one string). This is not `POST /flows/filter` definition tags. Only the first tag is stored. Task-run listing does **not** filter by tags.
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flow_runs": { "tags": { "any_": ["batch-1"] } },
+    "limit": 50
+  }' \
+  "$BASE_URL/flow_runs/filter"
+```
+
+Flat aliases: `{ "tags": "batch-1" }` or `{ "tracking_code": "batch-1" }`.
+
+**Free-text search** (flow name, task name, method, or plugin/bot path):
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "search": "EchoWorker",
+    "limit": 50
+  }' \
+  "$BASE_URL/flow_runs/filter"
+```
+
+Aliases: `"q": "…"`, or `"flow_runs": { "search": { "like_": "…" } }`. Case-insensitive substring; special regex characters are treated literally.
+
+Each flow run in the response includes `account_id`, **`parent_account_id`**, **`parent_ids`**, `completed_since`, `last_completed`, `dataflow_last_completed`, **`tags`**, and `tracking_code`.
 
 - `parent_account_id` is the first id in the owning account's `parent_ids` (`null` if the account has no parent).
 - `parent_ids` is the full array from the account document (an account can have more than one parent).
