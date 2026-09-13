@@ -20,7 +20,7 @@ to snake_case, and conflicting dual spellings are rejected.
 
 | Method | What it does |
 |--------|----------------|
-| `inventory` | Delegates to InventoryWorker: returns the cached `{account root}/cache/inventory.json` if present (`ready: true`), otherwise `ready: false`. Prefer `inventoryworker`. Generate/refresh with `e9 inventoryworker buildInventoryReport`. |
+| `inventory` | Delegates to InventoryWorker: stats `{account root}/cache/inventory.json.gz` (`ready: true` if present). Prefer `inventoryworker`. Generate/refresh with `e9 inventoryworker buildInventoryReport`. |
 | `export` | Unified export: infers mode from `definition_path` and options (bundle dump, one person-search CSV, or tables-only). Writes `inventory.json5` (plan only) when a bundle runs; does not write the account inventory cache. |
 
 `exportAll` and `exportTables` were removed; both error with a message to use `export`.

@@ -7,7 +7,7 @@ Build the keys screen from MCP `apiKey`. Do not query `api_key` with MCP `sql` a
 1. **`command: catalog`** — permissions checklist, field list, and plaintext rules. Cache for the session.
 2. **`command: list`** + `account_id` — table of keys (name, scopes, active, expires_at, timestamps). No secret column.
 3. **Create** — form from `catalog.fields` where `create: true`. `scopes` is required (`required_on_create`). On success, show a **copy-once** dialog for `key` (`shown_once: true`). Never persist that value in app storage.
-4. **Edit permissions** — `command: update` with `id` plus changed fields. Scope edits do not issue a new secret.
+4. **Edit permissions** — `command: update` with `id` plus changed fields. Scope edits do not issue a new secret. `default_role_id` and `expires_at` are optional: omit them on create, or send `null` on update, for **None** (no assumed role; does not expire). Do not send empty strings.
 5. **Rotate** — confirm, then `command: rotate`. Same copy-once dialog. Old id is in `revokedId`.
 6. **Revoke** — `command: revoke`. Row stays on list with `active: false` unless you pass `include_inactive: false` or `active: true`.
 

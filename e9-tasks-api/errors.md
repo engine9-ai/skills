@@ -167,7 +167,7 @@ Prefect task run state updates: [Set Task Run State](https://docs.prefect.io/v3/
 | 422 | Body missing `flow_run_ids` (or `flow_runs.id`) |
 | 503 | Archive/retry backend not reachable/configured on the server |
 
-These mutate existing flow runs. The `result` field of the 200 body reflects which runs the remote server actually archived or retried.
+These mutate existing flow runs. The `result` field of the 200 body reflects which runs the remote server actually archived or retried. Without `parent_account_id` / `account_ids`, a 200 can omit ids not owned by the account header. Pass those flags after a parent/all list so one POST spans children ([endpoints](./endpoints.md#post-flow_runsarchive)).
 
 ### `POST /task_runs/filter`
 

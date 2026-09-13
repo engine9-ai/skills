@@ -37,7 +37,7 @@ An on-demand task does **not** need a `flow_id`. A predefined flow does **not** 
 
 | Doc | Use when |
 |-----|----------|
-| [concepts.md](./concepts.md) | Terminology: flows, runs, IDs, async execution, `completed_since` |
+| [concepts.md](./concepts.md) | Terminology: flows, runs, IDs, async execution, `completed_since`, checkpoints |
 | [authentication.md](./authentication.md) | **API keys (`e9key_…`), scopes (`tasks:read` / `tasks:schedule`), account header** |
 | [getting-started.md](./getting-started.md) | First requests in five minutes |
 | [**deploy-flow.md**](./deploy-flow.md) | **Check + schedule a built-in/account flow for one account (MCP or CLI) — start here for identity rebuild etc.** |
@@ -67,8 +67,8 @@ Follow [echo-walkthrough.md](./echo-walkthrough.md) end to end: **ask the user f
    - **On-demand task:** `POST /tasks/schedule` with `{ "path": "@engine9/plugins/e9workers:EchoWorker", "method": "echo", "options"? }`. Built-in workers: `@engine9/plugins/e9workers:<Worker>` (no plugin lookup). Account plugins: path from discovery, then this endpoint. Optional flow-run **`tags`** (Prefect name for Frakture `tracking_code`, one string). See also `POST /flow_runs/`.
    - **Predefined flow:** `GET /flows` then `POST /flow_runs/` with `{ "flow_id": "<slug>", "options"? }` — optional top-level `options` (e.g. `start` / `end`) merges into every step; optional `tasks: [{ task_key, options }]` for per-step overrides. `flow_id` is required. Optional `tags` same as on-demand (not flow-definition tags). See also `POST /tasks/schedule`.
    → save `flow_run_id` / `task_run_ids`
-4. `POST /task_runs/filter` — `{ "flow_run_id": "…" }` until complete (each `task_run` includes **`log_link`**)
-4. Remote output: `GET /task_runs/:id` (`output`, `resolved_options`) or `GET /task_runs/:id/output`. Logs: `GET /task_runs/:id/log` (`log`, `truncated`, optional `log_url`). Per-task **Run now**: `POST /task_runs/:id/retry`.
+4. `POST /task_runs/filter` — `{ "flow_run_id": "…" }` until complete (each `task_run` includes **`log_link`**; no `checkpoints`)
+5. Remote output: `GET /task_runs/:id` (`output`, `resolved_options`, **`checkpoints`**) or `GET /task_runs/:id/output`. Logs: `GET /task_runs/:id/log` (`log`, `truncated`, optional `log_url`). Per-task **Run now**: `POST /task_runs/:id/retry`. Checkpoints are worker-written option snapshots and appear only on this single-task read — not on `POST /task_runs/filter`.
 
 Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
 
@@ -79,10 +79,11 @@ Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
 | GET | `/flows`, `/flows/:id` | `tasks:read` |
 | POST | `/flows/filter` | `tasks:read` |
 | POST | `/tasks/schedule` | `tasks:schedule` |
+| POST | `/tasks/describe` | `tasks:read` |
 | POST | `/flow_runs/` | `tasks:schedule` |
 | GET | `/flow_runs/:id` | `tasks:read` |
 | POST | `/flow_runs/filter` | `tasks:read` |
-| POST | `/flow_runs/archive`, `/flow_runs/retry` | `tasks:schedule` |
+| POST | `/flow_runs/archive`, `/flow_runs/retry` | `tasks:schedule` (bulk `flow_run_ids`; add `parent_account_id` to span children — [archive](./endpoints.md#post-flow_runsarchive)) |
 | POST | `/flow_runs/:id/set_state` | `tasks:schedule` |
 | GET | `/task_runs/:id`, `/task_runs/:id/log`, `/task_runs/:id/output` | `tasks:read` |
 | POST | `/task_runs/filter` | `tasks:read` |

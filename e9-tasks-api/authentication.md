@@ -56,7 +56,7 @@ Prefixes: `e9key_…` for normal scopes; `e9publickey_…` when the key includes
 | `POST /task_runs/:id/retry`, `/pause`, `/resume`, `/stop` | `tasks:schedule` |
 | `PATCH /task_runs/:id` | `tasks:schedule` |
 
-`POST /flow_runs/archive` and `POST /flow_runs/retry` use the **same identity as listing** (`POST /flow_runs/filter`). A `user_id` is **not** a request field and is **not** required — callers that can list can archive/retry.
+`POST /flow_runs/archive` and `POST /flow_runs/retry` use the **same identity as listing** (`POST /flow_runs/filter`). A `user_id` is **not** a request field and is **not** required — callers that can list can archive/retry. For parent/all, send `parent_account_id` or `account_ids` in the body so one POST can span children. See [endpoints — archive](./endpoints.md#post-flow_runsarchive).
 
 For a partner that discovers flows and schedules tasks, issue a key with both:
 

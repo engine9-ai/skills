@@ -45,7 +45,7 @@ Success responses use JSON text in `content` with `{ ok: true, ... }`. Failures 
 
 Tools that run warehouse SQL include a top-level **`sql`** field so you can debug without reconstructing statements. Prefer this over guessing SQL.
 
-**Array form** (`timelinePerson`, `auditPeople`, and any multi-query tool):
+**Array form** (`timelinePerson` and any multi-query tool):
 
 ```json
 {
@@ -72,7 +72,7 @@ When diagnosing timeline or model results, read `sql` first. Do not re-invent th
 
 ### Hard stop — do not continue
 
-When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `inventory`, `auditPeople`, `timelinePerson`, `chat`, `file`, `apiKey`, etc.).
+When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `inventory`, `timelinePerson`, `chat`, `file`, `apiKey`, etc.).
 
 1. Tool result has **`isError: true`**
 2. Response text matches a fatal pattern (even when only plain text is visible):
@@ -148,8 +148,7 @@ When an account or parent is not found, do NOT dig deeper into compiled account 
 | Schema / tables / indexes / raw SQL | MCP `sql` (`command`: query, describe, indexes, tables, info, histo, compile_eql) |
 | Schedule or check async work | MCP `task`: on-demand = `path`+`method` (`@engine9/plugins/e9workers:EchoWorker` needs no `account` lookup); predefined flow = `flow_id` slug |
 | Analyze / summarize / profile table contents | MCP `analyze` (uses `tables` then `analyze`) |
-| Account people / identity / timeline / model health | MCP `auditPeople` |
-| Person timeline + models (current and legacy) | MCP `timelinePerson` (`command: inspect`) |
+| Account / person timeline + identity / model health | MCP `timelinePerson` (`command: inspect`) |
 | Compare current (and opt-in legacy, including custom legacy models) model scores by source code | MCP `timelinePerson` (`command: compareSourceCodes`) |
 | Date histogram on indexed datetime column | MCP `sql` with `command: "histo"` |
 | List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
@@ -168,8 +167,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | List plugins / methods on one account | `account` with `account_id` (or `command: "plugins"`) |
 | Search people by email, phone, name, or id | `search` |
 | List available person-search form options for an account | `searchOptions` |
-| Account people / timeline / identity / model health check | `auditPeople` |
-| Person timeline + stored models (current and legacy) | `timelinePerson` |
+| Account / person timeline + identity / model health | `timelinePerson` (`command: inspect`) |
 | Compare current `model_*_stats` (and opt-in pivot, including custom legacy models) by source code | `timelinePerson` with `command: "compareSourceCodes"` |
 | List segments, load segment detail, or schedule segment builds | `segment` |
 | Read or schedule account warehouse inventory | `inventory` (`get` first; `build` only if not ready) |
@@ -183,8 +181,9 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Create / list / update / rotate / revoke API keys and scopes | `apiKey` — see [e9-api-key](../e9-api-key/SKILL.md). Never via `task` |
 | Run an on-demand plugin method | `task` with `path` + `method`. Built-in: `@engine9/plugins/e9workers:EchoWorker` + `echo` (no `account` lookup). Other plugins: discover via `account` first |
 | Run a published flow (predefined) | `task` with `flow_id` (slug from REST `GET /flows`) — no `path`/`method` |
-| Archive or retry flow runs / job lists | `task` with `action: "archive"` or bulk `"retry"` (`flow_run_ids`) |
-| Pause / resume / retry a task run, edit options, fetch log/output | `task` with `action: "pause"` / `"resume"` / `"retry"` (`task_run_id`) / `"updateOptions"` / `"log"` / `"output"` |
+| Archive or retry flow runs / job lists | `task` with `action: "archive"` or bulk `"retry"` (`flow_run_ids`). One call for all ids. After a parent/all list, pass the same `parent_account_id` — [bulk archive](#bulk-archive--retry-of-flow-runs) |
+| Pause / resume / retry a task run, edit options, fetch log/output/checkpoints | `task` with `action: "pause"` / `"resume"` / `"retry"` (`task_run_id`) / `"updateOptions"` / `"log"` / `"output"` / `"get"` (`checkpoints` only on `get`) |
+| Method option schema for a plugin path (Options form) | `task` with `action: "describe"` and `path` (same naming as schedule; `method` optional) |
 
 `task` is the **catch-all** for behaviors that do not have a native MCP call. Do not reach for `task` when a native tool already covers the request with equal or better fidelity.
 
@@ -213,8 +212,9 @@ Two commands:
 **`command: search`** — find accessible accounts in **one call** using config filters and optional installed-plugin probes. Prefer this over `user` + many per-account plugin loads when the question is “which accounts match …?”.
 
 - Requires at least one filter: `prefix` / `prefixes`, `parents`, `ids`, `name`, `type`, `tags`, or `plugins`
-- Optional: `recursive` (with `parents`), `include_disabled`, `include_plugins`, `limit` (default 50), `max_scan` (default 100 for plugin probes), `concurrency`
+- Optional: `recursive` (with `parents`), `include_disabled`, `include_plugins`, `include_plugin_metadata`, `limit` (default 50), `max_scan` (default 100 for plugin probes), `concurrency`
 - Returns: `{ ok: true, command: "search", count, accounts: [...], warnings, filters, truncated* }`
+- `include_plugins` attaches lite plugin rows (`id` / `name` / `path` / `table_prefix`) per account. `include_plugin_metadata` adds one marketplace metadata map keyed by plugin path — do not fan out `command: plugins` per account to build a method catalog.
 - `plugins` filter matches installed plugin `path` / `name` / `table_prefix` substrings (e.g. `["acoustic"]`). Apply `prefix`/`parents` first so DB probes stay bounded.
 - Per-account DB failures go into `warnings` (do not fail the whole search).
 - `count: 0` is the answer. Do **not** fall back to compiled account catalogs to find ids MCP omitted.
@@ -284,39 +284,23 @@ Example:
 { "account_id": "test" }
 ```
 
-### `auditPeople`
-
-Read-only account people / identity / timeline / model health check (`AccountWorker.auditPeople`). Independent components: missing tables are skipped, query failures are reported, the rest continue. Prefer this over ad-hoc SQL or MCP `task` when the UI or agent needs an account audit payload. Render `current` and `legacy` as separate sections.
-
-- Required: `account_id`
-- Optional: `components` (subset of checks), `exclude`, `legacy` (default true; `false` skips timeline_v3 / person_model_source_code / transaction_model_source_code)
-- Returns: `{ ok, account_id, available_components, components, current, legacy, sql, errors, started_at, finished_at }`
-- `sql` is `[{ id, sql, error }]` for every warehouse statement this audit ran
-- `ok` is false only when a component `status` is `error` (skipped is still success)
-
-Example:
-
-```json
-{ "account_id": "test" }
-```
-
-Example — current identity/timeline only:
-
-```json
-{ "account_id": "test", "legacy": false }
-```
-
 ### `timelinePerson`
 
-Person-level **current-identity** timeline + model inspect (`ModelWorker.inspectPerson`) and source-code model compare (`compareSourceCodes`). SQL lives on the server; prefer this over ad-hoc SQL. The conductor Timeline artifact is a shell over `command: inspect`; `/models` is a shell over `command: compareSourceCodes`.
+Account- or person-level **current-identity** timeline + model inspect (`ModelWorker.inspectPerson`) and source-code model compare (`compareSourceCodes`). SQL lives on the server; prefer this over ad-hoc SQL. The conductor Timeline artifact is a shell over `command: inspect`; `/models` is a shell over `command: compareSourceCodes`. There is no separate `auditPeople` tool — inspect includes those aggregations.
 
 - Required: `account_id`
-- **command: inspect** (default) — `emails` and/or `person_ids`. `person_ids` is a number, string, or array of either (warehouse `person.id` is an integer — do not stringify). Returns `{ queried, tables[], person_ids, emails, sql }` for current `timeline` / `model_*` only. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` (opt-in; future deployments will drop this). Missing tables are skipped. Do not join `person.id` to `person_id_int`.
+- **command: inspect** (default) — omit `emails` / `person_ids` / `source_codes` for an account-wide load (entry-type min/max/count, identity table counts, transaction min/max, model_* counts). `person_ids` is a number, string, or array of either (warehouse `person.id` is an integer — do not stringify). Optional `source_codes` (comma-delimited; `%` is LIKE) filters those queries. Person or source filters also load capped timeline detail and, with a person, `model_*_person`. Pass `legacy: true` to also load `timeline_v3` min/max/count, `person_model_source_code` totals, `transaction_model_source_code`, and person-level `timeline_v3_summary` when email is present (opt-in; future deployments will drop this). Missing tables are skipped. Do not join `person.id` to `person_id_int`.
 - **command: compareSourceCodes** — all current `model_*_stats` by source code (`person_count`, `revenue`, `transactions`). Omit `source_codes` to union each model's top 10 by people and by revenue. When both the current first-touch model and legacy first touch are deployed (and `legacy: true`), also unions the top 10 source codes by absolute person_count difference. Pass `legacy: true` to also include `transaction_model_pivot` stems (first_touch, crm_origin, last_acquisition, plus **custom legacy models** when those `{stem}_*` columns exist). Optional `models` subset. Returns `sql` for top-N selection and per-model stats.
 - **command: compareSourceCodesLegacy** — same-stem pivot vs current delta. `source_codes` required (comma-delimited; `%` is LIKE). Custom legacy models are included when present on the pivot table.
 - **command: summarizeSourceCodesLegacy** — pivot rows only. `source_codes` required. Same custom-legacy discovery as compare.
 
 All commands include top-level **`sql`**: `[{ id, sql, error, table? }]` — the statements executed for this request. Use that log when debugging inspect/compare results.
+
+Example — account-wide inspect (current aggregations):
+
+```json
+{ "account_id": "test" }
+```
 
 Example — person inspect (current only):
 
@@ -387,11 +371,11 @@ Example build by definition path:
 
 ### `inventory`
 
-Account warehouse inventory cache at `{account root}/cache/inventory.json`. Prefer this over `task` for inventory. Reports take a long time to build — **always `get` first**.
+Account warehouse inventory cache at `{account root}/cache/inventory.json.gz`. Prefer this over `task` for inventory. Reports take a long time to build — **always `get` first**.
 
 - Required: `account_id`
-- **command: get** (default) — `InventoryWorker.inventory`. If the cache exists: `ready: true`, summary (including the `statistics` block when the cache has monthly stats), and the same path as `options_filename` and `inventory_path`. If not: `ready: false` (do not retry get as a workaround — offer `build`). Full report: MCP `file` with `filename: cache/inventory.json`.
-- **command: build** — schedule `InventoryWorker.buildInventoryReport` via TaskWorker. Optional: `definition_path`, `tables`, `extra_tables`, `exclude_tables`, `input_directories`, `statistics`, `label`, `remote`. Does not wait for the report.
+- **command: get** (default) — `InventoryWorker.inventory`. Status only: if the gzip cache exists, `ready: true` plus path / size / modified_at. Does not parse the file. If not: `ready: false` (do not retry get as a workaround — offer `build`). Full report: `GET /data/inventory/report` (gzip bytes, `204` if missing) or MCP `file` with `filename: cache/inventory.json.gz`.
+- **command: build** — schedule `InventoryWorker.buildInventoryReport` via TaskWorker. Optional: `definition_path`, `tables`, `extra_tables`, `exclude_tables`, `input_directories`, `include_files`, `statistics`, `label`, `remote`. Standard builds omit input-store files. Does not wait for the report.
 
 Example get:
 
@@ -621,13 +605,16 @@ When the user asks for **all accounts**, **parent** children, or other multi-acc
 - Do **not** call `account` plugins (or any account-DB worker) once per child to “check access”.
 - Do **not** use the first id in a parent/all list as a required DB-connected `account_id` before the remote list.
 - Drive the request with remote multi-account filters (`parent_account_id`, `account_ids`, etc.) and status filters. Use Prefect `state_type` values only (`FAILED`, `RUNNING`, `COMPLETED`, `PAUSED`, …). Legacy Mongo tokens (`complete`, `error`, `in_progress`) are **rejected with 422**. Account database connectivity is not a prerequisite for remote-legacy flow-run list reads.
-- The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `search`, `auditPeople`, `timelinePerson`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
+- The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `search`, `timelinePerson`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
+- Listing is one request. **Archiving or bulk-retrying** those runs is also one request: reuse the same `parent_account_id` / `account_ids` and send every `flow_run_id` together ([bulk archive](#bulk-archive--retry-of-flow-runs)). Do **not** fan out one MCP call per child.
 
 ### `task` action `list` — remote flow runs
 
 MCP `task` with `action: "list"` calls `TaskWorker.listRemoteFlowRuns` (`POST /flow_runs/filter` on the remote-legacy Task API). Returns **flow runs only** — nested `task_runs` are not included. Each flow run includes `account_id`, `parent_account_id` (first id in that account's `parent_ids`, or `null`), and `parent_ids`.
 
-MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listRemoteTaskRuns` (`POST /task_runs/filter` on the remote-legacy Task API) for a specific `flow_run_id` / `task_run_ids`. The result is `{ task_runs: [ … ], flow_run? }` — the same shape as REST `POST /task_runs/filter`. Pass `remote: false` to list local runs. Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`. Each `task_run` includes **`log_link`** (`/task_runs/{id}/log` on the Task API). Display `state.name` (aka `state_name`); color/group by `state.type` (`state_type`). Render commands from `allowed_actions` (`pause`, `resume`, `retry`, `stop`, `update_options`). Do **not** read deprecated `status` (Mongo vocabulary).
+MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listRemoteTaskRuns` (`POST /task_runs/filter` on the remote-legacy Task API) for a specific `flow_run_id` / `task_run_ids`. The result is `{ task_runs: [ … ], flow_run? }` — the same shape as REST `POST /task_runs/filter`. Pass `remote: false` to list local runs. Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`. Each `task_run` includes **`log_link`** (`/task_runs/{id}/log` on the Task API). Listings omit **`checkpoints`**. Display `state.name` (aka `state_name`); color/group by `state.type` (`state_type`). Render commands from `allowed_actions` (`pause`, `resume`, `retry`, `stop`, `update_options`). Do **not** read deprecated `status` (Mongo vocabulary).
+
+MCP `task` with `action: "get"` calls `GET /task_runs/:id` (`TaskWorker.getRemoteTaskRun`). This is the single-task detail read: `resolved_options`, `output`, and **`checkpoints`** (`[{ modified, options }]` from worker `modify_history`). Checkpoints can exceed 1MB — request them only for one task. Workers write them; there is no PATCH/POST to create a checkpoint.
 
 MCP `task` per-task-run controls (Firebase / MCP session — **do not** send `e9key_` keys):
 
@@ -638,8 +625,10 @@ MCP `task` per-task-run controls (Firebase / MCP session — **do not** send `e9
 | `pause` / `resume` | `POST /task_runs/:id/pause` / `/resume` | True pause (not job kill). Offer only when `allowed_actions` contains the command |
 | `stop` | `POST /task_runs/:id/stop` | Kill. `set_state` `CANCELLED` equivalent |
 | `updateOptions` | `PATCH /task_runs/:id` `{ options }` | Pending/paused only; 409 when RUNNING/terminal |
+| `describe` | `POST /tasks/describe` | Method option metadata for `path` (marketplace first, then Frakture). `method` optional. Does not enqueue |
+| `get` | `GET /task_runs/:id` | Single-task details including **`checkpoints`**. Do not use `listTasks` for this |
 | `log` / `output` | `GET /task_runs/:id/log` / `/output` | `{ log_link, log, truncated }` and optional signed **`log_url`** from remote-legacy; prefer **`log_link`** for integrations |
-| `archive` / bulk `retry` | `POST /flow_runs/archive` / `/retry` | `flow_run_ids`. **`user_id` is not required** |
+| `archive` / bulk `retry` | `POST /flow_runs/archive` / `/retry` | All `flow_run_ids` in one call. After parent/all list, pass `parent_account_id`. **`user_id` is not required**. See [bulk archive](#bulk-archive--retry-of-flow-runs) |
 
 Same account-scope auth as `action: "list"` (account header + bearer). Do **not** ask the user for a remote-legacy `user_id`.
 
@@ -656,6 +645,45 @@ Example — errored flow runs under a parent:
   "limit": 300
 }
 ```
+
+### Bulk archive / retry of flow runs
+
+`action: "archive"` and bulk `action: "retry"` take **every** `flow_run_id` in one MCP call. Do **not** archive or retry one id at a time. Do **not** send `user_id`. Confirm with the user before a mass archive (count + how many accounts). Prefer terminal runs (`COMPLETED`, `FAILED`, `CANCELLED`, `CRASHED`) unless the user asked to archive in-progress work. The worker chunks at **500** ids (remote find/archive limit) — that is still one MCP call.
+
+Single account:
+
+```json
+{
+  "action": "archive",
+  "account_id": "<account_id>",
+  "flow_run_ids": ["<flow_run_id>", "<flow_run_id>"]
+}
+```
+
+#### Multiple accounts (parent / all — 100+ children)
+
+`action: "list"` already returns errored runs across children in one request (`parent_account_id` / `account_ids`). Frakture `POST /flow_runs/archive` is the same: it looks up job lists by **global** ids. The only thing that used to force 100 remote hops was engine9 sending `X-Account-Id` for a single owner, which made Frakture skip every other account's ids.
+
+**Do not** make one MCP `task` call per child. **Do not** add a JSON-RPC / generic batch endpoint. Pass the same multi-account flag as list so the remote hop **omits** `X-Account-Id` (server-token admin context, same as list). Then one Frakture POST archives every id, regardless of which child owns it.
+
+1. **List once** — `{ "action": "list", "account_id": "<parent_account_id>", "parent_account_id": "<parent_account_id>", "status": ["FAILED"], "limit": 300 }` (page if needed). No per-child DB.
+2. Collect every flow run `id`. Confirm with the user.
+3. **Archive once** with those ids and the same `parent_account_id` (or `account_ids`):
+
+```json
+{
+  "action": "archive",
+  "account_id": "<parent_account_id>",
+  "parent_account_id": "<parent_account_id>",
+  "flow_run_ids": ["<flow_run_id_1>", "<flow_run_id_2>"]
+}
+```
+
+`account_id` is MCP auth (must be an account the user can access — typically the parent). `parent_account_id` / `account_ids` is what drops the remote account header. Omit that flag and mixed-owner ids are silently skipped.
+
+REST: `POST /flow_runs/archive` with `flow_run_ids` plus `parent_account_id` or `account_ids` in the body. See [e9-tasks-api endpoints](../e9-tasks-api/endpoints.md#post-flow_runsarchive).
+
+Bulk `retry` with `flow_run_ids` uses the same flag. Per-task `retry` (`task_run_id`) stays single-run.
 
 ## Quick validation flow
 

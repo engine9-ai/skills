@@ -153,7 +153,8 @@ A **task run** is one execution of one task within a flow run.
 | `allowed_state_types` | Valid `set_state` types (`PAUSED`, `SCHEDULED`, `PENDING`, `CANCELLED`, `CANCELLING`) |
 | `errors` | Alert banners: `{ level, message, ts }[]` |
 | `options` / `task_inputs.options` | Options as scheduled (before server-side merge) |
-| `resolved_options` | Options the worker actually ran with (on `GET /task_runs/:id`) |
+| `resolved_options` | Options the worker actually ran with (on `GET /task_runs/:id`). Includes rolled-up checkpoint values |
+| `checkpoints` | Worker-written option snapshots (`[{ modified, options }]`). **Only** on `GET /task_runs/:id` / MCP `task` `action: "get"`. Listings omit this field — it can exceed 1MB. Read-only; workers write via modify/checkpoint, not `PATCH` |
 | `output` / `records` | Worker JSON result and a records count when present |
 | `expected_start_time` | Dependency/time gate ("Starting after …") |
 | `updated` | Last modification timestamp |
@@ -180,6 +181,19 @@ A **task run** is one execution of one task within a flow run.
 ```
 
 The `output_path` value is an opaque locator for the completed result. How you retrieve the payload depends on your deployment — ask your administrator if you need a download URL or API rather than a direct path.
+
+## Checkpoints
+
+A **checkpoint** is a worker-written option snapshot stored on the remote job as `modify_history` and exposed as **`checkpoints`**: `[{ "modified": "<ISO or null>", "options": { … } }]`.
+
+Workers emit these through a modify/checkpoint call while the task is running (for example `syncTables` `table_progress`). They are **not** user-initiated. `PATCH /task_runs/:id` merges pending-run options and does **not** append a checkpoint.
+
+| Surface | `checkpoints` |
+|---------|---------------|
+| `GET /task_runs/:id` / MCP `task` `action: "get"` | Included (single-task detail) |
+| `POST /task_runs/filter`, `POST /flow_runs/filter`, MCP `list` / `listTasks` / `debug` | **Omitted** — the list can exceed 1MB |
+
+`progress` is the live status message, not this list. `options` on the task run is the original scheduled options. On the single-task read, `resolved_options` is the rolled-up view (stdin + options + every checkpoint).
 
 ## Run states
 

@@ -14,6 +14,7 @@ Two endpoints, both call `TaskWorker.scheduleTasks`. Listing belongs on `POST /t
 |----------|-----------|----------|
 | [`POST /flow_runs/`](#post-flow_runs) | **Predefined flow** | **`flow_id`** (published slug) |
 | [`POST /tasks/schedule`](#post-tasksschedule) | **On-demand task** | Plugin **`path`** + **`method`** |
+| [`POST /tasks/describe`](#post-tasksdescribe) | **Method options** (read) | Plugin **`path`** (`method` optional) |
 
 ### `POST /tasks/schedule`
 
@@ -62,6 +63,36 @@ curl $CURL_TLS -sS -X POST \
 **Response:** `{ ok: true, action: "schedule", result: { flow_run_id, task_run_ids, … } }`
 
 **422** — missing `path`+`method`, or `flow_id` sent here (use `POST /flow_runs/` for a predefined flow).
+
+### `POST /tasks/describe`
+
+**Scope:** `tasks:read`
+
+Return **active method option metadata** for a plugin `path` (same naming as [`POST /tasks/schedule`](#post-tasksschedule)). `method` is optional — omit it to get every method on that plugin or submodule.
+
+Resolution: marketplace / `mcp: true` option defs first; built-in `@engine9/plugins/e9workers:<Worker>` from live worker metadata; otherwise Frakture `POST /tasks/describe`. Does **not** enqueue a task.
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "@frakture-com/channelbots/ActionKitBot:People"
+  }' \
+  "$BASE_URL/tasks/describe"
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `path` | **Yes** | Plugin or bot path (Engine9 colon path or Frakture dotted `bot.path`) |
+| `method` | No | If set, clients typically pick this method from the returned plugin bag |
+| `remote` | No | Default `true` (call Frakture when marketplace defs are missing) |
+
+**Response:** `{ ok: true, action: "describe", result: { path, bot_path, submodules, source } }`
+
+`source` is `marketplace`, `local`, or `merged`. Each method uses `submodules.<Name>.methods.<name>.options` (same shape as MCP `account` plugin metadata).
+
+**422** — missing `path`.
 
 ---
 
@@ -266,7 +297,7 @@ Prefer `POST /task_runs/filter` with `{ "flow_run_id": "…" }` to list that run
 
 **Scope:** `tasks:read`
 
-**Default `remote: true`** — lists remote flow runs via `TaskWorker.listRemoteFlowRuns` (same as MCP `task` `action: "list"`). Pass `"remote": false` (or `?remote=false`) for local SQL/file runs.
+**Default `remote: true`** — lists remote flow runs via `TaskWorker.listRemoteFlowRuns` (same as MCP `task` `action: "list"`). Pass `"remote": false` (or `?remote=false`) for local SQL/file runs. Nested `task_runs` (when `include_task_runs` is true) omit **`checkpoints`** — use [`GET /task_runs/:id`](#get-task_runsid).
 
 **List recent remote runs for this account** (after creating a key; no `flow_run_id` required):
 
@@ -407,9 +438,15 @@ Computation: `completed_since` is `true` when `dataflow_last_completed` exists a
 
 **Auth (same as listing):** `user_id` is **not** required. Callers that can `POST /flow_runs/filter` can archive with the same credentials.
 
-Bulk-archive flow runs.
+Bulk-archive flow runs in **one request**. Pass every id you want archived — do not POST once per run.
 
 Ids are sent as `flow_run_ids` (or the Prefect-style `flow_runs.id.any_` filter shape).
+
+**Single account:** the account header (`X-ENGINE9-ACCOUNT-ID`) is forwarded to the remote hop as `X-Account-Id`. Frakture then only matches job lists owned by that account.
+
+**Multiple accounts** (parent / all, including 100+ children): send `parent_account_id` or `account_ids` in the body — the same flags as `POST /flow_runs/filter`. The remote hop **omits** `X-Account-Id`. Frakture `JobList.archive` looks up global `_ids` and archives every matching list in that one POST. Do **not** POST once per child. Do not add a generic batch-request wrapper. MCP agents: [e9-mcp — Bulk archive](../e9-mcp/SKILL.md#bulk-archive--retry-of-flow-runs).
+
+The worker chunks at **500** ids (Frakture find/archive limit) and still counts as one Task API call.
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -417,6 +454,19 @@ curl $CURL_TLS -sS -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "flow_run_ids": ["6a82fed56813e4e2a0a0144e"]
+  }' \
+  "$BASE_URL/flow_runs/archive"
+```
+
+Parent / all (one POST for every child’s run):
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parent_account_id": "<parent_account_id>",
+    "flow_run_ids": ["<flow_run_id>", "<flow_run_id>"]
   }' \
   "$BASE_URL/flow_runs/archive"
 ```
@@ -436,6 +486,8 @@ curl $CURL_TLS -sS -X POST \
 |-------|----------|-------------|
 | `flow_run_ids` | One of | Array of flow run ids (preferred) |
 | `flow_runs.id.any_` / `eq_` | One of | Prefect-style filter shape |
+| `parent_account_id` | No | Omit remote `X-Account-Id` so ids may span children of this parent |
+| `account_ids` | No | Omit remote `X-Account-Id`; ids may span these accounts |
 
 **422** — none of those id fields provided. **503** — archive is not reachable/configured on the server.
 
@@ -472,7 +524,7 @@ curl $CURL_TLS -sS -X POST \
 }
 ```
 
-Body fields match `POST /flow_runs/archive`.
+Body fields match `POST /flow_runs/archive` (same `parent_account_id` / `account_ids` rule for cross-account ids).
 
 **422** — none of those id fields provided. **503** — retry is not reachable/configured on the server.
 
@@ -506,7 +558,7 @@ Task runs are created by scheduling — an on-demand task (`POST /tasks/schedule
 
 ### `GET /task_runs/:id`
 
-**Scope:** `tasks:read` — default `remote=true`. Remote responses include `resolved_options`, `output`, display fields (`bot`, `submodule`, `method`, `bot_location_id`, `errors`, `records`, `expected_start_time`, `updated`), **`log_link`** on every task run, and **`log_url`** when the job server can sign one (single-run reads only).
+**Scope:** `tasks:read` — default `remote=true`. Remote responses include `resolved_options`, `output`, **`checkpoints`** (worker `modify_history` as `[{ modified, options }]`; omitted from listings), display fields (`bot`, `submodule`, `method`, `bot_location_id`, `errors`, `records`, `expected_start_time`, `updated`), **`log_link`** on every task run, and **`log_url`** when the job server can sign one (single-run reads only).
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
@@ -524,6 +576,7 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
     flow_run_id: .task_run.flow_run_id,
     options: .task_run.options,
     resolved_options: .task_run.resolved_options,
+    checkpoints: .task_run.checkpoints,
     output: .task_run.output,
     records: .task_run.records,
     log_link: .task_run.log_link
@@ -573,7 +626,7 @@ Returns `{ "ok": true, "task_run_id": "…", "output": { … } }` for remote run
 
 ### `POST /task_runs/filter`
 
-Prefect **Read Task Runs**. Primary way to list or poll task runs. Returns `{ ok: true, task_runs: [ … ] }`. When a **single** `flow_run_id` is supplied, also includes `flow_run` (extension so one call can poll the parent run).
+Prefect **Read Task Runs**. Primary way to list or poll task runs. Returns `{ ok: true, task_runs: [ … ] }`. When a **single** `flow_run_id` is supplied, also includes `flow_run` (extension so one call can poll the parent run). Listings omit **`checkpoints`** (can exceed 1MB) — use [`GET /task_runs/:id`](#get-task_runsid) for that field.
 
 **Default `remote: true`** — lists remote task runs via `TaskWorker.listRemoteTaskRuns`. Pass `"remote": false` (or `?remote=false`) for local SQL task runs.
 
@@ -753,7 +806,7 @@ curl $CURL_TLS -sS -X POST \
 
 **Scope:** `tasks:schedule`
 
-Merge `options` onto a **pending or paused** remote task run before it executes.
+Merge `options` onto a **pending or paused** remote task run before it executes. This does **not** append a checkpoint — only the running worker can write checkpoints.
 
 ```bash
 curl $CURL_TLS -sS -X PATCH \
@@ -814,7 +867,8 @@ curl -X POST ... -d '{"flow_run_ids":["'"$FLOW_RUN_ID"'"]}' \
 curl -X POST ... "$BASE_URL/task_runs/$TASK_RUN_ID/pause"
 curl -X PATCH ... -d '{"options":{"limit":100}}' "$BASE_URL/task_runs/$TASK_RUN_ID"
 
-# 7. Optional: log and output
+# 7. Optional: single-task details (checkpoints), log, and output
+curl ... "$BASE_URL/task_runs/$TASK_RUN_ID"
 curl ... "$BASE_URL/task_runs/$TASK_RUN_ID/log"
 curl ... "$BASE_URL/task_runs/$TASK_RUN_ID/output"
 

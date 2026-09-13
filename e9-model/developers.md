@@ -26,7 +26,7 @@ await model.summarizePeople({ emails: 'a@example.com' });
 | --- | --- | --- |
 | `runPeople` | Result **file** (csv) | Test the person transform |
 | `runTransactions` | Result **file** (csv) | Test the transaction transform. Pass `person_filename` if there is no `transforms.transaction` |
-| `run` | Files **and** `{prefix}_*` tables + stats | Production / account load. Installs the plugin row, then deploys tables from `metadata.prefix` (not the plugin counter prefix). Returns `people` / `transactions` / `revenue` totals |
+| `run` | Files **and** `{prefix}_*` tables + stats | Production / account load. One timeline pass scores people and transactions, spills csv incrementally, then loads `{prefix}_*` (does not keep result rows in heap). Installs the plugin row, then deploys tables from `metadata.prefix` (not the plugin counter prefix). `replaceModelStats` rebuilds lifetime and by-date stats. Returns `people` / `transactions` / `revenue` totals |
 | `runMany({ models })` | Same as `run`, once per path | Comma-delimited model paths, run in series; returns `{ results }` |
 | `summarizeSourceCodes({ model })` | — | Read `{prefix}_person_stats` and `{prefix}_transaction_stats` (rollup by source code). Alias: `summarize` |
 | `summarizePeople({ emails / person_ids })` | — | UI inspect: timeline + stored rows from every available `model_*` table. Does **not** run models |
@@ -64,7 +64,7 @@ vs DuckDB vs file. Pass `timeline`; get `{ stream, close, mode }`.
 
 | `timeline` | Reads |
 | --- | --- |
-| omitted / `'sql'` | Account `timeline` + dictionary labels. Transaction runs join `transaction` on `timeline.id = transaction.id` |
+| omitted / `'sql'` | Account `timeline` + dictionary labels. Transaction runs join `transaction` on `timeline.id = transaction.id`. A standalone transaction run with no person filter adds `EXISTS` on `transaction.person_id` (not a huge `IN` list) |
 | `*.duckdb` | Same SQL against that file |
 | `.parquet` / `.csv` / `.json` | File rows, ordered by `person_id` |
 
@@ -127,7 +127,14 @@ tie-break for same-`ts` entries.
 
 **Files:** csv with `person_id`, `prefix`, `source_code`, `source_code_id`,
 `date_of_source`, `reason` (plus `transaction_id` / `amount` / `ts` on the
-transaction file).
+transaction file). `run` / `runPeople` / `runTransactions` write these
+incrementally while the timeline streams — they do not accumulate every result
+row in memory. `run` then `insertFromStream`s the files into `{prefix}_person`
+and `{prefix}_transaction` after the timeline connection is closed.
+
+A standalone `runTransactions` without `person_ids` / `emails` / `search` filters
+with SQL `EXISTS` on `transaction.person_id` rather than loading every person id
+into an `IN (...)` list.
 
 **SQL** (`run` only) — one set of tables per model, named from `metadata.prefix`:
 
@@ -137,6 +144,8 @@ transaction file).
 | `{prefix}_transaction` | one row per `transaction_id` (UUID) |
 | `{prefix}_person_stats` | people per `source_code_id` |
 | `{prefix}_transaction_stats` | tx / revenue / refunds / unique people per `source_code_id` |
+| `{prefix}_person_stats_by_date` | new people per `source_code_id` + first-seen day (`date_of_source` / credited `timeline.ts`, not `source_code_date`) |
+| `{prefix}_transaction_stats_by_date` | tx / revenue per `source_code_id` + `transaction.ts` day |
 
 No shared `person_model` interface table and no `@engine9/interfaces/model`.
 Join `source_code_dictionary` for the code string; join `transaction` on `id`
@@ -153,7 +162,7 @@ surface model numbers:
 
 1. Probe whether each model's stats tables exist (they appear only after
    `ModelWorker.run` for that prefix).
-2. `LEFT JOIN` on `source_code_id` — prefer stats over re-aggregating detail.
+2. `LEFT JOIN` on `source_code_id` (and `date` for `*_stats_by_date`) — prefer stats over re-aggregating detail. By-date person counts use credited `date_of_source` (`timeline.ts`), never dictionary `source_code_date`.
 3. Keep attributed `revenue` / transactions separate from model `revenue` /
    `person_count`; never sum them.
 4. Do not fill legacy `origin_*` from `{prefix}_*` unless product explicitly
@@ -187,9 +196,9 @@ export default { metadata, transforms };
 
 `metadata.prefix` is required, must match `model_<name>` (letters, digits,
 underscores), **is** the warehouse stem, and must stay stable across accounts.
-`run` creates `model_my_model_person`, `model_my_model_transaction`, and the two
-`_stats` tables. Do not rely on `plugin.table_prefix` — that gets a per-install
-counter.
+`run` creates `model_my_model_person`, `model_my_model_transaction`, the two
+lifetime `_stats` tables, and the two `_stats_by_date` tables. Do not rely on
+`plugin.table_prefix` — that gets a per-install counter.
 
 Plugin identity: `@engine9/plugins/models/my_model`, or `engine9-accounts/...`
 for an account-specific model.

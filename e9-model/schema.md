@@ -10,13 +10,13 @@ These tables are the **current** identity-aware model output (`person_id` bigint
 
 | Plugin | `metadata.prefix` | Tables created |
 | --- | --- | --- |
-| `@engine9/plugins/models/first_touch` | `model_first_touch` | `model_first_touch_{person,transaction,person_stats,transaction_stats}` |
-| `@engine9/plugins/models/crm_origin` | `model_crm_origin` | `model_crm_origin_{person,transaction,person_stats,transaction_stats}` |
-| `@engine9/plugins/models/last_acquisition` | `model_last_acquisition` | `model_last_acquisition_{person,transaction,person_stats,transaction_stats}` |
+| `@engine9/plugins/models/first_touch` | `model_first_touch` | `model_first_touch_{person,transaction,person_stats,transaction_stats,person_stats_by_date,transaction_stats_by_date}` |
+| `@engine9/plugins/models/crm_origin` | `model_crm_origin` | `model_crm_origin_{person,transaction,person_stats,transaction_stats,person_stats_by_date,transaction_stats_by_date}` |
+| `@engine9/plugins/models/last_acquisition` | `model_last_acquisition` | `model_last_acquisition_{person,transaction,person_stats,transaction_stats,person_stats_by_date,transaction_stats_by_date}` |
 
-Account-specific models use the same `model_<name>` prefix rule and the same four suffixes. Tables exist only after that model has been `run` on the account — probe before joining.
+Account-specific models use the same `model_<name>` prefix rule and the same six suffixes. Tables exist only after that model has been `run` on the account — probe before joining.
 
-## Four tables per prefix
+## Six tables per prefix
 
 | Table | Grain | Built when |
 | --- | --- | --- |
@@ -24,6 +24,8 @@ Account-specific models use the same `model_<name>` prefix rule and the same fou
 | `{prefix}_transaction` | one row per `transaction_id` | `run` (transaction transform or person inheritance) |
 | `{prefix}_person_stats` | one row per `source_code_id` | `run` / `loadStats` — `COUNT(*)` from `{prefix}_person` |
 | `{prefix}_transaction_stats` | one row per `source_code_id` | `run` / `loadStats` — rollup of `{prefix}_transaction` (+ `transaction.amount` / refunds when present) |
+| `{prefix}_person_stats_by_date` | one row per `(source_code_id, date)` | `run` / `loadStats` — people first seen that day (`date_of_source` = credited `timeline.ts`, **not** `source_code_date`) |
+| `{prefix}_transaction_stats_by_date` | one row per `(source_code_id, date)` | `run` / `loadStats` — gifts that happened that day (`transaction.ts`) |
 
 No shared cross-model table. Join `source_code_dictionary` (or `source_code_summary`) for the code string; join `transaction` on `id = transaction_id` for amount / `ts`.
 
@@ -35,7 +37,7 @@ One model source code per person. Unique on `person_id`; indexed on `source_code
 | --- | --- | --- |
 | `person_id` | `person_id` (bigint) | = `person.id`, unique |
 | `source_code_id` | `source_code_id` | chosen entry’s code |
-| `date_of_source` | datetime | chosen entry’s effective date (`timeline.ts`) |
+| `date_of_source` | datetime | chosen entry’s effective date (`timeline.ts`) — when that person was first seen for this credit. This is **not** dictionary `source_code_date` (the campaign date printed in the code). |
 | `reason` | text, nullable | why the rule chose this code |
 | `created_at` | datetime | row write time |
 | `modified_at` | datetime | row write time |
@@ -58,11 +60,11 @@ Amount / `ts` / recurring fields stay on `transaction` — not duplicated here.
 
 ## `{prefix}_person_stats`
 
-People acquired per source code. Unique on `source_code_id`.
+People acquired per source code. Primary key on `source_code_id`.
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `source_code_id` | `source_code_id` | unique |
+| `source_code_id` | `source_code_id` | primary key |
 | `person_count` | int | `COUNT(*)` from `{prefix}_person` for this code |
 | `created_at` | datetime | stats rebuild time |
 | `modified_at` | datetime | stats rebuild time |
@@ -71,11 +73,11 @@ Closest conceptual replacement for legacy `source_code_summary.origin_people` (w
 
 ## `{prefix}_transaction_stats`
 
-Lifetime giving of people (or transactions) credited to each source code. Unique on `source_code_id`.
+Lifetime giving of people (or transactions) credited to each source code. Primary key on `source_code_id`.
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `source_code_id` | `source_code_id` | unique |
+| `source_code_id` | `source_code_id` | primary key |
 | `transactions` | int | row count in `{prefix}_transaction` for this code |
 | `revenue` | currency | `SUM(transaction.amount)` for those rows (0 if `transaction` is missing) |
 | `refund_count` | int | rows with non-zero `refund_amount` |
@@ -85,6 +87,40 @@ Lifetime giving of people (or transactions) credited to each source code. Unique
 | `modified_at` | datetime | stats rebuild time |
 
 Closest conceptual replacement for legacy `source_code_summary.origin_revenue` (and related origin transaction rollups). Again: per-model, current identity, optional when the tables exist.
+
+## `{prefix}_person_stats_by_date`
+
+New people per source code per **first-seen day**. Primary key `(date, source_code_id)`.
+
+`date` is `CAST({prefix}_person.date_of_source AS DATE)`. That field is the credited timeline entry’s `ts` — the day the person was first seen for this credit (e.g. CRM record / first gift on 2026-05-20). **Do not** group by `source_code_dictionary.source_code_date` / `source_code_date_parsed` (e.g. a code dated 2026-05-01). Rows with null `date_of_source` are omitted.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `source_code_id` | `source_code_id` | PK with `date` |
+| `date` | date | first-seen day |
+| `person_count` | int | people whose credited `date_of_source` falls on `date` |
+| `created_at` / `modified_at` | datetime | stats rebuild time |
+
+`SUM(person_count)` across dates equals lifetime `{prefix}_person_stats.person_count` (same null filter). Join to spend on `date` + `source_code_id`. Do not `SUM` this onto a daily spend row if you meant lifetime people — use `{prefix}_person_stats` and `MAX`/`ANY_VALUE`.
+
+## `{prefix}_transaction_stats_by_date`
+
+Gifts credited to each source code, by the day the gift happened. Primary key `(date, source_code_id)`.
+
+`date` is `CAST(transaction.ts AS DATE)`, not `date_of_source` and not `source_code_date`. Rows with null `ts` are omitted.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `source_code_id` | `source_code_id` | PK with `date` |
+| `date` | date | gift day (`transaction.ts`) |
+| `transactions` | int | |
+| `revenue` | currency | `SUM(transaction.amount)` |
+| `refund_count` | int | rows with non-zero `refund_amount` |
+| `refund_amount` | currency | |
+| `transaction_unique_person` | int | distinct people who gave that day |
+| `created_at` / `modified_at` | datetime | stats rebuild time |
+
+`compareSourceCodes` / `summarizeSourceCodes` stay on the lifetime `*_stats` tables. These by-date tables are for warehouse SQL and `source_code_summary_by_date` joins.
 
 ## Optional use from `source_code_summary`
 

@@ -18,7 +18,7 @@ An agent with shell access can run this end to end. Follow these rules:
 3. **Explain every step.** Before each request, state in one or two sentences what you are about to call and why (e.g. "Scheduling the Echo task with `POST /tasks/schedule` — this creates a flow run and one task run"). After each response, show the relevant fields and say what they mean before moving on. Do not run the whole sequence silently and dump a final answer.
 4. **Run the sequence in order:**
    - Step 1 — schedule Echo, save `flow_run_id` and `task_run_ids[0]` from the response
-   - Steps 2–4 — poll `POST /task_runs/filter` (or `GET /task_runs/:id`), reporting each observed `state_type`, until it is terminal (`COMPLETED`, `FAILED`, `CANCELLED`, `CRASHED`). Wait a couple of seconds between polls; Echo with `"seconds": 1` normally completes within a few polls.
+   - Steps 2–4 — poll `POST /task_runs/filter`, reporting each observed `state_type`, until it is terminal (`COMPLETED`, `FAILED`, `CANCELLED`, `CRASHED`). Wait a couple of seconds between polls; Echo with `"seconds": 1` normally completes within a few polls. Use `GET /task_runs/:id` for a single-task detail read (`output`, `resolved_options`, `checkpoints`) — not as the poll loop.
    - Step 5 — on `COMPLETED`, report the output reference and confirm the echoed `options` match what was sent
 5. **Finish with a summary:** the ids involved, how long the run took (`start_time` → `end_time`), the final state, and the echoed output. If the run ends `FAILED` or stays `PENDING` for more than a minute or two, stop polling and report the state and error details instead of retrying forever (see [Troubleshooting](#troubleshooting)).
 

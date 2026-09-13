@@ -39,7 +39,7 @@ Project `.cursor/mcp.json` may define `engine9.local_noauth` with `Authorization
 
 ## MCP-only discovery
 
-When handling `/e9` or `/e9a` requests, **do not read local workspace code** to discover plugins, worker methods, paths, or options. Local source does not reliably match the connected MCP server or the account's installed plugins. Use MCP tool schemas, MCP `account` (cached as `engine9.plugins`), and MCP `task` / `sql` / `analyze` / `auditPeople` / `timelinePerson` / `file` / `apiKey` only. See [e9-mcp — MCP-only discovery](../e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code).
+When handling `/e9` or `/e9a` requests, **do not read local workspace code** to discover plugins, worker methods, paths, or options. Local source does not reliably match the connected MCP server or the account's installed plugins. Use MCP tool schemas, MCP `account` (cached as `engine9.plugins`), and MCP `task` / `sql` / `analyze` / `timelinePerson` / `file` / `apiKey` only. See [e9-mcp — MCP-only discovery](../e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code).
 
 When an account or parent is not found, do NOT dig deeper into compiled account catalogs, etc. Account discovery when using MCP should only be through that MCP, not through any other mechanisms. Do not read `accounts.d/`, `accounts.compiled.json5`, or other on-disk catalogs.
 
@@ -198,6 +198,7 @@ Use this for requests like “list current errored tasks”, cross-account job s
 - Do **not** treat account-DB failures (`Cannot connect to the … database`) as blocking for these ops — remote flow-run listing does not need account DBs.
 - Do **not** require `engine9.plugins` for remote flow-run listing; plugin cache is for single-account plugin method scheduling.
 - Single-account rules (load plugins via `/e9a <id>`, hard-stop on DB connect for `account`/`task` schedule path resolution) still apply when scheduling a plugin method on one account.
+- **Archive / bulk retry** of those listed runs is also one request: reuse `parent_account_id` / `account_ids` and send every `flow_run_id` together. Do **not** fan out one MCP call per child. See [e9-mcp — Bulk archive](../e9-mcp/SKILL.md#bulk-archive--retry-of-flow-runs).
 
 ### Recommended `/e9` bootstrap flow
 

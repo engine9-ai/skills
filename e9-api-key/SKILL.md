@@ -30,7 +30,7 @@ Do **not** schedule `SQLWorker.createApiKey` (or rotate/revoke) via MCP `task` �
 | Disable | `apiKey` `command: revoke` |
 | New secret | `apiKey` `command: rotate` — show `key` once; old id is revoked |
 
-CLI fallbacks (no MCP): `e9 sqlworker createApiKey` / `listApiKeys` / `updateApiKey` / `revokeApiKey` / `rotateApiKey` on a server account, or `npx e9 create-api-key` on a core-only site.
+CLI fallbacks (no MCP): server WorkerRunner `e9 sqlworker createApiKey` / `listApiKeys` / `updateApiKey` / `revokeApiKey` / `rotateApiKey` on a server account, or core `npx e9 create-api-key` on a core-only site (`@engine9/core` `bin/e9.js` — not the same binary as server `bin/e9`; see `@engine9/core` README “The e9 CLI”).
 
 ## Scopes
 

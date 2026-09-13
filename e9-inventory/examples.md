@@ -6,7 +6,7 @@
 # Read the cached inventory (does not generate)
 e9 inventoryworker inventory -a <account_id>
 
-# Build or refresh {account root}/cache/inventory.json
+# Build or refresh {account root}/cache/inventory.json.gz
 e9 inventoryworker buildInventoryReport -a <account_id>
 
 # Full report with a bundle definition
@@ -26,41 +26,17 @@ Read the full report from `inventory_path` / `options_filename` (same path when 
 e9 fileworker json -a <account_id> --filename=/path/from/inventory_path
 ```
 
-## Summary return value
+## Status return value
+
+`inventory` / `buildInventoryReport` return status only. Totals live in the gzip file under `summary`.
 
 ```json
 {
   "ready": true,
-  "definition_path": "engine9-accounts/<org>/<account>/export",
-  "plugin_path": "engine9-accounts/<org>/<account>/export",
-  "format_version": 2,
-  "table_count": 12,
-  "file_count": 14,
-  "directory_count": 14,
-  "table_records": 125000,
-  "file_records": 45000,
-  "records": 170000,
-  "options_filename": "<store>/<account_id>/cache/inventory.json",
-  "inventory_path": "<store>/<account_id>/cache/inventory.json",
-  "cached_at": "2026-09-08T12:00:00.000Z",
-  "statistics": {
-    "version": 1,
-    "month_range": { "min": "2020-04", "max": "2026-09" },
-    "inputs": { "records": 890000, "by_plugin_entry_type_month": ["…"] },
-    "tables": ["…"]
-  },
-  "tables": [
-    { "table": "person", "records": 50000 },
-    { "table": "transaction", "records": 75000 }
-  ],
-  "directories": [
-    {
-      "input_id": "c8ec58a6-a9d7-5277-a12a-030cc01d037f",
-      "input_type": "message",
-      "file_count": 1,
-      "records": 2
-    }
-  ]
+  "options_filename": "<store>/<account_id>/cache/inventory.json.gz",
+  "inventory_path": "<store>/<account_id>/cache/inventory.json.gz",
+  "size": 184320,
+  "modified_at": "2026-09-08T12:00:00.000Z"
 }
 ```
 
@@ -73,9 +49,16 @@ Tables omit empty `transforms`. Files carry export paths and source store roots.
   "format_version": 2,
   "definition_path": "engine9-accounts/<org>/<account>/export",
   "plugin_path": "engine9-accounts/<org>/<account>/export",
+  "summary": {
+    "table_count": 12,
+    "table_records": 125000,
+    "records": 125000,
+    "people": 50000,
+    "transactions": 75000,
+    "messages": 1200
+  },
   "table_records": 125000,
-  "file_records": 45000,
-  "records": 170000,
+  "records": 125000,
   "tables": [
     {
       "table": "person",
@@ -323,7 +306,7 @@ Each month with data gets a bucket. Use `month_range` for timeline axis bounds.
 
 | UI row (big 3) | Statistics source |
 |----------------|-------------------|
-| People → Distinct | `tables[]` where `table === 'person'` → overall `months` / `records` |
+| People | `tables[]` where `table === 'person'` → overall `months` / `records` (distinct people; not summed from platforms) |
 | People → platform | same table → `by_plugin_month` from `person_remote` ⨝ `input` (`count(distinct person_id)`) |
 | Messages → plugin → published | `messages.by_plugin_submodule_month` (`global_message_summary` / `publish_date`; includes `channel`) |
 | Messages → plugin → Active ads | `message_summary_by_date.by_plugin_submodule_month` (`spend > 0` on `date`) |
@@ -334,11 +317,13 @@ Each month with data gets a bucket. Use `month_range` for timeline axis bounds.
 
 | Home surface | Statistics source |
 |--------------|-------------------|
-| Total revenue | `transaction` `months[].revenue` vs previous month |
+| Total revenue | `transaction` `months[].revenue` vs same month last year |
 | Donations | `transaction` `months[].records` |
+| Average gift | `revenue / records` vs same month last year |
 | Active people | `timeline` `months[].people` |
+| People created chart | person `created_months` (fallback: person `months[]` when `date_column` is a created-date column) |
 | Emails sent / SMS sent | `message_activity.by_channel_month` filtered by `channel`, field `sent` |
-| Channel activity (sends, opens, clicks) | `message_activity.by_channel_month`: `sent`, `impressions`, `clicks` |
+| Channel activity (sends, opens, clicks) | `message_activity.by_channel_month`: `sent`, `impressions`, `clicks` (last 12 months) |
 
 Fallback if `message_activity` is skipped: `messages.by_channel_month`, then `inputs` entry types. Ad coverage (not Home activity) stays on `message_summary_by_date`.
 
@@ -352,6 +337,8 @@ e9 inventoryworker buildInventoryReport -a <account_id> \
 ```
 
 ## Programmatic use (server)
+
+The utility returns the **full** in-memory report (for export planning). `InventoryWorker.buildInventoryReport` writes the gzip cache (`include_files: false` by default) and returns status only.
 
 ```javascript
 import { buildInventoryReport } from '../utilities/inventoryReport.js';
