@@ -271,9 +271,11 @@ Reference: `person/metrics.js`, `source_code/metrics.js`.
 
 ### 11. Reports — composed dashboards
 
-Object with `name`, `description`, `components` mapping keys to `{ component: 'ReportTable', query: { table, joins, columns, groupBy, orderBy } }`.
+Export a keyed `reports` map on the **default** plugin object. Each value is JSON: `name`, `description`, `tags`, optional `data_sources` / `filters` (JSON Schema) / `optionsToEQL`, and `sections` (`{ title?, components: [{ id, component: 'StatCard'|'ComposedChart'|'Table', … }] }`). Path: `<package>:reports:<key>`. SQL is compiled by `ReportWorker`, not the plugin.
 
-Reference: `person_email/reports/subscription_status.js`.
+Full contract, filters, run/list payloads, and UI widget list: [e9-reports](../e9-reports/SKILL.md).
+
+Reference: `person_email/reports/subscription_status.js`, `channels/email/reports/summary.js`.
 
 ### 12. Thin / schema-first `index.js`
 

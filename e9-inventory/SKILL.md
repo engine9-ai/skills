@@ -2,30 +2,45 @@
 name: e9-inventory
 description: >-
   Run and interpret engine9 warehouse inventory with the e9 CLI
-  (`e9 inventoryworker inventory`, `e9 inventoryworker buildInventoryReport`).
+  (`e9 inventoryworker inventory`, `e9 inventoryworker buildInventorySummaryFile`).
   Covers the account cache at cache/inventory.json.gz, inventory.json5 export plans,
   InventoryWorker, input-store idv1 counts, table/message statistics (channel,
   sent, impressions/opens, clicks, transaction revenue, timeline people),
   plan-only runs, Home dashboard metrics from statistics, and using inventory
   outside export. Use when working with inventory, inventory.json.gz / inventory.json5,
   warehouse statistics, monthly counts, InventoryWorker, message_activity,
-  or pre-flight checks before export or analytics loads.
+  or pre-flight checks before export or analytics loads. When interpreting
+  inventory, stay on the cache/report — do not auto-run warehouse SQL.
 ---
 
 # engine9 inventory
 
 **Inventory** describes what is in an account warehouse: row counts, input-store idv1 files, planned export paths, and **monthly statistics** (per-month counts and engagement by table, plugin, channel, entry type, and similar). It writes a report file; it does not copy parquet or run export.
 
-Inventories take a while, so each account caches the last full report at **`{account root}/cache/inventory.json.gz`**. `inventory` only stats that path (ready / size). `buildInventoryReport` writes it. Standard builds omit input-store `files[]` (`include_files: false`).
+## Analyze from the report only (no auto-SQL)
+
+When the user asks to **check / analyze inventory** (what plugins have, email timeline entry coverage, monthly volume, gaps vs expected sources), **answer from the inventory cache/report alone**.
+
+1. MCP `inventory` `get` (or CLI `inventory`) for cache status.
+2. If `ready: true`, read `cache/inventory.json.gz` (MCP `file`, HTTP `/data/inventory/report`, or `e9 fileworker json`) and interpret `summary`, `tables[]`, and `statistics`.
+3. **Do not** automatically run MCP `sql` / `eql` / `analyze`, or any live warehouse query, to “confirm” inventory findings.
+
+Warehouse SQL is a **follow-up** — only when the user explicitly asks to query the DB, or after you have reported inventory results and they request deeper verification.
+
+**Input stores ≠ warehouse tables.** Large timeline idv1 files (especially email sends/opens/clicks) often live only in input stores on purpose: loading every entry into `timeline` is expensive and may never be intended. Prefer `statistics.inputs.by_plugin_entry_type_month` for “what email timeline entries does this plugin have?” Prefer `statistics.tables[]` (e.g. `timeline`) for “what is already loaded in the warehouse?” A mismatch between those blocks is common and **not** by itself a load failure — do not treat it as a bug or trigger SQL unless asked.
+
+Inventories take a while, so each account caches the last **account-wide** report at **`{account root}/cache/inventory.json.gz`**. `inventory` only stats that path (ready / size). `buildInventorySummaryFile` **without** an export definition writes it. Standard builds omit input-store `files[]` (`include_files: false`).
+
+**Custom / export-scoped builds never use that path.** When `definition_path`, `universe`, `tables`, or other bundle overrides are set, the plan is written to **`cache/inventory-plans/<slug>.json.gz`** (or `{export_dir}/inventory.json.gz` when `export_dir` is set). Bundle **export** still writes `{export_dir}/inventory.json5` and does not touch the account cache.
 
 Run inventory before export, before analytics DB loads, or any time you need a warehouse snapshot. What an export contains: [e9-export](../e9-export/SKILL.md). File production: [e9-export/building.md](../e9-export/building.md). MCP: [e9-mcp](../e9-mcp/SKILL.md) `inventory` tool.
 
 ```
 e9 inventoryworker inventory -a <account_id>
-e9 inventoryworker buildInventoryReport -a <account_id>
+e9 inventoryworker buildInventorySummaryFile -a <account_id>
 ```
 
-`-a` is the account id from `accounts.d`. Options are `--snake_case` flags. When the cache exists, both `options_filename` and `inventory_path` are `{store_path}/{account_id}/cache/inventory.json.gz`.
+`-a` is the account id from `accounts.d`. Options are `--snake_case` flags. For the account cache, both `options_filename` and `inventory_path` are `{store_path}/{account_id}/cache/inventory.json.gz`. Custom plans return `account_inventory: false` and a path under `cache/inventory-plans/`.
 
 Related: export contents [e9-export](../e9-export/SKILL.md); running an export [e9-export/building.md](../e9-export/building.md); timeline entry types [e9-timeline](../e9-timeline/SKILL.md); input metadata [inputs/timeline](../inputs/timeline/SKILL.md).
 
@@ -33,17 +48,17 @@ Related: export contents [e9-export](../e9-export/SKILL.md); running an export [
 
 | Worker | Alias | When to use |
 |--------|-------|-------------|
-| `@engine9/plugins/e9workers:InventoryWorker` | `inventoryworker` | **Preferred.** `inventory` stats the cache; `buildInventoryReport` writes it. |
-| `@engine9/plugins/e9workers:ExportWorker` | `exportworker` | `inventory` delegates to InventoryWorker (cache lookup only). Bundle **export** still builds a plan-only `inventory.json5` in the export dir (`statistics: false`) and does not overwrite the account cache. |
+| `@engine9/plugins/e9workers:InventoryWorker` | `inventoryworker` | **Preferred.** `inventory` stats the **account** cache; `buildInventorySummaryFile` writes that cache only for default (non-export) builds. With `definition_path` / custom universe → `cache/inventory-plans/`. |
+| `@engine9/plugins/e9workers:ExportWorker` | `exportworker` | `inventory` delegates to InventoryWorker (account cache lookup only). Bundle **export** builds a plan-only `inventory.json5` in the export dir (`statistics: false`) and does not overwrite the account cache. |
 
 ## What inventory produces
 
 Two logical parts in one JSON report (`format_version` **2**):
 
 1. **Plan** — what an export *would* write: tables, idv1 files, `relative_path`, transforms, skipped items, totals.
-2. **Statistics** — account-wide **monthly** counts and engagement (revenue, people, sends / impressions / clicks by channel) for warehouse timelines, Home KPIs, and analytics iteration (standalone `buildInventoryReport` only by default). Grain is `YYYY-MM`, not daily.
+2. **Statistics** — account-wide **monthly** counts and engagement (revenue, people, sends / impressions / clicks by channel) for warehouse timelines, Home KPIs, and analytics iteration (standalone `buildInventorySummaryFile` only by default). Grain is `YYYY-MM`, not daily.
 
-Account cache: `{account root}/cache/inventory.json.gz` (gzipped JSON; no `files[]` unless `--include_files=true`). Bundle export plan: `{export_dir}/inventory.json5` (statistics omitted; includes files). Examples: [examples.md](examples.md).
+Account cache: `{account root}/cache/inventory.json.gz` (gzipped JSON; no `files[]` unless `--include_files=true`). Custom/export plans: `{account root}/cache/inventory-plans/<slug>.json.gz`. Bundle export plan: `{export_dir}/inventory.json5` (statistics omitted; includes files). Examples: [examples.md](examples.md).
 
 ## CLI
 
@@ -55,31 +70,38 @@ Does **not** generate a report. Completes immediately.
 e9 inventoryworker inventory -a <account_id>
 ```
 
-If `{account root}/cache/inventory.json.gz` exists, the return value includes `ready: true`, the path, and `size` / `modified_at` from stat. It does **not** parse the file. If it does not exist, `ready: false` with a message to run `buildInventoryReport`.
+If `{account root}/cache/inventory.json.gz` exists, the return value includes `ready: true`, the path, and `size` / `modified_at` from stat. It does **not** parse the file. If it does not exist, `ready: false` with a message to run `buildInventorySummaryFile`.
 
 `e9 exportworker inventory` is the same cache lookup.
 
-### Build (or refresh) the cache
+### Build (or refresh) the account cache
 
-This is the long-running job. Writes `{account root}/cache/inventory.json.gz` with `summary` baked in. Standard runs pass `include_files: false` (no input-store file listing). Use `--include_files=true` to include `files[]`.
-
-With a bundle definition:
+This is the long-running job. With **no** export definition, writes `{account root}/cache/inventory.json.gz` with `summary` baked in (`account_inventory: true`). Standard runs pass `include_files: false`. Use `--include_files=true` to include `files[]`.
 
 ```
-e9 inventoryworker buildInventoryReport -a <account_id> \
-  --definition_path=engine9-accounts/<org>/<account>/export
+e9 inventoryworker buildInventorySummaryFile -a <account_id>
 ```
 
-Without `definition_path`, uses the **default definition**: person* tables, `segment`, `source_code_dictionary`, `transaction`, `timeline`, and **all input stores** (`input` EQL):
+### Build an export / custom plan (does not clobber the account cache)
+
+With a bundle definition (or `universe` / `tables` / `input_directories`), writes `cache/inventory-plans/<slug>.json.gz` and returns `account_inventory: false`:
 
 ```
-e9 inventoryworker buildInventoryReport -a <account_id>
+e9 inventoryworker buildInventorySummaryFile -a <account_id> \
+  --definition_path=engine9-accounts/<org>/<account>/export \
+  --statistics=false --include_files=true
+```
+
+Without `definition_path`, uses the **default definition**: person* tables, `segment`, `source_code_dictionary`, `transaction`, `timeline`, and **all input stores** (`input` EQL) — that path **is** the account cache:
+
+```
+e9 inventoryworker buildInventorySummaryFile -a <account_id>
 ```
 
 ### Plan-only (faster, no monthly statistics)
 
 ```
-e9 inventoryworker buildInventoryReport -a <account_id> \
+e9 inventoryworker buildInventorySummaryFile -a <account_id> \
   --definition_path=engine9-accounts/<org>/<account>/export \
   --statistics=false
 ```
@@ -89,7 +111,7 @@ Legacy alias: `--coverage=false` (deprecated).
 ### Tables-only override (no bundle definition)
 
 ```
-e9 inventoryworker buildInventoryReport -a <account_id> \
+e9 inventoryworker buildInventorySummaryFile -a <account_id> \
   --tables=person,transaction \
   --extra_tables=global_message_summary \
   --exclude_tables=setting
@@ -100,7 +122,7 @@ When `--tables` (or `universe` / `input_directories`) is set without `definition
 ### Override input selectors (with a bundle)
 
 ```
-e9 inventoryworker buildInventoryReport -a <account_id> \
+e9 inventoryworker buildInventorySummaryFile -a <account_id> \
   --definition_path=engine9-accounts/<org>/<account>/export \
   --input_directories='[{"entry_types":["EMAIL_OPEN"],"files":"^opens\\.idv1\\.parquet$"}]'
 ```
@@ -113,20 +135,22 @@ Browser UIs use the account-scoped data API (Firebase / session auth + `X-ENGINE
 |--------|------|------|
 | `GET` | `/data/inventory` | Status only (`InventoryWorker.inventory`). Does not parse the gzip file. |
 | `GET` | `/data/inventory/report` | Streams `cache/inventory.json.gz` (`Content-Type: application/json`, `Content-Encoding: gzip`). `204` when the cache is missing. |
-| `POST` | `/data/inventory/build` | Schedule `InventoryWorker.buildInventoryReport` (does not wait). |
+| `POST` | `/data/inventory/build` | Schedule `InventoryWorker.buildInventorySummaryFile` (does not wait). |
 
 ## MCP
 
 Prefer the native **`inventory`** tool over `task` (agents / CLI-style MCP clients):
 
 1. **`command: get`** (default) — same as `GET /data/inventory` / `InventoryWorker.inventory`. Status only: `ready`, path, `size`, `modified_at`. Does not parse the file.
-2. If `ready: false` (or the user asked to refresh), **`command: build`** — same as `POST /data/inventory/build`. Schedules `InventoryWorker.buildInventoryReport` (does not wait). Poll with MCP `task` list/output, then `get` again.
+2. If `ready: false` (or the user asked to refresh), **`command: build`** — same as `POST /data/inventory/build`. Schedules `InventoryWorker.buildInventorySummaryFile` (does not wait). Poll with MCP `task` list/output, then `get` again.
 
 Full report: `GET /data/inventory/report` (gzip bytes; `204` if missing), or MCP `file` with `filename: cache/inventory.json.gz` (gunzipped, then byte-capped; use `start`/`end` to sample).
 
+For “what’s in inventory?” questions, stop after parsing that report. Do not chain into `sql` / `eql` unless the user asks.
+
 ## Return value vs full report
 
-`inventory` and `buildInventoryReport` return **status** only (they do not parse or reshape the cache):
+`inventory` and `buildInventorySummaryFile` return **status** only (they do not parse or reshape the cache):
 
 | Field | Meaning |
 |-------|---------|
@@ -159,7 +183,7 @@ The account cache is gzipped JSON. Bundle export still writes uncompressed JSON5
 | Key | Purpose |
 |-----|---------|
 | `format_version` | Schema version (`2`). |
-| `cached_at` | ISO timestamp when the account cache was written (`buildInventoryReport` only). |
+| `cached_at` | ISO timestamp when the account cache was written (`buildInventorySummaryFile` only). |
 | `definition_path`, `plugin_path`, `source_directory` | Run context. |
 | `universe` | Resolved bundle universe. |
 | `summary` | Baked-in totals: `table_count`, `table_records`, `records`, `people` / `transactions` / `messages` when those tables were inventoried. File counts only when `files` were included. |
@@ -180,7 +204,7 @@ Monthly buckets use `YYYY-MM`. `month_range` spans the earliest and latest month
 | `version` | Statistics schema version (`1`). New fields are additive. |
 | `generated_at` | ISO timestamp when statistics were collected. |
 | `month_range` | `{ min, max }` month keys. |
-| `inputs.by_plugin_entry_type_month[]` | Non-unique timeline row counts from input-store `.idv1.parquet`, aggregated by plugin and entry type. Plugin id from `metadata.json` / `plugin`; display name prefers nickname/label over path. `{ plugin_id, plugin_name, entry_type, channel, month, records }`. **`channel`** is inferred from the entry-type prefix (`EMAIL_OPEN` → `email`, `SMS_SEND` → `sms`, `PHONE_*` → `phone`; otherwise omitted/`null`). |
+| `inputs.by_plugin_entry_type_month[]` | Non-unique timeline row counts from input-store `.idv1.parquet`, aggregated by plugin and entry type. Plugin id from `metadata.json` / `plugin`; display name prefers nickname/label over path. `{ plugin_id, plugin_name, entry_type, channel, month, records }`. **`channel`** is inferred from the entry-type prefix (`EMAIL_OPEN` → `email`, `SMS_SEND` → `sms`, `PHONE_*` → `phone`; otherwise omitted/`null`). These counts describe **files on disk**, not necessarily rows in warehouse `timeline`. |
 | `tables[]` | Per inventoried table: `{ table, date_column, months: [{ month, records, … }], records, sql }`. `sql` is the monthly-count query that produced `months`. Date column uses the export cascade: `frakture_last_modified`, `ts`, `last_modified`, `frakture_date_created`, … then `created_at` / `modified_at`. Extra measures on `months[]` when the column exists: **`transaction`** → `revenue` (`sum(amount)`), also rolled up as `tables[].revenue`; **`timeline`** → `people` (`count(distinct person_id)` — people with a timeline entry that month). For **`person`**, also **`created_months`** / **`created_date_column`** when a created-date column exists (`frakture_date_created`, `date_created`, `created_at`, `remote_date_created`) — used by Home’s people-created chart. For `transaction` and `person`, also **`by_plugin_month`** (always present when attempted), **`by_plugin_month_sql`**, and optional **`by_plugin_month_skipped`**: transaction via `input_id` → `input` ⨝ `plugin` (rows also carry `revenue`); person via `person_remote.source_input_id` → `input` ⨝ `plugin` with `count(distinct person_id)` (platform people). |
 | `messages` | Prefer **`global_message_summary`** (fallback: `global_message` / `message`): lifetime stats by plugin / submodule / **channel** / month on **`publish_date`**, only rows with **`publish_date > 2000-01-01`** (skips junk/empty dates). Plugin id comes from `bot_id` / `plugin_id`. Display name prefers instance **label** (`bot_nickname` / `bot_label`) over type (`bot_path` / `plugin_path`). Each `by_plugin_submodule_month[]` bucket: `{ plugin_id, plugin_name, submodule, channel, month, records }` plus sums of **`sent`**, **`impressions`** (opens), **`clicks`**, **`spend`**, **`attributed_revenue`**, **`attributed_transactions`** when those columns exist. **`by_channel_month[]`** is the same metrics rolled up without plugin/submodule. Includes `sql`, `date_column`. |
 | `message_summary_by_date` | From **`global_message_summary_by_date`** on **`date`**: **active ads** with **`spend > 0`**. `count(distinct message_id)` when available. Grain is plugin / submodule / channel / month. Coverage only — no engagement sums. Includes `sql`, `filter`, `count`, `by_channel_month`. |
@@ -199,12 +223,16 @@ Metric columns are omitted from a bucket when the warehouse column is missing. S
 
 ## Using statistics
 
+Stay on these fields when answering inventory questions. Do not open a live DB session unless the user asks (see [Analyze from the report only](#analyze-from-the-report-only-no-auto-sql)).
+
 Typical uses:
 
+- **Plugin / channel coverage in files** — `inputs.by_plugin_entry_type_month` (what was extracted into idv1; may never be loaded into warehouse tables).
+- **Loaded warehouse volumes** — `tables[]` monthly buckets (what is already in SQL tables such as `timeline` / `transaction`).
 - **Warehouse timeline UI** — one row per source; each month tick is populated when `months[].records > 0` or a matching statistics bucket exists.
 - **Home dashboard** — monthly KPIs and charts (see below). Compare the latest month with data to the same month a year earlier for `% vs`. Charts are the last 12 months.
 - **Analytics DB iteration** — walk `statistics.tables` / `inputs.by_plugin_entry_type_month` to decide which months to pull.
-- **Gap detection** — compare `statistics.month_range` to expected span; empty `months` on a table that should have data → stats job or load missing.
+- **Gap detection** — compare `statistics.month_range` to expected span; empty `months` on a table that should have data → stats job or load missing. Empty or smaller warehouse `timeline` vs large email input buckets is often intentional (space), not a gap to “fix” with SQL.
 
 ### Home dashboard
 
@@ -251,7 +279,7 @@ Export-specific steps (F, G): [e9-export debug](../e9-export/building.md#debug-a
 ## Implementation notes
 
 - Core logic: `server/utilities/inventoryReport.js`, `inventoryStatistics.js`.
-- `InventoryWorker.inventory` stats `{account root}/cache/inventory.json.gz` (no parse); `InventoryWorker.buildInventoryReport` writes it (`include_files: false` by default).
+- `InventoryWorker.inventory` stats `{account root}/cache/inventory.json.gz` (no parse); `InventoryWorker.buildInventorySummaryFile` writes that path **only** for account (default) builds. Export / custom builds write `cache/inventory-plans/<slug>.json.gz` and never overwrite the account cache.
 - `ExportWorker.inventory` delegates to InventoryWorker. Bundle export calls the plan builder with `statistics: false` and writes `{export_dir}/inventory.json5` without touching the account cache.
 - MCP `inventory` `get` / `build` wraps those two methods.
 

@@ -176,6 +176,8 @@ Supported forms:
 - `/e9 search foo@bar.com`
 - `/e9 segment list` — MCP `segment` with `command: list`
 - `/e9 segment build <segment_id|definition_path>` — MCP `segment` with `command: build`
+- `/e9 report list` — MCP `report` with `command: list`
+- `/e9 report run <path>` — MCP `report` with `command: run` (see [e9-reports](../e9-reports/SKILL.md))
 - `/e9 apiKey list` / `/e9 apiKey create …` — MCP `apiKey` (see [e9-api-key](../e9-api-key/SKILL.md))
 - `/e9 task <plugin-path-or-alias> <method> [options...]`
 
@@ -224,7 +226,13 @@ Use this for requests like “list current errored tasks”, cross-account job s
 5. `/e9 segment build ...`:
    - Ensure active `account_id` exists.
    - Call MCP `segment` with `command: build` and either `segment_id` or `definition_path` from the user args.
-6. `/e9 apiKey …`:
+6. `/e9 report list`:
+   - Ensure active `account_id` exists (or request it / suggest `/e9a`).
+   - Call MCP `report` with `{ "command": "list", "account_id": "<account_id>" }`.
+7. `/e9 report run <path>`:
+   - Ensure active `account_id` exists.
+   - Call MCP `report` with `command: run`, `path`, and any filter options (`start`, `end`, `limit`).
+8. `/e9 apiKey …`:
    - Catalog needs no account. Other commands need `account_id`.
    - Call MCP `apiKey`. Never schedule `createApiKey` via `task`. Show plaintext `key` to the user immediately on create/rotate.
 ## `/e9 search` parsing rules

@@ -1,8 +1,8 @@
 # Authentication and scopes
 
-The Task API authenticates with **engine9 API keys** (`e9key_…`) — the same layer-1 keys used by `@engine9/core` site APIs. Keys are stored (hashed) in the **account database** and scoped to that account.
+The Task API authenticates with **engine9 API keys** (`e9key_…`) — the same **generic non-session** credentials used by `@engine9/core` site APIs (public signup/payment forms, inbound, and other HTTP routes). Task API is one consumer; **`tasks:read` / `tasks:schedule`** are the scopes that grant these routes. Keys are stored (hashed) in the **account database** and bound to that account.
 
-MCP (`POST /mcp`) continues to use Firebase / engine9 OAuth / `localdev`. Do **not** send Firebase ID tokens to the Task API.
+MCP (`POST /mcp`) continues to use Firebase / engine9 OAuth / `localdev`. Do **not** send Firebase ID tokens to the Task API, and do **not** send `e9key_` to MCP. Key model: [e9-api-key](../e9-api-key/SKILL.md).
 
 ## Required headers
 

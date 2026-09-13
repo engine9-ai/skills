@@ -67,4 +67,4 @@ Rotate adds `revokedId`. Show `key` immediately; closing the dialog loses it.
 
 ## Auth for the UI
 
-The management UI is an MCP client: Google / engine9 session, then `apiKey` with `account_id` the user can access. Issued keys are for Task API / core HTTP callers — do not send `e9key_` on `POST /mcp`.
+The management UI is an MCP client: Google / engine9 session, then `apiKey` with `account_id` the user can access. Issued keys are Bearer credentials for **non-session HTTP** (signup/payment forms, inbound, Task API, and other scoped routes). Do not send `e9key_` on `POST /mcp`.

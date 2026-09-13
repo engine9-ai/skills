@@ -11,7 +11,7 @@ Public skills for working with engine9 deployments.
 | Create plugin / interface | [create-engine9-plugin/SKILL.md](./create-engine9-plugin/SKILL.md) | Implement `@engine9/interfaces/*` packages and `@engine9/plugins/*` native plugins |
 | CLI / `/e9`, `/e9a` | [e9-cli/SKILL.md](./e9-cli/SKILL.md) | Connect Cursor to engine9 MCP, account scope, search, task scheduling |
 | MCP tools | [e9-mcp/SKILL.md](./e9-mcp/SKILL.md) | Native MCP tool selection, account discovery, task fallback |
-| API keys | [e9-api-key/SKILL.md](./e9-api-key/SKILL.md) | Create/manage `e9key_` keys and scopes via MCP `apiKey` (UI: [ui.md](./e9-api-key/ui.md)) |
+| API keys | [e9-api-key/SKILL.md](./e9-api-key/SKILL.md) | Generic non-session auth (`e9key_`); scopes gate forms, inbound, Task API, etc. Manage via MCP `apiKey` (UI: [ui.md](./e9-api-key/ui.md)) |
 | EQL | [e9-eql/SKILL.md](./e9-eql/SKILL.md) | engine9 Query Language — expressions, query objects, MCP `eql` |
 | Task API (REST) | [e9-tasks-api/SKILL.md](./e9-tasks-api/SKILL.md) | Task API REST — predefined flows (`flow_id`) or an on-demand task (`path` + `method`; Echo: `@engine9/plugins/e9workers:EchoWorker`) |
 | Dev tasks (flows) | [e9-dev-tasks/SKILL.md](./e9-dev-tasks/SKILL.md) | Design/build JSON5 flows, TaskWorker, SQLTaskManager *(developers only)* |
@@ -27,3 +27,4 @@ Public skills for working with engine9 deployments.
 | Exports | [e9-export/SKILL.md](./e9-export/SKILL.md) | What an export contains (tables, idv1, `metadata.json`, entry types) for receivers |
 | Exports *(building)* | [e9-export/building.md](./e9-export/building.md) | Create/run/debug export files via `e9 exportworker` (bundle dumps, person-search) |
 | Inventory | [e9-inventory/SKILL.md](./e9-inventory/SKILL.md) | Warehouse inventory and monthly statistics via `e9 inventoryworker` (plan + `statistics`) |
+| Reports | [e9-reports/SKILL.md](./e9-reports/SKILL.md) | Install JSON dashboards with a plugin; list filters; run via MCP `report` / `GET /data/reports` |

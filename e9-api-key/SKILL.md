@@ -1,20 +1,30 @@
 ---
 name: e9-api-key
 description: >-
-  Create and manage engine9 API keys (e9key_ / e9publickey_) and their permission
-  scopes via MCP apiKey. Covers catalog, list, get, create, update, revoke, rotate,
-  SqlApiKeyStore storage (hash only), Task API scopes (tasks:read / tasks:schedule),
-  and building a key-management UI. Use when working with API keys, e9key, e9k,
-  key permissions, scopes, rotate/revoke, or a keys admin screen.
+  Create and manage engine9 API keys (e9key_ / e9publickey_) — generic non-session
+  auth whose scopes gate HTTP APIs (public signup/payment forms, inbound, Task API,
+  and other routes). MCP apiKey covers catalog, list, get, create, update, revoke,
+  rotate, SqlApiKeyStore (hash only), and a key-management UI. Use when working with
+  API keys, e9key, e9k, scopes, rotate/revoke, public forms, or a keys admin screen.
 ---
 
 # engine9 API keys
 
-Layer-1 credentials for core site APIs and the server **Task API**. Humans manage keys through **MCP `apiKey`** (Firebase / session / `localdev`). Machines **use** keys as `Authorization: Bearer e9key_…` (or `e9publickey_…`). Do not mix those credentials.
+API keys are engine9's **generic authentication for non-session callers** — anything that is not a logged-in human in MCP or the console. There is one key model; **scopes** decide what a key can do. The Task API is one consumer, not the definition of a key.
+
+Typical callers:
+
+- Public **signup** and **payment** forms (`public`, `people:write`, …)
+- Site / inbound HTTP (`people:write`, `tables:write`, `data:read`)
+- Machine integrations, including scheduling work (`tasks:read`, `tasks:schedule`)
+
+MCP (`POST /mcp`) stays on Firebase / session / `localdev`. That path is distinct. Keys remain the common mechanism for HTTP APIs: `Authorization: Bearer e9key_…` (or `e9publickey_…`) plus `X-ENGINE9-ACCOUNT-ID`. Do not send `e9key_` to MCP, and do not send MCP session tokens to key-authenticated routes.
+
+Humans **manage** keys through **MCP `apiKey`**. Machines **use** the issued secret on HTTP.
 
 **Storage and verification always go through `@engine9/core`** (`SqlApiKeyStore` in the account `api_key` table). MCP does not invent a second store. Only the SHA-256 hash is retained; plaintext is returned **once** on create and rotate.
 
-Using a key against the Task API: [e9-tasks-api](../e9-tasks-api/SKILL.md) / [authentication.md](../e9-tasks-api/authentication.md). MCP login and tool selection: [e9-mcp](../e9-mcp/SKILL.md). UI payload contract: [ui.md](ui.md).
+Task API as one scoped use case: [e9-tasks-api](../e9-tasks-api/SKILL.md) / [authentication.md](../e9-tasks-api/authentication.md). MCP login: [e9-mcp](../e9-mcp/SKILL.md). UI payload contract: [ui.md](ui.md).
 
 ## Prefer MCP `apiKey`
 
@@ -34,7 +44,7 @@ CLI fallbacks (no MCP): server WorkerRunner `e9 sqlworker createApiKey` / `listA
 
 ## Scopes
 
-Keys **must** list scopes at creation. Empty scopes deny every check. `admin` grants all scopes. Prefix follows scopes at create/rotate: `public` → `e9publickey_…`, otherwise `e9key_…`. Changing scopes later does **not** change an existing key's prefix — rotate if you need the other prefix.
+The scope list **is** the permission model. The same key type covers forms, inbound, reads, and tasks; attach only the scopes that surface needs. Keys **must** list scopes at creation. Empty scopes deny every check. `admin` grants all scopes. Prefix follows scopes at create/rotate: `public` → `e9publickey_…`, otherwise `e9key_…`. Changing scopes later does **not** change an existing key's prefix — rotate if you need the other prefix.
 
 | Scope | Surface | Allows |
 |-------|---------|--------|
@@ -47,6 +57,12 @@ Keys **must** list scopes at creation. Empty scopes deny every check. `admin` gr
 | `public` | Inbound / forms | Public ingest (`e9publickey_` prefix) |
 
 Constants: `SCOPES` from `@engine9/core`. Canonical list for UIs: MCP `apiKey` `command: catalog` → `scopes[]`.
+
+A public signup or payment form typically needs:
+
+```text
+public,people:write
+```
 
 A partner that discovers flows and schedules tasks needs:
 
@@ -69,6 +85,17 @@ List:
 ```
 
 Create (plaintext in `key`, `shown_once: true`):
+
+```json
+{
+  "command": "create",
+  "account_id": "<account_id>",
+  "name": "public-signup",
+  "scopes": ["public", "people:write"]
+}
+```
+
+Task-API partner (same key model, different scopes):
 
 ```json
 {
@@ -97,7 +124,7 @@ List returns `keys[]`. Get/update/revoke return `record`. None of those include 
 ## Auth
 
 - **Managing keys:** signed-in MCP user with access to `account_id` (same gate as `sql` / `task`).
-- **Using keys:** `Authorization: Bearer e9key_…` + `X-ENGINE9-ACCOUNT-ID` on core APIs and the Task API. MCP `POST /mcp` does not accept `e9key_` keys.
+- **Using keys:** `Authorization: Bearer e9key_…` + `X-ENGINE9-ACCOUNT-ID` on any HTTP route that verifies layer-1 keys (core site APIs, public forms, Task API, and other scoped endpoints). MCP `POST /mcp` does not accept `e9key_` keys.
 
 ## CLI (when MCP is not available)
 

@@ -7,17 +7,17 @@
 e9 inventoryworker inventory -a <account_id>
 
 # Build or refresh {account root}/cache/inventory.json.gz
-e9 inventoryworker buildInventoryReport -a <account_id>
+e9 inventoryworker buildInventorySummaryFile -a <account_id>
 
 # Full report with a bundle definition
-e9 inventoryworker buildInventoryReport -a <account_id> \
+e9 inventoryworker buildInventorySummaryFile -a <account_id> \
   --definition_path=engine9-accounts/<org>/<account>/export
 
 # Plan only — skip monthly statistics (faster)
-e9 inventoryworker buildInventoryReport -a <account_id> --statistics=false
+e9 inventoryworker buildInventorySummaryFile -a <account_id> --statistics=false
 
 # Explicit table list only (defaults not applied)
-e9 inventoryworker buildInventoryReport -a <account_id> --tables=person,transaction
+e9 inventoryworker buildInventorySummaryFile -a <account_id> --tables=person,transaction
 ```
 
 Read the full report from `inventory_path` / `options_filename` (same path when ready):
@@ -28,7 +28,7 @@ e9 fileworker json -a <account_id> --filename=/path/from/inventory_path
 
 ## Status return value
 
-`inventory` / `buildInventoryReport` return status only. Totals live in the gzip file under `summary`.
+`inventory` / `buildInventorySummaryFile` return status only. Totals live in the gzip file under `summary`.
 
 ```json
 {
@@ -332,18 +332,18 @@ Fallback if `message_activity` is skipped: `messages.by_channel_month`, then `in
 During `e9 exportworker export`, the written `inventory.json5` contains the **plan** only (`statistics` omitted). Collect statistics into the account cache separately:
 
 ```bash
-e9 inventoryworker buildInventoryReport -a <account_id> \
+e9 inventoryworker buildInventorySummaryFile -a <account_id> \
   --definition_path=engine9-accounts/<org>/<account>/export
 ```
 
 ## Programmatic use (server)
 
-The utility returns the **full** in-memory report (for export planning). `InventoryWorker.buildInventoryReport` writes the gzip cache (`include_files: false` by default) and returns status only.
+The utility returns the **full** in-memory report (for export planning). `InventoryWorker.buildInventorySummaryFile` writes the gzip cache (`include_files: false` by default) and returns status only.
 
 ```javascript
-import { buildInventoryReport } from '../utilities/inventoryReport.js';
+import { buildInventorySummaryFile } from '../utilities/inventoryReport.js';
 
-const report = await buildInventoryReport(worker, {
+const report = await buildInventorySummaryFile(worker, {
   definition_path: 'engine9-accounts/<org>/<account>/export',
   statistics: true
 });
@@ -355,7 +355,7 @@ const report = await buildInventoryReport(worker, {
 For plan-only (mirrors export bundle):
 
 ```javascript
-const plan = await buildInventoryReport(worker, {
+const plan = await buildInventorySummaryFile(worker, {
   definition_path: '…',
   statistics: false
 });
