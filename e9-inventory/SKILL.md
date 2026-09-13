@@ -4,7 +4,8 @@ description: >-
   Run and interpret engine9 warehouse inventory with the e9 CLI
   (`e9 inventoryworker inventory`, `e9 inventoryworker buildInventorySummaryFile`).
   Covers the account cache at cache/inventory.json.gz, inventory.json5 export plans,
-  InventoryWorker, input-store idv1 counts, table/message statistics (channel,
+  InventoryWorker, aggregate Messages vs Timeline → Messages (per-person),
+  input-store idv1 counts, table/message statistics (channel,
   sent, impressions/opens, clicks, transaction revenue, timeline people),
   plan-only runs, Home dashboard metrics from statistics, and using inventory
   outside export. Use when working with inventory, inventory.json.gz / inventory.json5,
@@ -27,7 +28,9 @@ When the user asks to **check / analyze inventory** (what plugins have, email ti
 
 Warehouse SQL is a **follow-up** — only when the user explicitly asks to query the DB, or after you have reported inventory results and they request deeper verification.
 
-**Input stores ≠ warehouse tables.** Large timeline idv1 files (especially email sends/opens/clicks) often live only in input stores on purpose: loading every entry into `timeline` is expensive and may never be intended. Prefer `statistics.inputs.by_plugin_entry_type_month` for “what email timeline entries does this plugin have?” Prefer `statistics.tables[]` (e.g. `timeline`) for “what is already loaded in the warehouse?” A mismatch between those blocks is common and **not** by itself a load failure — do not treat it as a bug or trigger SQL unless asked.
+**Two kinds of message data.** Most accounts are audited on **aggregate Messages** (`statistics.messages` from `global_message_summary`: sent / opens / clicks / spend). **Timeline → Messages** is optional per-person entries (`EMAIL_SEND`, `EMAIL_OPEN`, …) from input stores. Audit aggregate first and more often. A large Messages series with a missing or smaller Timeline → Messages row is normal — do not treat missing per-person entries as a failed message load.
+
+**Input stores ≠ warehouse tables.** Large timeline idv1 files (especially email sends/opens/clicks) often live only in input stores on purpose: loading every entry into `timeline` is expensive and may never be intended. Prefer `statistics.inputs.by_plugin_entry_type_month` (`category: timeline`, `subcategory: messages`) for “what per-person message entries does this plugin have?” Prefer `statistics.tables[]` (e.g. `timeline`) for “what is already loaded in the warehouse?” A mismatch between those blocks is common and **not** by itself a load failure — do not treat it as a bug or trigger SQL unless asked.
 
 Inventories take a while, so each account caches the last **account-wide** report at **`{account root}/cache/inventory.json.gz`**. `inventory` only stats that path (ready / size). `buildInventorySummaryFile` **without** an export definition writes it. Standard builds omit input-store `files[]` (`include_files: false`).
 
@@ -56,7 +59,7 @@ Related: export contents [e9-export](../e9-export/SKILL.md); running an export [
 Two logical parts in one JSON report (`format_version` **2**):
 
 1. **Plan** — what an export *would* write: tables, idv1 files, `relative_path`, transforms, skipped items, totals.
-2. **Statistics** — account-wide **monthly** counts and engagement (revenue, people, sends / impressions / clicks by channel) for warehouse timelines, Home KPIs, and analytics iteration (standalone `buildInventorySummaryFile` only by default). Grain is `YYYY-MM`, not daily.
+2. **Statistics** — account-wide **monthly** counts and engagement (revenue, people, sends / impressions / clicks by channel) for warehouse timelines, Home KPIs, and analytics iteration (standalone `buildInventorySummaryFile` only by default). Grain is `YYYY-MM`, not daily. Message stats are **aggregate** (`statistics.messages` from `global_message_summary` — Inventory **Messages**). Per-person send/open/click rows are **Timeline → Messages** (`statistics.inputs`, `subcategory: messages`).
 
 Account cache: `{account root}/cache/inventory.json.gz` (gzipped JSON; no `files[]` unless `--include_files=true`). Custom/export plans: `{account root}/cache/inventory-plans/<slug>.json.gz`. Bundle export plan: `{export_dir}/inventory.json5` (statistics omitted; includes files). Examples: [examples.md](examples.md).
 
@@ -166,7 +169,9 @@ For “what’s in inventory?” questions, stop after parsing that report. Do n
 
 When `definition_path` is omitted and no explicit bundle options are passed, inventory uses:
 
-**Tables:** `person`, `person_remote`, `person_email`, `person_phone`, `person_address`, `segment`, `source_code_dictionary`, `transaction`, `timeline`
+**Tables:** `person`, `person_remote`, `person_email`, `person_phone`, `person_address`, `segment`, `source_code_dictionary`, `transaction`, `global_message_summary`, `global_message_summary_by_date`, `timeline`
+
+Aggregate message views come before `timeline` so the usual message audit is in the plan even when per-person entries are not loaded.
 
 **Inputs:** all rows in `input` via `{ type: 'inputs', eql: { table: 'input', columns: [...] } }` — every input store with listable `.idv1.parquet` files
 
@@ -204,9 +209,9 @@ Monthly buckets use `YYYY-MM`. `month_range` spans the earliest and latest month
 | `version` | Statistics schema version (`1`). New fields are additive. |
 | `generated_at` | ISO timestamp when statistics were collected. |
 | `month_range` | `{ min, max }` month keys. |
-| `inputs.by_plugin_entry_type_month[]` | Non-unique timeline row counts from input-store `.idv1.parquet`, aggregated by plugin and entry type. Plugin id from `metadata.json` / `plugin`; display name prefers nickname/label over path. `{ plugin_id, plugin_name, entry_type, channel, month, records }`. **`channel`** is inferred from the entry-type prefix (`EMAIL_OPEN` → `email`, `SMS_SEND` → `sms`, `PHONE_*` → `phone`; otherwise omitted/`null`). These counts describe **files on disk**, not necessarily rows in warehouse `timeline`. |
+| `inputs` | Per-person timeline entries (`category: timeline`). `by_plugin_entry_type_month[]` rows also have **`subcategory`** (`messages` for EMAIL_*/SMS_*/PHONE_*/MESSAGE_*, else transactions / signups / forms / segments / other). Plugin id from `metadata.json` / `plugin`; display name prefers nickname/label over path. `{ plugin_id, plugin_name, entry_type, channel, month, records, category, subcategory }`. **`channel`** is inferred from the entry-type prefix (`EMAIL_OPEN` → `email`). These counts describe **files on disk**, not warehouse `timeline`, and are **not** aggregate message stats. Inventory UI: **Timeline → Messages** (per-person). |
 | `tables[]` | Per inventoried table: `{ table, date_column, months: [{ month, records, … }], records, sql }`. `sql` is the monthly-count query that produced `months`. Date column uses the export cascade: `frakture_last_modified`, `ts`, `last_modified`, `frakture_date_created`, … then `created_at` / `modified_at`. Extra measures on `months[]` when the column exists: **`transaction`** → `revenue` (`sum(amount)`), also rolled up as `tables[].revenue`; **`timeline`** → `people` (`count(distinct person_id)` — people with a timeline entry that month). For **`person`**, also **`created_months`** / **`created_date_column`** when a created-date column exists (`frakture_date_created`, `date_created`, `created_at`, `remote_date_created`) — used by Home’s people-created chart. For `transaction` and `person`, also **`by_plugin_month`** (always present when attempted), **`by_plugin_month_sql`**, and optional **`by_plugin_month_skipped`**: transaction via `input_id` → `input` ⨝ `plugin` (rows also carry `revenue`); person via `person_remote.source_input_id` → `input` ⨝ `plugin` with `count(distinct person_id)` (platform people). |
-| `messages` | Prefer **`global_message_summary`** (fallback: `global_message` / `message`): lifetime stats by plugin / submodule / **channel** / month on **`publish_date`**, only rows with **`publish_date > 2000-01-01`** (skips junk/empty dates). Plugin id comes from `bot_id` / `plugin_id`. Display name prefers instance **label** (`bot_nickname` / `bot_label`) over type (`bot_path` / `plugin_path`). Each `by_plugin_submodule_month[]` bucket: `{ plugin_id, plugin_name, submodule, channel, month, records }` plus sums of **`sent`**, **`impressions`** (opens), **`clicks`**, **`spend`**, **`attributed_revenue`**, **`attributed_transactions`** when those columns exist. **`by_channel_month[]`** is the same metrics rolled up without plugin/submodule. Includes `sql`, `date_column`. |
+| `messages` | **Aggregate** (`kind: aggregate`) — the usual message audit. Prefer **`global_message_summary`** (fallback: `global_message` / `message`): lifetime stats by plugin / submodule / **channel** / month on **`publish_date`**, only rows with **`publish_date > 2000-01-01`** (skips junk/empty dates). Plugin id comes from `bot_id` / `plugin_id`. Display name prefers instance **label** (`bot_nickname` / `bot_label`) over type (`bot_path` / `plugin_path`). Each `by_plugin_submodule_month[]` bucket: `{ plugin_id, plugin_name, submodule, channel, month, records }` plus sums of **`sent`**, **`impressions`** (opens), **`clicks`**, **`spend`**, **`attributed_revenue`**, **`attributed_transactions`** when those columns exist. **`by_channel_month[]`** is the same metrics rolled up without plugin/submodule. Includes `sql`, `date_column`. Inventory UI: top-level **Messages**. |
 | `message_summary_by_date` | From **`global_message_summary_by_date`** on **`date`**: **active ads** with **`spend > 0`**. `count(distinct message_id)` when available. Grain is plugin / submodule / channel / month. Coverage only — no engagement sums. Includes `sql`, `filter`, `count`, `by_channel_month`. |
 | `message_activity` | Same view on **`date`**, **no spend filter** (email and SMS daily stats included). Same grain and metric sums as `messages` (`sent`, `impressions`, `clicks`, …). Prefer this for calendar activity charts. Includes `sql`, `count`, `by_channel_month`. |
 
@@ -227,12 +232,13 @@ Stay on these fields when answering inventory questions. Do not open a live DB s
 
 Typical uses:
 
-- **Plugin / channel coverage in files** — `inputs.by_plugin_entry_type_month` (what was extracted into idv1; may never be loaded into warehouse tables).
+- **Aggregate message coverage (usual audit)** — `statistics.messages` / `message_activity` (`global_message_summary`). Inventory UI: **Messages**.
+- **Per-person message entries (optional)** — `inputs.by_plugin_entry_type_month` where `subcategory === 'messages'` (what was extracted into idv1; may never be loaded into warehouse `timeline`). Inventory UI: **Timeline → Messages**.
 - **Loaded warehouse volumes** — `tables[]` monthly buckets (what is already in SQL tables such as `timeline` / `transaction`).
 - **Warehouse timeline UI** — one row per source; each month tick is populated when `months[].records > 0` or a matching statistics bucket exists.
 - **Home dashboard** — monthly KPIs and charts (see below). Compare the latest month with data to the same month a year earlier for `% vs`. Charts are the last 12 months.
-- **Analytics DB iteration** — walk `statistics.tables` / `inputs.by_plugin_entry_type_month` to decide which months to pull.
-- **Gap detection** — compare `statistics.month_range` to expected span; empty `months` on a table that should have data → stats job or load missing. Empty or smaller warehouse `timeline` vs large email input buckets is often intentional (space), not a gap to “fix” with SQL.
+- **Analytics DB iteration** — walk `statistics.tables` / `messages` first; use `inputs.by_plugin_entry_type_month` only when you need per-person months.
+- **Gap detection** — compare `statistics.month_range` to expected span; empty `months` on a table that should have data → stats job or load missing. Empty or smaller warehouse `timeline` vs large email input buckets is often intentional (space), not a gap to “fix” with SQL. Empty Timeline → Messages with a populated Messages series is also normal.
 
 ### Home dashboard
 
@@ -245,9 +251,9 @@ Grain is monthly (`YYYY-MM`). Plot `month` as the date axis (`YYYY-MM-01`). Filt
 | Average gift | `revenue / records` for the latest month vs the same month last year. |
 | Active people | `tables[]` where `table === 'timeline'` → `months[].people` (`count(distinct person_id)`). Fallback: `person` table `records` (warehouse people, not activity). |
 | People created chart | Prefer person `created_months` (`frakture_date_created` / `date_created` / `created_at`). Fallback: person `months[]` only when `date_column` is a created-date column. Last 12 months. |
-| Emails sent (and other channel send KPIs) | Prefer **`message_activity.by_channel_month`** → `sent` for that channel. Fallback: `messages.by_channel_month`, then `inputs.by_plugin_entry_type_month` where `entry_type` is `EMAIL_SEND` / `SMS_SEND` / … (`channel` is already on those rows). |
+| Emails sent (and other channel send KPIs) | Prefer **`message_activity.by_channel_month`** → `sent` for that channel. Fallback: `messages.by_channel_month` (or roll up `messages.by_plugin_submodule_month`). Do **not** use timeline `inputs` / `EMAIL_SEND` for Home email stats. |
 | Revenue and donations chart | transaction `months[]` for the last 12 months: `revenue` (bars) + `records` (donations line) |
-| Channel activity chart (sends, opens, clicks) | Prefer **`message_activity.by_channel_month`**: `sent`, `impressions` (opens), `clicks`. Fallback: `messages.by_channel_month`, then inputs (`EMAIL_SEND` / `EMAIL_OPEN` / `EMAIL_CLICK`, `SMS_*`). Last 12 months. |
+| Channel activity chart (sends, opens, clicks) | Prefer **`message_activity.by_channel_month`**: `sent`, `impressions` (opens), `clicks`. Fallback: `messages.by_channel_month` (or `by_plugin_submodule_month`). Last 12 months. Per-person timeline entries stay on Inventory **Timeline → Messages**. |
 
 Paid/social **coverage** (which months had spend) still maps to `message_summary_by_date` (`spend > 0`). Do not use that block for email opens/clicks — it excludes rows without spend.
 

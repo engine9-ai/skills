@@ -19,7 +19,7 @@ Guiding loop:
 
 ## Install with a plugin
 
-Path format: `@engine9/interfaces/<pkg>:reports:<key>` (same triple as transforms/search).
+Path format: `@engine9/plugins/reports/<area>:reports:<key>` (same triple as transforms/search). Interfaces do not ship reports.
 
 Put files under `reports/` and export a **keyed object on the default plugin export** (`compilePlugin` reads `mod.default.reports`):
 
@@ -59,15 +59,15 @@ export default {
 ```
 
 ```javascript
-// index.js
+// plugins/reports/people/index.js
 import subscription_status from './reports/subscription_status.js';
 export const reports = { subscription_status };
-export default { metadata, reports, /* schema, search, … */ };
+export default { metadata, reports };
 ```
 
-Ship only reports that belong on that plugin. Email send/engagement dashboards live on `@engine9/interfaces/channels/email` (`summary`, `transactions`) because they query `global_message_summary` with `channel='email'`. Subscription counts live on `person_email`.
+Ship only reports that belong on that plugin. Email send/engagement and fundraising dashboards live on `@engine9/plugins/reports/messaging` (`email`, `email_transactions`) because they query `global_message_summary` with `channel='email'`. Subscription counts and person-created charts live on `@engine9/plugins/reports/people`.
 
-Reference: `person_email/reports/subscription_status.js`, `channels/email/reports/summary.js`, `person/reports/summary.js`.
+Reference: `plugins/reports/people/reports/subscription_status.js`, `plugins/reports/messaging/reports/email.js`.
 
 ## Definition shape
 
@@ -95,7 +95,7 @@ sections: [
     ]
   },
   {
-    title: 'By date',
+    title: 'Emails by Date',
     components: [
       {
         id: 'opens_clicks',
@@ -103,6 +103,7 @@ sections: [
         isDate: true,
         dimension: { eql: 'publish_date' },
         metrics: [
+          { name: 'Sent', eql: 'sum(sent)' },
           { name: 'Opened', eql: 'sum(impressions)' },
           { name: 'Clicked', eql: 'sum(clicks)' }
         ]
@@ -184,7 +185,7 @@ Surfaces accept the same bag of options (nested `options` and/or top-level alias
 
 ```json
 {
-  "path": "@engine9/interfaces/channels/email:reports:summary",
+  "path": "@engine9/plugins/reports/messaging:reports:email",
   "start": "-3M",
   "end": "now",
   "channel": "email",
@@ -268,7 +269,7 @@ export default {
       ]
     },
     {
-      title: 'By date',
+      title: 'Emails by Date',
       components: [
         {
           id: 'opens_clicks',
@@ -276,6 +277,7 @@ export default {
           isDate: true,
           dimension: { eql: 'publish_date' },
           metrics: [
+            { name: 'Sent', eql: 'sum(sent)' },
             { name: 'Opened', eql: 'sum(impressions)' },
             { name: 'Clicked', eql: 'sum(clicks)' }
           ]
@@ -307,11 +309,11 @@ Do **not** hardcode report maps. Prefer native MCP `report` over `task` for inte
   "account_id": "<account_id>",
   "reports": [
     {
-      "path": "@engine9/interfaces/channels/email:reports:summary",
+      "path": "@engine9/plugins/reports/messaging:reports:email",
       "name": "Email Engagement",
       "description": "…",
       "tags": ["Email"],
-      "plugin": { "path": "@engine9/interfaces/channels/email", "instances": [{ "id": "…", "name": "…" }] },
+      "plugin": { "path": "@engine9/plugins/reports/messaging", "instances": [{ "id": "…", "name": "…" }] },
       "filters": {
         "title": "Filters",
         "type": "object",
@@ -369,7 +371,7 @@ Preserve **section order** and **component order within each section**.
 {
   "command": "run",
   "account_id": "<account_id>",
-  "path": "@engine9/interfaces/person_email:reports:subscription_status",
+  "path": "@engine9/plugins/reports/people:reports:subscription_status",
   "plugin_name": "email"
 }
 ```

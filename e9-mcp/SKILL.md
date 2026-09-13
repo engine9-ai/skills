@@ -306,7 +306,7 @@ Example run:
 {
   "command": "run",
   "account_id": "<account_id>",
-  "path": "@engine9/interfaces/person_email:reports:subscription_status",
+  "path": "@engine9/plugins/reports/people:reports:subscription_status",
   "limit": 1000
 }
 ```

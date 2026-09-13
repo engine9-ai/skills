@@ -118,6 +118,8 @@ Each month with data gets a bucket. Use `month_range` for timeline axis bounds.
           "plugin_name": "@frakture-com/plugins/Switchboard",
           "entry_type": "EMAIL_SEND",
           "channel": "email",
+          "category": "timeline",
+          "subcategory": "messages",
           "month": "2024-01",
           "records": 152340
         },
@@ -126,6 +128,8 @@ Each month with data gets a bucket. Use `month_range` for timeline axis bounds.
           "plugin_name": "@frakture-com/plugins/Switchboard",
           "entry_type": "EMAIL_OPEN",
           "channel": "email",
+          "category": "timeline",
+          "subcategory": "messages",
           "month": "2024-01",
           "records": 42100
         }
@@ -304,13 +308,15 @@ Each month with data gets a bucket. Use `month_range` for timeline axis bounds.
 
 ## Mapping statistics to a warehouse timeline
 
-| UI row (big 3) | Statistics source |
-|----------------|-------------------|
+Audit **Messages** (aggregate) more often than **Timeline → Messages** (per-person). They are not the same data.
+
+| UI row | Statistics source |
+|--------|-------------------|
 | People | `tables[]` where `table === 'person'` → overall `months` / `records` (distinct people; not summed from platforms) |
 | People → platform | same table → `by_plugin_month` from `person_remote` ⨝ `input` (`count(distinct person_id)`) |
-| Messages → plugin → published | `messages.by_plugin_submodule_month` (`global_message_summary` / `publish_date`; includes `channel`) |
-| Messages → plugin → Active ads | `message_summary_by_date.by_plugin_submodule_month` (`spend > 0` on `date`) |
-| Messages → plugin → entry type | `inputs.by_plugin_entry_type_month` (`EMAIL_SEND`, `EMAIL_OPEN`, …; `channel` from prefix) |
+| Messages (aggregate) → plugin → published | `messages.by_plugin_submodule_month` (`kind: aggregate`; `global_message_summary` / `publish_date`; includes `channel`) |
+| Messages (aggregate) → plugin → Active ads | `message_summary_by_date.by_plugin_submodule_month` (`spend > 0` on `date`) |
+| Timeline → Messages (per-person) → plugin → entry type | `inputs.by_plugin_entry_type_month` where `subcategory === 'messages'` (`EMAIL_SEND`, `EMAIL_OPEN`, …) |
 | Transactions → plugin | `tables[]` where `table === 'transaction'` → `by_plugin_month` (`input_id` → `input.plugin_id`; includes `revenue`) |
 
 ## Mapping statistics to Home

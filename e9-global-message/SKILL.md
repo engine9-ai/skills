@@ -125,12 +125,14 @@ Stale `attributed_*` with good `transaction_summary.recommended_message_id` usua
 
 [e9-inventory](../e9-inventory/SKILL.md) warehouse statistics read these views. Grain is **month** (`YYYY-MM`). `impressions` is platform opens.
 
+These blocks are **aggregate** message stats (`kind: aggregate`) — the usual inventory audit. They are **not** per-person timeline entries. Per-person send/open/click rows live under **Timeline → Messages** (`statistics.inputs`, `subcategory: messages`). Audit this aggregate work more often than timeline entries.
+
 | Inventory key | Source | Bucket |
 |---------------|--------|--------|
-| `statistics.messages` | `global_message_summary` | Plugin (`bot_*`) / submodule / **channel** / month of **`publish_date`**. `records` = message count; sums `sent`, `impressions`, `clicks`, `spend`, `attributed_*` when columns exist. Also `by_channel_month`. |
+| `statistics.messages` | `global_message_summary` | Plugin (`bot_*`) / submodule / **channel** / month of **`publish_date`**. `records` = message count; sums `sent`, `impressions`, `clicks`, `spend`, `attributed_*` when columns exist. Also `by_channel_month`. Inventory UI: **Messages**. |
 | `statistics.message_summary_by_date` | `global_message_summary_by_date` | **Active ads** (`spend > 0`) by plugin / submodule / channel / month of **`date`** (`count(distinct message_id)`). Coverage only — no engagement sums. |
 | `statistics.message_activity` | `global_message_summary_by_date` | Calendar-day engagement, **no spend filter**, same grain and metric sums as `messages`. Prefer this for Home sends / opens / clicks by channel. |
 
-Use the lifetime summary (`messages`) for publish-month totals; use `message_activity` for calendar-month engagement (opens/clicks after send day, ads, SMS). Do not use `message_summary_by_date` for email activity — it drops rows without spend.
+Use the lifetime summary (`messages`) for publish-month totals; use `message_activity` for calendar-month engagement (opens/clicks after send day, ads, SMS). Do not use `message_summary_by_date` for email activity — it drops rows without spend. Do not use `inputs.by_plugin_entry_type_month` as a substitute for these views.
 
 Home mapping: [e9-inventory using statistics](../e9-inventory/SKILL.md#using-statistics).

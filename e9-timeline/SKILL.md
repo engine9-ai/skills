@@ -110,7 +110,8 @@ Until step 3 succeeds, the row is not on `timeline`. A file that only has an ema
 |----------|----------------|
 | Who is this person? Duplicate people? | [e9-person-id](../e9-person-id/SKILL.md) — not `timeline.id` |
 | Why is revenue on the wrong email? | [e9-source-code](../e9-source-code/SKILL.md) — `transaction_summary`, not timeline engagement |
-| Did this person open / click / get sent a message? | `timeline` (`EMAIL_*`, `SMS_*`) |
+| Did this person open / click / get sent a message? | `timeline` (`EMAIL_*`, `SMS_*`) — inventory **Timeline → Messages** (per-person), not aggregate **Messages** |
+| How did messages perform overall (sent / opens / clicks)? | `global_message_summary` — inventory **Messages** (aggregate). [e9-global-message](../e9-global-message/SKILL.md) |
 | Did this person transact? Amount, recurring, refund? | `transaction` / `transaction_summary` (also mirrored as `TRANSACTION_*` timeline rows) |
 | Is this person in an engagement audience? | Segment build: universe (which inputs) + search (which `entry_type_id` / window) |
 

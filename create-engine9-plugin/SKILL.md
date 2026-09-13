@@ -27,10 +27,11 @@ When unique, a second install reuses the existing row (or errors if duplicate ro
 Typical layout:
 
 - `README.md` — **required** human-readable documentation for the package (see [Document with README.md](#document-with-readmemd)).
-- `index.js` — exports `metadata`, optional `schema`, `transforms`, `search`, `segments`, `metrics`, `reports`, default aggregate object.
+- `index.js` — exports `metadata`, optional `schema`, `transforms`, `search`, `segments`, `metrics`, default aggregate object.
 - `schema.js` — `export default { tables: [...] }`.
 - `transforms/inbound/…`, `transforms/outbound/…` — pipeline steps.
-- Optional: `search.js`, `segments.js`, `metrics.js`, `reports/…`, `ui.console.json5`.
+- Optional: `search.js`, `segments.js`, `metrics.js`, `ui.console.json5`.
+- Do **not** ship `reports/` on interfaces. Dashboards live on `@engine9/plugins/reports/<area>`.
 
 `metadata` at minimum:
 
@@ -62,6 +63,8 @@ One-paragraph purpose. Name the package path and `metadata.dependencies`.
 ## Metrics
 ## Reports and UI
 ```
+
+On interfaces, this section should point at the matching `@engine9/plugins/reports/<area>` package rather than shipping a `reports/` map.
 
 **Segments (required when `segments.js` exists).** Document every predefined audience in prose a person who does not read the code can use:
 
@@ -271,11 +274,11 @@ Reference: `person/metrics.js`, `source_code/metrics.js`.
 
 ### 11. Reports — composed dashboards
 
-Export a keyed `reports` map on the **default** plugin object. Each value is JSON: `name`, `description`, `tags`, optional `data_sources` / `filters` (JSON Schema) / `optionsToEQL`, and `sections` (`{ title?, components: [{ id, component: 'StatCard'|'ComposedChart'|'Table', … }] }`). Path: `<package>:reports:<key>`. SQL is compiled by `ReportWorker`, not the plugin.
+Reports belong on **native report plugins** (`@engine9/plugins/reports/<area>`), not on interfaces. Export a keyed `reports` map on the **default** plugin object. Each value is JSON: `name`, `description`, `tags`, optional `data_sources` / `filters` (JSON Schema) / `optionsToEQL`, and `sections` (`{ title?, components: [{ id, component: 'StatCard'|'ComposedChart'|'Table', … }] }`). Path: `<package>:reports:<key>`. SQL is compiled by `ReportWorker`, not the plugin.
 
 Full contract, filters, run/list payloads, and UI widget list: [e9-reports](../e9-reports/SKILL.md).
 
-Reference: `person_email/reports/subscription_status.js`, `channels/email/reports/summary.js`.
+Reference: `plugins/reports/people/reports/subscription_status.js`, `plugins/reports/messaging/reports/email.js`.
 
 ### 12. Thin / schema-first `index.js`
 
