@@ -1,33 +1,34 @@
 # Task API — end-user documentation
 
-Guides for developers and integrators who **call the engine9 Task API** over HTTP. The default production base URL is **`https://data.engine9.ai`**; your administrator may provide a different host for staging or local use.
+The engine9 Task API lets developers and integrators schedule work and inspect asynchronous runs over HTTP. Use this documentation when building a direct HTTP integration against the production service or an administrator-provided staging or local host.
 
-**Cursor agents:** start with [SKILL.md](./SKILL.md).
+## Quick reference
 
-## Start here
+| Need | Value |
+|------|-------|
+| Production base URL | `https://data.engine9.ai` |
+| Authentication | `e9key_…` with `X-ENGINE9-ACCOUNT-ID` |
+| Read scope | `tasks:read` |
+| Schedule and control scope | `tasks:schedule` |
+| Poll runs | `POST /task_runs/filter` |
 
-1. [concepts.md](./concepts.md) — flows, runs, IDs, states, async execution
-2. [authentication.md](./authentication.md) — **API keys (`e9key_…`) and scopes** (`tasks:read` / `tasks:schedule`)
-3. [getting-started.md](./getting-started.md) — environment variables and first calls
-4. [echo-walkthrough.md](./echo-walkthrough.md) — on-demand Echo (`@engine9/plugins/e9workers:EchoWorker` + `echo`) → task_runs/filter
-5. [endpoints.md](./endpoints.md) — per-route reference with multiple examples
-6. [errors.md](./errors.md) — HTTP status codes (Prefect links for error semantics only)
+**Rule:** Task API routes live at the API origin root, not under `/api/task`.
 
-Developers authoring JSON5 flow files: see [e9-dev-tasks](../e9-dev-tasks/SKILL.md) (not for normal API users).
+## Concepts
 
-## What you need from your administrator
+Obtain these values from your administrator before integrating:
 
 | Item | Example |
 |------|---------|
 | Base URL | `https://data.engine9.ai` |
 | API key | `e9key_…` with `tasks:read` and/or `tasks:schedule` — see [authentication.md](./authentication.md) |
-| Account id | `acme` — sent as `X-ENGINE9-ACCOUNT-ID` |
+| Account id | `<account_id>` — sent as `X-ENGINE9-ACCOUNT-ID` |
 | Available flows | Slugs from `GET /flows` (optional; on-demand Echo does not need a flow) |
 | Output retrieval | How to fetch completed task results for your environment |
 
 Operators and deployment setup are documented separately (ask your administrator).
 
-## API shape
+## Workflow
 
 Routes live at the **API origin root** — not under `/api/task`:
 
@@ -50,3 +51,16 @@ Primary integration path: pick the **schedule endpoint**, then **list** via `POS
 
 - **Predefined flow:** `POST /flow_runs/` with **`flow_id`** (published slug) — see also `POST /tasks/schedule`
 - **On-demand task:** `POST /tasks/schedule` with plugin **`path`** + **`method`** — built-in: `@engine9/plugins/e9workers:EchoWorker` + `echo`; see also `POST /flow_runs/`
+
+## Related documentation
+
+| Documentation | Use when |
+|---------------|----------|
+| [SKILL.md](./SKILL.md) | Give a Cursor agent the complete Task API operating rules |
+| [concepts.md](./concepts.md) | Learn flows, runs, IDs, states, and asynchronous execution |
+| [authentication.md](./authentication.md) | Configure API keys and `tasks:read` / `tasks:schedule` scopes |
+| [getting-started.md](./getting-started.md) | Set environment variables and make the first calls |
+| [echo-walkthrough.md](./echo-walkthrough.md) | Schedule and poll the built-in Echo worker |
+| [endpoints.md](./endpoints.md) | Review routes and request examples |
+| [errors.md](./errors.md) | Interpret HTTP status codes |
+| [e9-dev-tasks](../e9-dev-tasks/SKILL.md) | Author JSON5 flow files |

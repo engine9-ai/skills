@@ -10,7 +10,23 @@ description: >-
 
 # engine9 API keys
 
-API keys are engine9's **generic authentication for non-session callers** — anything that is not a logged-in human in MCP or the console. There is one key model; **scopes** decide what a key can do. The Task API is one consumer, not the definition of a key.
+engine9 API keys provide generic authentication for non-session HTTP callers, including public forms, inbound integrations, data routes, and the Task API. Use this skill to create, scope, rotate, revoke, or integrate `e9key_` and `e9publickey_` credentials. MCP and console users authenticate through sessions instead; API keys are for machines and other HTTP clients.
+
+## Quick reference
+
+| Need | Use |
+|------|-----|
+| Discover scopes and form fields | MCP `apiKey` with `command: catalog` |
+| Create or manage a key | MCP `apiKey` with `create`, `update`, `rotate`, or `revoke` |
+| Authenticate an HTTP request | `Authorization: Bearer <key>` plus `X-ENGINE9-ACCOUNT-ID` |
+| Schedule tasks | Grant `tasks:read` and/or `tasks:schedule` |
+| Use a public form | Grant `public` and only the required write scopes |
+
+**Rule:** Never send an `e9key_` or `e9publickey_` credential to MCP.
+
+## Concepts
+
+There is one key model; **scopes** decide what a key can do. The Task API is one consumer, not the definition of a key.
 
 Typical callers:
 
@@ -24,11 +40,9 @@ Humans **manage** keys through **MCP `apiKey`**. Machines **use** the issued sec
 
 **Storage and verification always go through `@engine9/core`** (`SqlApiKeyStore` in the account `api_key` table). MCP does not invent a second store. Only the SHA-256 hash is retained; plaintext is returned **once** on create and rotate.
 
-Task API as one scoped use case: [e9-tasks-api](../e9-tasks-api/SKILL.md) / [authentication.md](../e9-tasks-api/authentication.md). MCP login: [e9-mcp](../e9-mcp/SKILL.md). UI payload contract: [ui.md](ui.md).
+## Workflow
 
-## Prefer MCP `apiKey`
-
-Do **not** schedule `SQLWorker.createApiKey` (or rotate/revoke) via MCP `task` — the plaintext key would land in task run output.
+**Rule:** Do not schedule `SQLWorker.createApiKey` (or rotate/revoke) via MCP `task`; the plaintext key would land in task run output.
 
 | Need | Call |
 |------|------|
@@ -45,6 +59,8 @@ CLI fallbacks (no MCP): server WorkerRunner `e9 sqlworker createApiKey` / `listA
 ## Scopes
 
 The scope list **is** the permission model. The same key type covers forms, inbound, reads, and tasks; attach only the scopes that surface needs. Keys **must** list scopes at creation. Empty scopes deny every check. `admin` grants all scopes. Prefix follows scopes at create/rotate: `public` → `e9publickey_…`, otherwise `e9key_…`. Changing scopes later does **not** change an existing key's prefix — rotate if you need the other prefix.
+
+**Rule:** Grant only the scopes required by the calling surface; empty scopes deny every permission check, while `admin` grants all scopes.
 
 | Scope | Surface | Allows |
 |-------|---------|--------|
@@ -141,3 +157,12 @@ Core-only (no `accounts.d`):
 ```
 npx e9 create-api-key --db sqlite://./engine9.db --name website --scopes admin
 ```
+
+## Related documentation
+
+| Topic | Documentation |
+|-------|---------------|
+| MCP login and tool behavior | [e9-mcp](../e9-mcp/SKILL.md) |
+| Task API authentication | [authentication.md](../e9-tasks-api/authentication.md) |
+| Task API workflows | [e9-tasks-api](../e9-tasks-api/SKILL.md) |
+| Key-management UI contract | [ui.md](ui.md) |

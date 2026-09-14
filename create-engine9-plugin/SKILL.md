@@ -1,98 +1,103 @@
 ---
 name: create-engine9-plugin
 description: >-
-  Describes how to implement engine9 interface packages (@engine9/interfaces/*)
-  and native plugins (@engine9/plugins/*): metadata, schemas, transforms with
-  bindings, search, segments, metrics, reports, optional ui.console.json5, and worker
-  classes. Use when adding or extending plugins, interfaces, transforms, EQL
-  search, or engine9 deployment schemas.
+  Implement and extend engine9 interface packages (`@engine9/interfaces/*`) and
+  native plugins (`@engine9/plugins/*`), including metadata, schemas, transforms,
+  search, segments, metrics, reports, UI configuration, and worker classes. Use
+  when building plugin capabilities, wiring deployment schemas, or documenting
+  an engine9 interface or native plugin.
 ---
 
 # Create an engine9 plugin or interface
 
-engine9 splits shared data contracts (**interfaces**) from deployable integrations (**native plugins**). Both are Node ESM modules identified by package path (`@engine9/interfaces/...` or `@engine9/plugins/...`). The server resolver loads from node_modules, a monorepo sibling checkout, or an optional install `source` — never via a `local$` path prefix (see [reference.md](reference.md)).
+engine9 separates shared data contracts, called interfaces, from deployable integrations, called native plugins. Both are Node ESM modules resolved by package path from `node_modules`, a monorepo sibling checkout, or an optional install `source`; they never require a `local$` path prefix. Use this skill when adding or extending an interface, native plugin, transform, search handler, segment, report, or deployment schema.
 
-## Interface package (`@engine9/interfaces/<name>`)
+## Quick reference
 
-**Install uniqueness:** `PluginWorker.install` decides whether a path may have more than one `plugin` row:
+| Need | Contract or location |
+| --- | --- |
+| Shared schema or reusable behavior | `@engine9/interfaces/<name>` |
+| Deployable integration | `@engine9/plugins/<prefix>` |
+| Transform capability | `<package>:transforms:<name>` |
+| Search capability | `<package>:search:<handler>` |
+| Segment definition | `<package>:segments:<key>` |
+| Report definition | `@engine9/plugins/reports/<area>:reports:<key>` |
+| Package documentation | Package-root `README.md` |
+| Resolver and registration details | [reference.md](reference.md) |
 
-1. `metadata.unique` if set — native plugins typically `true`; **`person_custom` is `false`**.
-2. Else packages under `@engine9/interfaces/*` default to **unique** (one row per account).
-3. Else `options.unique` (default `false`) — third-party plugins can be installed multiple times.
+## Concepts
 
-When unique, a second install reuses the existing row (or errors if duplicate rows already exist). When not unique, each install without an `id` creates a new row; `person_custom` gets a new `person_custom_<n>_` table prefix.
+### Interfaces and install uniqueness
 
-**Exports:** Only expose the standard feature modules below (and the default aggregate object). Do **not** export non-standard helpers meant only for the server (for example custom `resolveSegmentPluginId`–style functions). If an interface needs special install behavior, it belongs in server code keyed by `plugin.path`, not in the published interface API.
+`PluginWorker.install` determines whether a package path may have more than one `plugin` row:
 
-Typical layout:
+1. Use `metadata.unique` when set. Native plugins typically set it to `true`; `person_custom` sets it to `false`.
+2. Otherwise, packages under `@engine9/interfaces/*` default to unique, with one row per account.
+3. Otherwise, use `options.unique`, which defaults to `false`; third-party plugins may therefore be installed multiple times.
 
-- `README.md` — **required** human-readable documentation for the package (see [Document with README.md](#document-with-readmemd)).
-- `index.js` — exports `metadata`, optional `schema`, `transforms`, `search`, `segments`, `metrics`, default aggregate object.
-- `schema.js` — `export default { tables: [...] }`.
-- `transforms/inbound/…`, `transforms/outbound/…` — pipeline steps.
-- Optional: `search.js`, `segments.js`, `metrics.js`, `ui.console.json5`.
-- Do **not** ship `reports/` on interfaces. Dashboards live on `@engine9/plugins/reports/<area>`.
+When a package is unique, a second install reuses the existing row or errors if duplicate rows already exist. When it is not unique, every install without an `id` creates a row; `person_custom` receives a new `person_custom_<n>_` table prefix.
 
-`metadata` at minimum:
+**Rule:** Export only standard feature modules and the default aggregate object from an interface. Server-only helpers, such as custom `resolveSegmentPluginId` functions, belong in server code keyed by `plugin.path`, not in the public interface API.
+
+### Stacks
+
+A stack at `@engine9/interfaces/stacks/<name>` is a metadata-only interface with `name`, `description`, `include`, and `exclude`. Core `PluginWorker`, not `SchemaWorker`, installs stacks: it deploys the plugin table, records the stack as a plugin row, walks `include`, and rejects paths forbidden by an installed plugin's `metadata.exclude`. `SchemaWorker` installs only one plugin's schema and row.
+
+`installStandard({ path })` defaults to the account's default stack, typically `@engine9/interfaces/stacks/standard`. Pass another stack, such as `@engine9/interfaces/stacks/limited-pii`, instead of hard-coding stack behavior into `SchemaWorker`. Installing limited-pii and then standard without Server must throw.
+
+Server `accounts.d` values `defaultStack` and `stacks[]` are options passed to `PluginWorker`; they do not belong in core. Inherited, child-first `settings.exclude_pii` forces limited-pii when the default would otherwise be standard and refuses standard, `person_email`, `person_phone`, and `person_address`, even when those plugins are already installed.
+
+### Inbound people pipeline
+
+Core assembles the people pipeline from plugins installed in an account; it does not maintain a list of plugin paths. A plugin participates by mapping pipeline slots to keys from its `transforms` export:
+
+| Slot | Purpose |
+| --- | --- |
+| `normalize` | Clean or normalize fields |
+| `id` | Populate `identifiers[]` before person assignment |
+| `assign` | Core-owned person assignment phase |
+| `upsert` | Queue table rows after person assignment |
+
+Install validates that each transform key exists and that transform `type` values such as `'id'` or `'upsert'` match their slots. It then snapshots the specification on the `plugin` row. Verify the result with `personWorker.getInboundTransforms({ pluginId, describe: true })`.
+
+### Segments and reports
+
+Segments are keyed saved-audience definitions. The export key is the final part of `<package>:segments:<key>`. The deployed `segment.plugin_id` identifies the owning package; it need not match each plugin supplying data. An optional `universe` narrows the input IDs whose timeline files participate in a build, while an empty `pluginId` in search options preserves universe scope.
+
+Reports are composed dashboards owned by native report plugins at `@engine9/plugins/reports/<area>`, never by interfaces. Export a keyed `reports` map on the default plugin object. `ReportWorker` compiles report EQL/SQL.
+
+## File format
+
+### Interface package layout
+
+| Path | Purpose |
+| --- | --- |
+| `README.md` | Required audience-facing package documentation |
+| `index.js` | Named feature exports and default aggregate |
+| `schema.js` | Default export `{ tables: [...] }` |
+| `transforms/inbound/` | Normalize, identity, and upsert steps |
+| `transforms/outbound/` | Enrichment and output steps |
+| `search.js` | Optional UI-to-EQL handlers |
+| `segments.js` | Optional saved-audience definitions |
+| `metrics.js` | Optional aggregate cards |
+| `ui.console.json5` | Optional console UI configuration |
+
+**Rule:** Do not ship `reports/` on interfaces. Put dashboards in `@engine9/plugins/reports/<area>`.
+
+At minimum, interface metadata identifies the package and version:
 
 ```javascript
 const metadata = {
   name: "@engine9/interfaces/example",
   version: "1.0.0",
   dependencies: { "@engine9/interfaces/person": ">=1.0.0" }, // optional
-  schemas: ["schema.js"], // optional hint when schema file name is nonstandard
+  schemas: ["schema.js"], // optional for a nonstandard schema filename
 };
 ```
 
-### Document with README.md
+### Schema
 
-`README.md` in the package root is the standard way to document an interface or native plugin. Do not rely on `segments.js` comments, `metadata.description`, or skill files as the audience-facing contract.
-
-Use this outline and omit sections that do not apply:
-
-```markdown
-# Human Name Interface
-
-One-paragraph purpose. Name the package path and `metadata.dependencies`.
-
-## Data Model
-## Inbound Behavior
-## Outbound Behavior
-## Search
-## Segments
-## Metrics
-## Reports and UI
-```
-
-On interfaces, this section should point at the matching `@engine9/plugins/reports/<area>` package rather than shipping a `reports/` map.
-
-**Segments (required when `segments.js` exists).** Document every predefined audience in prose a person who does not read the code can use:
-
-- Display **name** and export **key**
-- **Definition path** (`@engine9/interfaces/<pkg>:segments:<key>`)
-- **Who is included** and **who is excluded**
-- **How it is built** (search handler or table condition)
-- **Universe**, if any (which inputs/messages the build may see). Write `None` when membership is current table state.
-
-Reference: `person_email/README.md`, `person_phone/README.md`, `transaction/core/README.md`, `channels/email/README.md`.
-
-### Stacks (`@engine9/interfaces/stacks/<name>`)
-
-A **stack** is a metadata-only interface: `name`, `description`, `include`, `exclude`. Core **PluginWorker** (not SchemaWorker) installs stacks: it deploys the plugin table, records the stack as a plugin row, walks `include`, and refuses any path that an already-installed plugin's `metadata.exclude` forbids. SchemaWorker only installs one plugin's schema/row.
-
-`installStandard({ path })` is a convenience whose default `path` is the account default stack (typically `@engine9/interfaces/stacks/standard`). Pass a different stack (for example `@engine9/interfaces/stacks/limited-pii`) instead of baking stack names into SchemaWorker. Installing limited-pii and then the standard stack without Server must throw.
-
-Server `accounts.d` `defaultStack` / `stacks[]` are options fed into PluginWorker; they do not live in core. Server `settings.exclude_pii` (inherited child-first) forces the default stack to limited-pii when it would otherwise be standard, and refuses installing the standard stack or `person_email` / `person_phone` / `person_address` even if those plugins are already installed.
-
-Reference: `stacks/standard/index.js`, `stacks/limited-pii/index.js`.
-
-### 1. Schema — tables, columns, indexes, views
-
-Export `tables`: each entry has `name`, `columns`, optional `indexes`, optional `type: 'view'` + `sql`.
-
-Column values can be shorthand types (`'string'`, `'id'`, `'foreign_uuid'`, `'created_at'`, …) or objects with `type`, `nullable`, `default_value`, `values` (enum), `description`, `length`.
-
-Minimal example:
+Export `tables`. Each table has `name`, `columns`, and optional `indexes`; views add `type: 'view'` and `sql`. Column values may be shorthand types such as `'string'`, `'id'`, `'foreign_uuid'`, or `'created_at'`, or objects with `type`, `nullable`, `default_value`, `values`, `description`, and `length`.
 
 ```javascript
 export const tables = [
@@ -125,32 +130,124 @@ export const tables = [
 export default { tables };
 ```
 
-Reference: `message/schema.js` (views, many tables), `person_email/schema.js` (enums), `job/schema.js` (`type: 'enum'`).
+### Search
 
-### 1b. Join the inbound people pipeline — `metadata.inbound`
+The named `search` export is a map of handlers:
 
-Core weaves the people pipeline from the plugins **installed** in an account; it never lists plugin paths. To take part, declare which slot each inbound transform runs in. Values are keys of your `transforms` export:
+| Member | Purpose |
+| --- | --- |
+| `title`, `description` | Optional catalog labels |
+| `form` | Canonical JSON Schema object |
+| `optionsToEQL(options)` | Returns `{ text, eql }` |
+| `optionsToEQLContext(options)` | Optional pre-query lookup context |
+
+Canonical forms use `{ title, type: 'object', properties, required? }`. The server still normalizes legacy flat property maps and single-key wrappers. EQL may contain `table`, `columns`, `conditions`, and `joins`; conditions may be structured (`EQUALS`, `LIKE`) or raw `{ eql: '...' }` fragments.
+
+Account-scoped discovery through MCP `searchOptions`, `PersonWorker.searchOptions`, or `GET /data/search/options` returns standard filters and all installed-plugin handlers with normalized forms. A UI submits `{ and: [{ path, options }] }` to search.
+
+### Segment definition
+
+Export an object map, not an array. Each value has `name`, optional `universe` EQL objects whose rows yield `input_id`, and optional `search` trees using `and`, paths, or table/column clauses. Paths use `@engine9/interfaces/...:search:<handler>`.
+
+### Report definition
+
+Each report contains `name`, `description`, `tags`, optional `data_sources`, `filters` expressed as JSON Schema, optional `optionsToEQL`, and `sections`. A section has an optional `title` and `components` such as `StatCard`, `ComposedChart`, or `Table`.
+
+### Native plugin layout
+
+Native plugins follow the same package-root `README.md` convention and may provide integration behavior, account setup, schema, and classes:
+
+```javascript
+const metadata = {
+  name: "Human Name",
+  prefix: "e9myplugin",
+  unique: true,
+  version: "1.0.0",
+  dependencies: { "@engine9/interfaces/message": ">1.0.0" },
+};
+
+export default {
+  metadata,
+  schema,  // optional table DDL
+  install, // optional async setup
+  // Optional feature classes
+};
+```
+
+`install(context)` is asynchronous and receives `{ account, plugin, sqlWorker }` for one-time provisioning.
+
+Worker-style classes follow `function Worker(args) { ... }`, static `Worker.metadata`, prototype methods, and method-level metadata such as `Worker.prototype.myMethod.metadata = { options: { ... } }`. Export each class as a named property on the plugin object. Concrete domain integrations may live in separate classes/files and attach to the default export.
+
+Metadata-only plugins may declare dependencies without schema or handlers. Optional `ui.console.json5` may define top-level `menu` and `routes`, CRUD components such as `RecordTable`, `RecordForm`, or `RecordDisplay`, and `sidebar` or `main` tabs with path segments.
+
+## Workflow
+
+1. Choose an interface for reusable contracts or a native plugin for deployable integration behavior.
+2. Create package metadata and declare deployment dependencies.
+3. Define tables, columns, indexes, and views.
+4. Add inbound or outbound transforms and their bindings.
+5. Add search, segments, metrics, reports, UI configuration, or worker classes where appropriate.
+6. Export named features and a default aggregate from `index.js`.
+7. Document behavior and every predefined segment in the package `README.md`.
+8. Register a new interface when deployment uses `deployAllSchemas` or `getActivePluginPaths`.
+9. Install and verify compiled features and inbound transforms.
+
+### Document the package
+
+`README.md` is the audience-facing contract. Do not rely on comments in `segments.js`, `metadata.description`, or skill files as package documentation. A useful outline is:
+
+```markdown
+# Human Name Interface
+
+One-paragraph purpose. Name the package path and `metadata.dependencies`.
+
+## Data Model
+## Inbound Behavior
+## Outbound Behavior
+## Search
+## Segments
+## Metrics
+## Reports and UI
+```
+
+For every predefined segment, document its display name, export key, definition path, included and excluded people, search or table-condition implementation, and universe. Write `None` when membership is based on current table state.
+
+## Rules
+
+**Rule:** Package metadata names must match the package scope: `@engine9/interfaces/...` for interfaces and the intended display name for native plugins.
+
+**Rule:** Declare every interface or schema dependency required at deployment time.
+
+**Rule:** Index columns used for joins, filters, natural keys, and uniqueness.
+
+**Rule:** Bind state-changing inbound transforms to `sql.tables.upsert`; bind query enrichments to `sql.query`.
+
+**Rule:** Never queue duplicate natural keys in one upsert batch. Use `mergeIntoQueue` and plugin-owned merge semantics; without a `merge` callback, duplicates throw during transformation.
+
+**Rule:** Search handlers must return human-readable `text` and valid `eql`.
+
+**Rule:** Segment exports must be keyed objects, and every key must be documented in the package README with membership and universe behavior.
+
+**Rule:** Wire only standard named exports and the default aggregate from interface `index.js`.
+
+## Examples
+
+### Declare inbound transforms
 
 ```javascript
 const metadata = {
   name: "@engine9/interfaces/example",
   version: "1.0.0",
   inbound: {
-    id: ["extractLoyaltyNumber"], // push identifiers[] before person_id assignment
-    upsert: ["upsertMembership"], // queue table rows after person_id assignment
+    id: ["extractLoyaltyNumber"],
+    upsert: ["upsertMembership"],
   },
 };
 ```
 
-Slots: `normalize` (field cleanup), `id` (identifier extraction), `upsert` (table writes). Core owns the `assign` phase between `id` and `upsert`. `install` validates the keys exist and that a transform's `type` (`'id'` / `'upsert'`) matches its slot, then snapshots the spec onto the `plugin` row. Nothing else is needed: install the plugin and its steps appear. Verify with `personWorker.getInboundTransforms({ pluginId, describe: true })`.
+Identifier extraction transforms set `export const type = 'id'` and mutate each batch row's `identifiers`.
 
-Reference: `person_email/index.js`, `person_hash/index.js` (PII-free peer of email/phone). Full explanation of slots, the weaver, overrides, and debugging: `@engine9/core/lib/peoplePipeline/README.md`.
-
-### 2. Transforms — inbound upsert (accumulate rows)
-
-Bind `sql.tables.upsert` and queue rows with `mergeIntoQueue` from `@engine9/input-tools`. Do **not** push duplicate natural keys into `tablesToUpsert` in one batch — many SQL engines reject or mishandle duplicate unique keys inside a single upsert statement even when upsert is enabled. Merge semantics (field overrides, status precedence) belong in your plugin via the `merge` callback, not in a global SQL safety net.
-
-Use the table’s unique key columns (see your schema `indexes`). Example for `(email, person_id)`:
+### Merge inbound rows
 
 ```javascript
 import { mergeIntoQueue } from "@engine9/input-tools";
@@ -164,34 +261,32 @@ function mergeExampleRow(existing, incoming) {
     ...existing,
     ...incoming,
     id: existing.id ?? incoming.id ?? null,
-    // Last row in batch wins — e.g. Unsub then Sub in one file keeps Subscribed
     status: incoming.status ?? existing.status,
     source_input_id: existing.source_input_id ?? incoming.source_input_id,
   };
 }
 
 export async function transform({ batch, tablesToUpsert }) {
-  tablesToUpsert.example_row = tablesToUpsert.example_row || [];
+  tablesToUpsert.example_row ||= [];
   for (const row of batch) {
-    mergeIntoQueue(tablesToUpsert.example_row, { person_id: row.person_id, status: row.status, id: null }, {
-      keyFields: ["person_id"],
-      merge: mergeExampleRow,
-      label: "example_row",
-    });
+    mergeIntoQueue(
+      tablesToUpsert.example_row,
+      { person_id: row.person_id, status: row.status, id: null },
+      {
+        keyFields: ["person_id"],
+        merge: mergeExampleRow,
+        label: "example_row",
+      },
+    );
   }
 }
+
 export default { bindings, transform };
 ```
 
-If two batch rows share a natural key and you omit `merge`, `mergeIntoQueue` throws at transform time so the bug surfaces during development.
+For status changes in one file, `person_email` uses last-row-wins order. Unsubscribed then Subscribed preserves a resubscription; the reverse preserves Unsubscribed. Same-timestamp rows are ambiguous, so use explicit entry types or sort the source when order matters.
 
-**Subscription status in one file:** `person_email` uses last-wins batch order. `Unsubscribed` then `Subscribed` in the same import yields `Subscribed` (possible resubscribe). `Subscribed` then `Unsubscribed` yields `Unsubscribed`. Same-timestamp rows are ambiguous — use explicit entry types or sort the source file if order matters.
-
-Reference: `person_email/transforms/inbound/upsert_tables.js`, `person/transforms/inbound/upsert_tables.js`.
-
-### 3. Transforms — outbound enrichment (`sql.query`)
-
-Declare `description`, `bindings` with a SELECT shaped as EQL (`table`, `columns`, `lookup`, `joins`, `conditions`), and a `transform` function `( { batch, ...bound, options } ) => void`.
+### Enrich outbound rows
 
 ```javascript
 export const bindings = {
@@ -205,177 +300,86 @@ export const bindings = {
     },
   },
 };
-export const transform = ({ batch, rows, options }) => {
-  const map = Object.fromEntries(rows.map((r) => [r.person_id, r.status]));
-  batch.forEach((b) => {
-    b.status = b.status ?? map[b.person_id] ?? null;
+
+export const transform = ({ batch, rows }) => {
+  const statusByPerson = Object.fromEntries(
+    rows.map((row) => [row.person_id, row.status]),
+  );
+  batch.forEach((row) => {
+    row.status = row.status ?? statusByPerson[row.person_id] ?? null;
   });
 };
-export default { description: "Attach latest status", bindings, transform };
+
+export default {
+  description: "Attach latest status",
+  bindings,
+  transform,
+};
 ```
 
-Reference: `person_email/transforms/outbound/appendEmail.js`.
+### Map fields with Handlebars
 
-### 4. Transforms — identifier extraction (`type: 'id'`)
+An asynchronous `transform({ batch, options })` may compile `options.map` with Handlebars and build new objects. The `*` mapping copies remaining fields.
 
-Used to populate `identifiers` for matching; set `export const type = 'id'` and mutate `batch` in `transform`.
+### Export an inline transform
 
-Reference: `person_email/transforms/inbound/extract_identifiers.js`.
+An interface may expose `{ description?, bindings, transform }`, where `transform` is synchronous and consumes pre-resolved binding data such as `sql.query`.
 
-### 5. Transforms — Handlebars field map
+### Define a metric
 
-Async `transform({ batch, options })` compiles `options.map` with Handlebars and builds new objects (`*` copies remaining fields).
+Metric functions return `{ label, description?, eql: { table, columns: [aggregations] } }`.
 
-Reference: `person/transforms/simpleMap.js`.
-
-### 6. Transforms — inline object with `bindings` + function
-
-Expose an object `{ description?, bindings, transform }` where `transform` is synchronous and uses pre-resolved binding data (e.g. `sql.query`).
-
-Reference: `person_remote` → `transforms.appendRemotePersonId` in `person_remote/index.js`.
-
-### 7. Search — UI form → EQL
-
-Named export is a map of handlers. Each handler provides:
-
-- optional **`title`** / **`description`** (catalog labels for `searchOptions`)
-- **`form`** — canonical JSON Schema: `{ title, type: 'object', properties, required? }`
-- **`optionsToEQL(options)`** returning `{ text, eql }` where `eql` includes `table`, `columns?`, `conditions`, `joins?`
-
-Conditions may be structured (`type: 'EQUALS' | 'LIKE'` with `ref` / `value`) or `{ eql: 'raw sql fragment' }`.
-
-Prefer the canonical form shape above. Older shapes (flat property map, or a single-key wrapper like `{ emails: { type: 'object', properties } }`) are still normalized by the server `searchOptions` helper.
-
-Reference: `person_email/search.js`, `person/index.js` (mixed raw `eql` strings), `channels/email/search.js`.
-
-Account-scoped discovery: MCP tool **`searchOptions`** / `PersonWorker.searchOptions` / `GET /data/search/options` lists `standard` filters plus every installed plugin handler (`path` + normalized `form`) so a UI can build a form and submit `{ and: [{ path, options }] }` to search.
-
-### 8. Search — `optionsToEQLContext`
-
-For lookups before building the main EQL (e.g. load segment rows), add `optionsToEQLContext(opts)` returning named context; `optionsToEQL(options, context)` consumes it.
-
-Reference: `segment/search.js` (`segment` handler).
-
-### 9. Segments — saved audience presets
-
-Export **keyed** definitions (an object map, not an array): `name`, optional **`universe`** (array of EQL objects whose rows yield `input_id` values), optional `search` tree (`and` / paths / table+columns). Paths use `@engine9/interfaces/...:search:<handler>`. The export key is the last segment of `definition_path` (`<package>:segments:<key>`).
-
-The deployed `segment.plugin_id` identifies the **owning** package (often the interface). It does not have to match every plugin that supplies data: the **universe** narrows which inputs (possibly across plugins) feed timeline files for the build. Optional empty `pluginId` in search options keeps handlers universe-scoped; set it only when the search handler should filter by a specific data plugin.
-
-Document each key in the package `README.md` (who is in, who is out, search, universe). Do not leave membership rules only in `segments.js`.
-
-Reference: `person_email/segments.js`, `transaction/core/segments.js`, `channels/email/segments.js` (`universe` + engagement search).
-
-### 10. Metrics — aggregate cards
-
-Functions return `{ label, description?, eql: { table, columns: [ aggregations ] } }`.
-
-Reference: `person/metrics.js`, `source_code/metrics.js`.
-
-### 11. Reports — composed dashboards
-
-Reports belong on **native report plugins** (`@engine9/plugins/reports/<area>`), not on interfaces. Export a keyed `reports` map on the **default** plugin object. Each value is JSON: `name`, `description`, `tags`, optional `data_sources` / `filters` (JSON Schema) / `optionsToEQL`, and `sections` (`{ title?, components: [{ id, component: 'StatCard'|'ComposedChart'|'Table', … }] }`). Path: `<package>:reports:<key>`. SQL is compiled by `ReportWorker`, not the plugin.
-
-Full contract, filters, run/list payloads, and UI widget list: [e9-reports](../e9-reports/SKILL.md).
-
-Reference: `plugins/reports/people/reports/subscription_status.js`, `plugins/reports/messaging/reports/email.js`.
-
-### 12. Thin / schema-first `index.js`
-
-- `message/index.js` exports only `metadata` (with `schemas: ['schema.js']`); table DDL lives in `schema.js`.
-- `job/index.js` and `segment_stats/index.js` export `metadata`, `schema`, and default `{ metadata, schema }` (optional `metadata.dependencies` on `segment_stats`).
-- `report/index.js` is metadata-only (marker interface).
-
-### 13. Optional `ui.console.json5`
-
-Console UI can ship as JSON5: top-level `menu` + `routes` (e.g. `RecordTable`, `RecordForm`, `RecordDisplay`), or extra tabs on existing routes (`sidebar` / `main` with `path` segments).
-
-Reference: `job/ui.console.json5` (menus + job CRUD), `person_address/ui.console.json5` (person detail tabs).
-
-### 14. Wiring `index.js`
-
-Export named and default aggregates so `compilePlugin` can read `transforms`, `schema`, etc.:
+### Wire the interface
 
 ```javascript
 import schema from "./schema.js";
 import upsert from "./transforms/inbound/upsert_tables.js";
-const metadata = { name: "@engine9/interfaces/example", version: "1.0.0" };
+
+const metadata = {
+  name: "@engine9/interfaces/example",
+  version: "1.0.0",
+};
 export const transforms = { upsert };
 export { metadata, schema };
 export default { metadata, schema, transforms };
 ```
 
-Reference: `person_email/index.js` (full feature set), `segment/index.js`, `timeline/index.js`.
+Thin, schema-first interfaces are also valid. `message/index.js` exports only metadata with `schemas: ['schema.js']`; `job/index.js` and `segment_stats/index.js` export metadata, schema, and the default aggregate; `report/index.js` is a metadata-only marker.
 
----
+## Troubleshooting
 
-## Native plugin (`@engine9/plugins/<prefix>`)
+| Symptom | Check |
+| --- | --- |
+| Second install creates or reuses the wrong row | Review `metadata.unique`, interface defaults, and `options.unique` |
+| Installed transform is absent | Confirm `metadata.inbound` names an exported transform and its `type` matches the slot |
+| Upsert fails on duplicate keys | Merge rows by the schema's unique key with `mergeIntoQueue` |
+| Search does not appear in discovery | Confirm the plugin is installed and the handler uses a canonical form |
+| Segment membership is unexpectedly broad | Inspect `universe`, search path, and optional `pluginId` scope |
+| Interface report is not available | Move it to a native `@engine9/plugins/reports/<area>` package |
+| Package cannot resolve | Use the package path and inspect resolver/registration rules; do not add `local$` |
+| Stack installation conflicts | Inspect installed stack `exclude` metadata and inherited `exclude_pii` |
 
-Native plugins use the same `README.md` convention as interfaces (purpose, install, schema, workers, and any predefined segments).
+## Related documentation
 
-Implements integration behavior and optional account setup. Convention:
-
-```javascript
-const metadata = {
-  name: "Human Name",
-  prefix: "e9myplugin",
-  unique: true,
-  version: "1.0.0",
-  dependencies: { "@engine9/interfaces/message": ">1.0.0" },
-};
-export default {
-  metadata,
-  schema, // optional table DDL module
-  install, // optional async (context) => { message }
-  // Plus feature classes, see below
-};
-```
-
-### 15. `install(context)`
-
-Async function receiving `{ account, plugin, sqlWorker }`; run one-time provisioning (e.g. default rows).
-
-Reference: `e9email/install.js`.
-
-### 16. Worker-style class (RPC methods)
-
-`function Worker(args) { … }`, `Worker.metadata = {}`, `Worker.prototype.myMethod = async function (opts) { … }`, `Worker.prototype.myMethod.metadata = { options: { … } }`. Export as a named property on the plugin object (e.g. `Messages`).
-
-Reference: `e9email/Messages.js`.
-
-### 17. Domain modules
-
-Export concrete integrations (email providers, timeline processors, form handlers) as separate classes/files and attach them to the default plugin export.
-
-Reference: `e9email/index.js` (`SendGridEmail`, `SESTimeline`, …), `e9forms/FormTimeline.js`.
-
-### 18. Metadata-only plugin
-
-Dependency declaration only — no schema or handlers until extended.
-
-Reference: `e9stub/index.js`, `e9workers/index.js`, `e9console/index.js`.
-
----
-
-## Referencing capabilities from config
-
-- **Transform path:** `@engine9/interfaces/<pkg>:transforms:<name>` (colon-separated triple).
-- **Search path:** `@engine9/interfaces/<pkg>:search:<handler>` (used inside segment JSON).
-
-Server resolution loads `@engine9/...` via `resolvePluginModule` (node_modules → monorepo sibling → optional `source`). Legacy `local$` prefixes are stripped.
-
----
-
-## Checklist
-
-- [ ] Package `README.md` documents purpose, data model, behavior, and every predefined segment in prose.
-- [ ] Interface `index.js` exposes only the standard exports (no server-only hooks or extra named APIs).
-- [ ] `metadata.name` matches package scope (`@engine9/interfaces/...` or display name for native).
-- [ ] `dependencies` declare other interfaces/schemas required at deploy time.
-- [ ] `schema.js` indexes cover join/filter columns; primary keys set where needed.
-- [ ] Transforms that mutate SQL state use correct `bindings.path` (`sql.tables.upsert` / `sql.query`).
-- [ ] Search handlers return both human `text` and valid `eql`.
-- [ ] Segment exports are a keyed object; each key is listed in the README with definition path, membership, and universe.
-- [ ] New interface is registered for deploy if using `deployAllSchemas` / `getActivePluginPaths` (see [reference.md](reference.md)).
-
-For deeper path rules and registration, read [reference.md](reference.md).
+- [Plugin resolver and registration reference](reference.md)
+- [Report authoring](../e9-reports/SKILL.md)
+- `@engine9/core/lib/peoplePipeline/README.md`
+- `stacks/standard/index.js`
+- `stacks/limited-pii/index.js`
+- `message/schema.js`, `person_email/schema.js`, and `job/schema.js`
+- `person_email/transforms/inbound/upsert_tables.js`
+- `person/transforms/inbound/upsert_tables.js`
+- `person_email/transforms/outbound/appendEmail.js`
+- `person_email/transforms/inbound/extract_identifiers.js`
+- `person/transforms/simpleMap.js`
+- `person_remote/index.js`
+- `person_email/search.js`, `person/index.js`, and `channels/email/search.js`
+- `segment/search.js`
+- `person_email/segments.js`, `transaction/core/segments.js`, and `channels/email/segments.js`
+- `person/metrics.js` and `source_code/metrics.js`
+- `plugins/reports/people/reports/subscription_status.js`
+- `plugins/reports/messaging/reports/email.js`
+- `job/ui.console.json5` and `person_address/ui.console.json5`
+- `person_email/index.js`, `segment/index.js`, and `timeline/index.js`
+- `e9email/install.js`, `e9email/Messages.js`, `e9email/index.js`, and `e9forms/FormTimeline.js`
+- `e9stub/index.js`, `e9workers/index.js`, and `e9console/index.js`

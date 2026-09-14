@@ -16,21 +16,36 @@ description: >-
 
 # engine9 person identity (`person_id`)
 
-The overarching goal of the person identity framework is to identify a quality **`person_id`** from many inbound inputs. A row may arrive with an email, a phone, a CRM `remote_person_id`, a delegate unid, an existing `person_id`, hashes only, or several of those at once. engine9 extracts match keys, looks them up, and stamps one integer `person_id` on the row. Downstream tables (`timeline`, `transaction`, segments) never invent identity — they consume that `person_id`.
+The engine9 person identity framework selects a durable `person_id` from
+inbound email, phone, remote, delegate, hash, and existing-person identifiers.
+Use this skill to understand identity stores, trace the inbound people pipeline,
+or diagnose deduplication and duplicate-person behavior. Downstream tables such
+as `timeline`, `transaction`, and segments consume this identity rather than
+creating their own.
 
-This skill is **exclusively about `person_id`**. It is not about `source_code_id`, message ids, timeline entry ids, or other identifiers. For source codes see [e9-source-code](../e9-source-code/SKILL.md). For the person activity log that consumes `person_id`, see [e9-timeline](../e9-timeline/SKILL.md).
+## Quick reference
 
-Worked email / phone / `remote_person_id` examples: [examples.md](examples.md).
+| Need | Start here |
+| --- | --- |
+| Understand canonical identity and match keys | [Concepts](#concepts) |
+| Inspect lookup and attribute tables | [File format](#file-format) |
+| Follow assignment and upsert behavior | [Workflow](#workflow) |
+| Avoid legacy/current identity mistakes | [Rules](#rules) |
+| Diagnose missing or duplicate identity | [Troubleshooting](#troubleshooting) |
 
-## Canonical identity
+## Concepts
 
 `person.id` **is** `person_id`: a numeric autoincrement on the `person` table. Every other person-related table stores that integer as `person_id`.
 
 Names (`given_name`, `family_name`) and addresses are **attributes**, not match keys. Two people can share a name. Identity matching uses only the identifier types below.
 
-One person may have **many** emails and **many** phones. That is the current model. The old one-email-equals-one-person world lives in [Old identity model](#old-identity-model-person_metadata-person_id_int-timeline_v3-transaction_metadata).
+Rule: One person may have many emails and many phones. Do not apply the legacy
+one-email-equals-one-person assumption to current identity.
 
-## Tables
+Rule: This skill is exclusively about `person_id`; do not apply these rules to
+`source_code_id`, message IDs, timeline entry IDs, or other identifiers.
+
+## File format
 
 Two layers: a **lookup** from match key → `person_id`, and **attribute** rows hanging off that `person_id`.
 
@@ -72,7 +87,7 @@ Written **after** `person_id` is assigned. Unique keys allow multiple emails/pho
 
 `timeline`, `transaction`, `person_segment`, and similar tables store `person_id` after the people pipeline has run. They are not identity sources.
 
-## Identifier types
+### Identifier types
 
 Inbound rows do not match on raw email/phone strings in the lookup tables. Extract transforms push `{ type, value, path }` onto `row.identifiers`. `assignPersonIds` matches those.
 
@@ -85,17 +100,21 @@ Inbound rows do not match on raw email/phone strings in the lookup tables. Extra
 
 `appendPersonId` lowercases and strips accents on every identifier `value` before lookup (`NFD` + combining marks). Matching is case- and accent-insensitive.
 
-The blank SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` is never stored. Extract skips it; `assignPersonIds` throws if it appears.
+Rule: Never store the blank SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Extract skips it, and `assignPersonIds` throws if it appears.
 
 Code: `@engine9/interfaces/person_email|person_phone|person_remote/transforms/inbound/extract_identifiers.js`, `@engine9/core/lib/id/index.js`.
 
-## Inbound pipeline
+## Workflow
+
+### Inbound pipeline
 
 Shared by server `PersonWorker.loadPeople` (streams/files) and core `PersonWorker.processPeople` (in-memory). Woven by `buildInboundTransforms` in `@engine9/core/lib/peoplePipeline/getInboundTransforms.js` from the plugins **installed in the account** — core has no list of person plugins. Each people interface declares `metadata.inbound = { slot: [transformKey] }`; the snapshot is stored on `plugin.transforms` at install.
 
 Slots, in order (`assign` is core-only):
 
-```
+```text
 beforeAll  extra
 normalize  person:normalizeFieldNames                       # lowercase keys, strip punctuation
 id         person_email / person_phone / person_remote :id   # identifiers[]; person_hash:id when installed
@@ -123,7 +142,7 @@ WHERE plugin_id = '00000000-0000-4000-a000-000000000001'
 -- compact | legacy | missing (then SQLite/D1 → compact, MySQL → person_identifier)
 ```
 
-## How `assignPersonIds` works
+### How `assignPersonIds` works
 
 `@engine9/core/lib/id/index.js`. One batch, one store.
 
@@ -138,12 +157,16 @@ WHERE plugin_id = '00000000-0000-4000-a000-000000000001'
 Consequences:
 
 - One inbound row with email + phone + remote id attaches **all three** keys to the same `person_id`. A later row matching **any** of those keys resolves to that person (unless a higher-priority already-set `person_id` / `remote_person_id` won first).
-- Identifier mappings are immutable. A second person created via a new `remote_person_id` does not steal an email/phone key that already points at someone else. `person_email` uniqueness is `(email, person_id)`, so the plaintext email **can** appear on more than one person; the **lookup** key still points at the first `person_id`.
+- Rule: Identifier mappings are immutable and first-wins. A second person
+  created via a new `remote_person_id` does not steal an email or phone key
+  that already points at someone else. `person_email` uniqueness is
+  `(email, person_id)`, so plaintext email can appear on more than one person;
+  the lookup key still points at the first `person_id`.
 - Caller-supplied `person_id` is respected and seeds the store for new keys.
 
 After assignment, upserts write attributes. Email upsert looks up existing `person_email` by address; same person+email updates (keeps original `source_input_id`); new pair inserts. Default new subscription is `Subscribed`; explicit unsubscribe (or `EMAIL_UNSUBSCRIBE`) updates **all** `person_email` rows with that address. Phone upsert is analogous (min 8 digits; default SMS `Not Subscribed`).
 
-## Identifier stores
+### Select an identifier store
 
 `createDefaultIdentifierStore` (`@engine9/core/lib/id/storeKind.js`):
 
@@ -155,7 +178,9 @@ After assignment, upserts write attributes. Email upsert looks up existing `pers
 
 **Migrate:** `PersonWorker.migratePersonIdentifiersToCompact` pages `person_identifier`, writes compact tables (first-wins), renames `person_identifier` to `person_identifier_legacy_<timestamp>`, sets `identifier_store_kind=compact`. `dry_run` counts only.
 
-## Old identity model (`person_metadata`, `person_id_int`, `timeline_v3`, `transaction_metadata`)
+## Rules
+
+### Old identity model (`person_metadata`, `person_id_int`, `timeline_v3`, `transaction_metadata`)
 
 `person_metadata`, `person_id_int`, `transaction_metadata`, and `timeline_v3` all use an **OLD identity model that did not account for multiple emails or phones per person**.
 
@@ -163,11 +188,14 @@ In that model the person key was a single integer `person_id_int`, and `person_m
 
 `PersonWorker.unwindPersonMetadata` is the bridge: copy `person_metadata.person_id_int` into `person.id`, then delete those legacy metadata rows. `LocalDatabasePersonWorker.importFromTimelineV3` still reads `timeline_v3` joined to `person_metadata` and feeds emails into the **current** people pipeline.
 
-When you see `person_id_int` or `person_metadata.person_id` as an email, you are in the old model. Do not join it to current `person_email` as if it were `person.id`. Resolve through the current lookup (`person_id_*` / `person_identifier`) and attribute tables instead.
+Rule: When you see `person_id_int` or `person_metadata.person_id` as an email,
+you are in the old model. Do not join it to current `person_email` as if it were
+`person.id`; resolve through the current lookup (`person_id_*` or
+`person_identifier`) and attribute tables.
 
 Legacy `source_code_summary.origin_*` rollups were computed in that old identity world. Current models write `{prefix}_*` tables with bigint `person_id` — [e9-model](../e9-model/SKILL.md).
 
-## Debugging identity
+## Troubleshooting
 
 Prefer attribute tables (plaintext) over compact BLOBs. `DESCRIBE` first; filter to one example; LIMIT.
 
@@ -209,7 +237,12 @@ On **compact** accounts, `person_identifier` may be empty or renamed. Lookup tab
 
 Duplicate-people symptoms: same email on two `person_id`s (lookup first-wins; attribute table allows both), missing `remote_person_id` extract (`pluginId` required), short phone dropped (< 8 digits), blank hash refused, or still reading `person_metadata` / `timeline_v3` as if they were current.
 
-## Additional resources
+## Related documentation
 
-- Worked dedupe examples: [examples.md](examples.md)
-- Person activity log: [e9-timeline](../e9-timeline/SKILL.md)
+| Topic | Documentation |
+| --- | --- |
+| Worked email, phone, remote ID, and dedupe examples | [Examples](examples.md) |
+| Person activity log that consumes `person_id` | [e9-timeline](../e9-timeline/SKILL.md) |
+| Plugin-scoped remote attributes and exports | [e9-person-remote](../e9-person-remote/SKILL.md) |
+| Source-code identifiers, which are not person identity | [e9-source-code](../e9-source-code/SKILL.md) |
+| Current model output and legacy origin context | [e9-model](../e9-model/SKILL.md) |

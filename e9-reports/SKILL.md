@@ -1,23 +1,27 @@
 ---
 name: e9-reports
-description: >-
-  Author engine9 plugin reports (JSON dashboards with EQL) and consume them via
-  ReportWorker / MCP report / GET /data/reports: install with a plugin, list
-  filters, execute with date and option variables. Use when adding reports/,
-  StatCard, ComposedChart, Table, optionsToEQL, or plugin-installed dashboards.
+description: "Author and consume engine9 plugin reports: JSON dashboard definitions with EQL-backed StatCard, ComposedChart, and Table components installed through plugins and executed by ReportWorker, HTTP, or MCP. Use when adding reports/, defining filters and optionsToEQL, compiling date and option variables into conditions, rendering plugin-installed dashboards, or debugging report list, get, and run payloads."
 ---
 
 # engine9 reports
 
 Reports are **JSON dashboards installed with a plugin**. `ReportWorker` lists what the account has installed, turns run options into EQL conditions, and compiles/runs SQL. Consumers (HTTP, MCP, or a UI elsewhere) only pass `path` + options and render the returned `sections` data — they never write SQL.
 
-Guiding loop:
+Use this skill when defining a report, wiring filters to EQL, executing it through supported surfaces, or implementing a consumer for report results.
 
-1. **Install** — plugin exports `reports.<key>`
-2. **List** — catalog + JSON Schema `filters` for the account
-3. **Execute** — `path` + options (`start`, `end`, `channel`, …) → `sections[].components[].data` (and `sql` for debug)
+## Quick reference
 
-## Install with a plugin
+| Task | Contract |
+|------|----------|
+| Install | Plugin exports `reports.<key>` and `default.reports` |
+| List | Catalog plus merged JSON Schema `filters` |
+| Get | Definition selected by report `path` |
+| Run | `path` + options → `sections[].components[].data` and debug SQL |
+| Render | Preserve section and component order |
+
+## Workflow
+
+### Install with a plugin
 
 Path format: `@engine9/plugins/reports/<area>:reports:<key>` (same triple as transforms/search). Interfaces do not ship reports.
 
@@ -67,9 +71,9 @@ export default { metadata, reports };
 
 Ship only reports that belong on that plugin. Email send/engagement and fundraising dashboards live on `@engine9/plugins/reports/messaging` (`email`, `email_transactions`) because they query `global_message_summary` with `channel='email'`. Subscription counts and person-created charts live on `@engine9/plugins/reports/people`.
 
-Reference: `plugins/reports/people/reports/subscription_status.js`, `plugins/reports/messaging/reports/email.js`.
+## Concepts
 
-## Definition shape
+### Definition shape
 
 | Field | Required | Notes |
 |-------|----------|--------|
@@ -81,7 +85,7 @@ Reference: `plugins/reports/people/reports/subscription_status.js`, `plugins/rep
 | `sections` | yes | Ordered layout: `{ title?, components: [{ id, component, … }] }` |
 | `optionsToEQL` | no | `(options, ctx) => conditions` — custom option → EQL mapping (same idea as search `optionsToEQL`) |
 
-### Layout: sections
+#### Layout: sections
 
 Reports use an ordered **`sections`** array. Each section is a visual group; optional `title` is the heading. Widgets live under `components` with stable **`id`** values used for run-result binding (`sql[].id`, UI keys).
 
@@ -120,7 +124,7 @@ sections: [
 | Stable `id` per widget | Run `sql[]` and consumers key off `id` |
 | One section per visual group | Stat cards that belong together share a section |
 
-### Components
+#### Components
 
 | `component` | Role | Typical fields | `data` after run |
 |-------------|------|----------------|------------------|
@@ -141,9 +145,11 @@ Two ways to specify the query:
 1. **Data source + metrics** — worker builds `table` / `columns` / `groupBy` / date grouping from `metric(s)`, `dimension(s)`, `isDate`.
 2. **Explicit `query`** — full EQL object (`table`, `joins`, `columns`, `groupBy`, `orderBy`). Date + filter options are **appended** to `query.conditions`.
 
-Use only `StatCard`, `ComposedChart`, `Table`.
+Rule: Use only `StatCard`, `ComposedChart`, and `Table`.
 
-## Options → conditions (how `channel` / `start` / `end` become SQL)
+## Rules
+
+### Options → conditions
 
 Run callers pass variables. `ReportWorker` turns them into EQL `conditions` on **every** component query. Nothing on the client invents WHERE clauses.
 
@@ -234,7 +240,9 @@ optionsToEQL(options) {
 }
 ```
 
-Prefer declarative `filter: { column }` when a simple column predicate is enough; use `optionsToEQL` when you need joins, OR groups, or option-dependent shapes. Same naming spirit as search `optionsToEQL`, but reports only **append conditions** — each component already owns its table/columns.
+Rule: Prefer declarative `filter: { column }` when a simple column predicate is enough; use `optionsToEQL` only for joins, OR groups, or option-dependent shapes.
+
+Reports only append conditions; each component already owns its table and columns.
 
 `days` (optional on run) picks date-chart grouping: year (>1200d), month (>365), week (>180), else day. If omitted, `start`+`end` span is used when both are set.
 
@@ -290,7 +298,7 @@ export default {
 
 (Email channel is fixed in `data_sources.conditions` here. To make channel a run variable, move it into `filters.properties` with `filter: { column: 'channel' }` and drop the hardcoded predicate.)
 
-## List / get / run
+### List, get, and run
 
 SQL is generated only in `ReportWorker` (`compileReport` → `buildSqlFromEQLObject`).
 
@@ -300,7 +308,7 @@ SQL is generated only in `ReportWorker` (`compileReport` → `buildSqlFromEQLObj
 | HTTP (`X-ENGINE9-ACCOUNT-ID` + session) | `GET /data/reports` | `GET /data/reports/get?path=` | `GET` or `POST /data/reports/run` |
 | MCP | `report` `command: list` (default) | `command: get` | `command: run` |
 
-Do **not** hardcode report maps. Prefer native MCP `report` over `task` for interactive queries.
+Rule: Do not hardcode report maps. Prefer native MCP `report` over `task` for interactive queries.
 
 ### List payload
 
@@ -346,9 +354,9 @@ Do **not** hardcode report maps. Prefer native MCP `report` over `task` for inte
 
 Each widget gains `data`, `sql`, `query`, `seconds`. Top-level `sql` is `[{ id, table, sql, error, seconds }]`. Section titles are not executed.
 
-Unknown `component` values: show a placeholder. Do not invent SQL outside `ReportWorker`.
+Rule: Unknown component values must render as placeholders. Do not invent SQL outside `ReportWorker`.
 
-## Widget contract (for consumers)
+### Widget contract for consumers
 
 | Widget | Input | Output |
 |--------|--------|--------|
@@ -359,9 +367,11 @@ Unknown `component` values: show a placeholder. Do not invent SQL outside `Repor
 | ComposedChart | `{ isDate, dimension, metrics, data }` | X = `dimension.name` or `dimension_name`; series = `metrics[].name` |
 | Table | `{ dimensions, metrics, data }` or column names from `data[0]` | Table; apply `format` when present |
 
-Preserve **section order** and **component order within each section**.
+Rule: Preserve section order and component order within each section.
 
-## MCP
+## Examples
+
+### MCP
 
 ```json
 { "account_id": "<account_id>" }
@@ -376,18 +386,20 @@ Preserve **section order** and **component order within each section**.
 }
 ```
 
-Login and account scope: [e9-mcp](../e9-mcp/SKILL.md). EQL syntax: [e9-eql](../e9-eql/SKILL.md). Message grain: [e9-global-message](../e9-global-message/SKILL.md).
-
-## Auth (API keys — recommendation only)
+### Authentication constraints
 
 Today reports run as:
 
 - **MCP `report`** — Firebase / session / `localdev`
 - **HTTP `/data/reports*`** — same user session as the rest of `/data`
 
-An **`e9key_` cannot run reports through those paths today.** **Recommendation (do not implement here):** a `reports:read` (or `data:read`) scope on `GET/POST /data/reports*` for machine clients. Keep SQL generation in `ReportWorker`. See [e9-api-key](../e9-api-key/SKILL.md).
+Rule: An `e9key_` cannot run reports through these paths today. Do not implement or document API-key execution as if it were supported.
 
-## Checklist for a new report
+Recommendation only: add a future `reports:read` or `data:read` scope on `GET/POST /data/reports*` for machine clients while keeping SQL generation in `ReportWorker`.
+
+## Troubleshooting
+
+### Checklist for a new report
 
 - [ ] File under `reports/<key>.js`; key is the path tail
 - [ ] `name`, `description`, `tags`, `sections` with stable component `id`s
@@ -396,3 +408,12 @@ An **`e9key_` cannot run reports through those paths today.** **Recommendation (
 - [ ] Component names `StatCard` / `ComposedChart` / `Table` only
 - [ ] Exported on `reports` **and** `default.reports`
 - [ ] Documented in the package `README.md` (path, who it is for, filters)
+
+## Related documentation
+
+- [engine9 MCP](../e9-mcp/SKILL.md)
+- [engine9 EQL](../e9-eql/SKILL.md)
+- [Global message view grain and metrics](../e9-global-message/SKILL.md)
+- [API key capabilities](../e9-api-key/SKILL.md)
+- Reference implementation: `plugins/reports/people/reports/subscription_status.js`
+- Reference implementation: `plugins/reports/messaging/reports/email.js`

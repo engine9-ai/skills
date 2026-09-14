@@ -1,0 +1,36 @@
+---
+description: Standard structure and writing conventions for skill documentation
+globs: "**/{README.md,SKILL.md}"
+alwaysApply: false
+---
+
+# Skill writing standard
+
+Use this structure for every skill `README.md` and `SKILL.md`.
+
+## Required structure
+
+1. Start each `SKILL.md` with valid YAML frontmatter containing `name` and a dense, selection-oriented `description`. Keep frontmatter metadata-like.
+2. Use exactly one clear `#` title.
+3. Follow the title with a 2–4 sentence summary explaining what the subject is and when to use the document.
+4. Add a short `## Quick reference` section containing the facts needed most often.
+5. Organize the body around tasks. Prefer the predictable headings `Concepts`, `File format`, `Workflow`, `Rules`, `Examples`, and `Troubleshooting`; use specific task headings beneath them when useful.
+6. Put structured reference data in tables.
+7. Put examples in fenced code blocks.
+8. End with `## Related documentation`; do not crowd the introduction with related links.
+
+## Rules
+
+Rule: State critical instructions as declarative sentences prefixed with `Rule:`.
+
+Rule: Preserve explicit redundancy around dangerous distinctions. Repeat an important constraint in the relevant workflow or troubleshooting section when that prevents mistakes.
+
+Rule: Do not shorten a document at the expense of operational detail, assumptions, edge cases, or gotchas.
+
+Rule: Keep heading vocabulary predictable, but choose task-oriented subheadings that describe what the reader is doing.
+
+## Example
+
+```markdown
+Rule: `inventory.json5` is authoritative. Do not infer artifact locations from the default directory structure.
+```

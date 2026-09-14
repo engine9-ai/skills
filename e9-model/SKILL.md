@@ -7,21 +7,33 @@ description: >-
   (model_first_touch_person, …) that answer lifetime value (LTV) and acquisition
   ROI questions. Models connect people and their transactions to PEOPLE-level
   origin; attribution connects a transaction to a MESSAGE and is never a model
-  (see e9-source-code). Also explains the timeline effective date cascade
-  (timeline.ts / effective_date, default_timestamp, extract_timestamp,
-  source_code_date, acquisition_date, SOURCE_CODE_OVERRIDE) that every model
-  sorts by. Use when working with ModelWorker, model_*_person,
-  model_*_transaction, lifetime value, LTV, acquisition ROI, first touch, CRM
-  origin, or reading/running a model. Authoring and internals: developers.md.
+  peer. Covers the timeline effective-date cascade (timeline.ts /
+  effective_date, default_timestamp, extract_timestamp, source_code_date,
+  acquisition_date, SOURCE_CODE_OVERRIDE) that every model sorts by. Use when
+  working with ModelWorker, model_*_person, model_*_transaction, lifetime value,
+  LTV, acquisition ROI, first touch, CRM origin, or reading/running a model.
 ---
 
 # engine9 models
 
-This document explains **what a model is, why it exists, and how to read what it
-produces**. It assumes no prior engine9 knowledge. Building or running one in
-code is [developers.md](developers.md).
+An engine9 model reads a person's timeline and assigns person-level source-code
+credit for questions such as lifetime value and acquisition ROI. Use this skill
+to understand shipped models, inspect model output, diagnose a person's result,
+or run a model. It assumes no prior engine9 knowledge.
 
-## 1. The timeline: what a model reads
+## Quick reference
+
+| Need | Start here |
+| --- | --- |
+| Understand model inputs and decisions | [Concepts](#concepts) |
+| Distinguish models from attribution | [Rules](#rules) |
+| Inspect output tables or query results | [File format](#file-format) and [Examples](#examples) |
+| Investigate one person's credit | [Troubleshooting](#troubleshooting) |
+| Run a model | [Workflow](#workflow) |
+
+## Concepts
+
+### The timeline a model reads
 
 Every person in engine9 has a **timeline**: a list of things that happened to
 them or that they did, in time order. One row is one **entry** — one fact about
@@ -44,7 +56,7 @@ The timeline is raw history. It does not say which of those five entries
 "revenue from people the climate petition brought us." That is the gap a model
 fills.
 
-## 2. What a model is
+### What a model is
 
 A **model** is a rule that walks one person's entries and picks the single entry
 that deserves credit for **that person**. It stores four things per person:
@@ -76,7 +88,7 @@ questions ("who first touched them?" vs. "what most recently reactivated
 them?"). This is why engine9 runs several models side by side instead of
 choosing one, and why every stored row carries a `reason`.
 
-## 3. Attribution is NOT a model
+## Rules
 
 This is the most important distinction in this document, and the easiest to get
 wrong.
@@ -91,9 +103,9 @@ wrong.
 | Lives in | [e9-source-code](../e9-source-code/SKILL.md) | this document |
 | Output | `recommended_message_id`, `attributed_revenue`, `source_code_summary.revenue` | `{prefix}_person`, `{prefix}_transaction` |
 
-**Attribution is exclusively transaction → message.** It is never a model. Do
-not call last click "the last-click model", do not list it among the models, and
-do not put it in a model comparison as if it were a peer.
+Rule: Attribution is exclusively transaction → message. It is never a model.
+Do not call last click "the last-click model", list it among the models, or put
+it in a model comparison as if it were a peer.
 
 Both are true at once, and they are not alternatives:
 
@@ -105,7 +117,7 @@ Both are true at once, and they are not alternatives:
 
 Consequences to respect:
 
-- Never add attributed revenue and model revenue together; they are the same
+- Rule: Never add attributed revenue and model revenue together; they are the same
   dollars counted for two different questions.
 - Model revenue for a source code will not equal that source code's attributed
   revenue, and that is not a bug. A petition that never asks for money can have
@@ -115,7 +127,9 @@ Consequences to respect:
   (old identity) and are not current model output — see
   [developers.md](developers.md#legacy-old-identity).
 
-## 4. The models engine9 ships
+## Reference
+
+### Models engine9 ships
 
 Each model is a plugin with a stable `prefix`. The prefix is the table name stem
 and is identical on every account.
@@ -138,7 +152,7 @@ crm_origin, and last_acquisition). Those stems are discovered from the table
 and omitted when absent; `timelinePerson` `compareSourceCodes` with
 `legacy: true` includes them.
 
-## 5. The effective date of an entry
+### Effective date of an entry
 
 Every rule above is a statement about **time** — *earliest* entry, *most recent*
 acquisition. So a model's answer depends entirely on which date each entry
@@ -146,11 +160,10 @@ carries. That date is the entry's **effective date**: when the thing actually
 happened, not when engine9 loaded it. It is stored as `timeline.ts`, and
 `timelinePerson` shows it as `effective_date`.
 
-The effective date is decided **once, at load time**, and models only read it. A
-model never recomputes it. So if a model picked the "wrong" entry, check the
-dates before questioning the rule — an entry with a bad effective date sorts to
-the wrong end of history and quietly changes both first touch and last
-acquisition.
+Rule: The effective date is decided once, at load time; models only read it and
+never recompute it. If a model picked the "wrong" entry, check dates before
+questioning the rule—an entry with a bad effective date sorts to the wrong end
+of history and quietly changes both first touch and last acquisition.
 
 **Cascade for a single entry**, first usable value wins:
 
@@ -189,7 +202,7 @@ everyone's "first touch".
 Field-level detail, date format heuristics, and the exact option names:
 [developers.md](developers.md#effective-date-resolution).
 
-## 6. What a model writes
+## File format
 
 One `run` of one model produces six tables, named from its prefix:
 
@@ -217,7 +230,7 @@ when they exist (models are optional per account). Do not replace attributed
 rules for developers: [schema.md](schema.md) and
 [developers.md](developers.md#optional-use-from-source_code_summary).
 
-## 7. Reading the answers
+## Examples
 
 **Which efforts brought the most people?**
 
@@ -290,7 +303,7 @@ also includes the top 10 source codes by absolute person_count difference
 `{stem}_*` columns on `transaction_model_pivot` are included as custom legacy
 models when present.
 
-## 8. Checking one person
+## Troubleshooting
 
 To see why a person got the credit they got, read their entries and each model's
 stored conclusion together. MCP tool **`timelinePerson`** returns exactly that:
@@ -313,7 +326,7 @@ Read it in this order:
 Stored `reason` and `date_of_source` reflect the last `run`; a model does not
 re-decide when you read it.
 
-## 9. Running a model
+## Workflow
 
 A model is not live — someone has to run it, and the tables hold whatever the
 last run decided.
@@ -323,7 +336,7 @@ const model = new ModelWorker(accountWorker);
 await model.run({ model: '@engine9/plugins/models/first_touch' });
 ```
 
-`run` streams the timeline, applies the rule, and writes that model's four
+`run` streams the timeline, applies the rule, and writes that model's six
 tables. Method list, test options, authoring a new model, and legacy tables:
 [developers.md](developers.md).
 
@@ -340,7 +353,7 @@ tables. Method list, test options, authoring a new model, and legacy tables:
 | **prefix** | A model's table stem, e.g. `model_first_touch`. |
 | **reason** | Why the model chose what it chose, stored per row. |
 
-## Additional resources
+## Related documentation
 
 - Running, authoring, testing, internals, legacy: [developers.md](developers.md)
 - Table columns and payload shapes: [schema.md](schema.md)

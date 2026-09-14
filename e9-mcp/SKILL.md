@@ -5,11 +5,24 @@ description: Use the engine9 MCP server — log in first via mcp_auth, MCP-only 
 
 # engine9 MCP
 
-Use this skill when calling engine9 MCP tools from Cursor or another MCP client. For `/e9` and `/e9a` slash commands and client setup, see [e9-cli](../e9-cli/SKILL.md). For the Prefect-compatible REST Task API, see [e9-tasks-api](../e9-tasks-api/SKILL.md).
+The engine9 MCP server exposes authenticated, account-scoped tools for discovery, queries, reporting, API-key management, and asynchronous work. Use this skill when selecting and calling engine9 MCP tools from Cursor or another MCP client.
+
+## Quick reference
+
+| Need | Use |
+|------|-----|
+| Authenticate | `mcp_auth` with `{}`, then verify with `ok` and `user` |
+| Discover accounts or installed plugins | `account` |
+| Use a purpose-built operation | The matching native MCP tool |
+| Run an on-demand worker method | `task` with `path` + `method` |
+| Run a predefined flow | `task` with `flow_id` |
+| Diagnose generated queries | The response's top-level `sql` field |
+
+**Rule:** Discover accounts, plugins, methods, and options from the connected MCP server only; never infer them from local workspace code.
 
 ## Step 0 — Log in (always first)
 
-**Every `/e9` or MCP request starts here.** Do not grep, curl, read config files, start servers, or run CLI commands to "figure out" auth — just log in.
+**Rule:** Every `/e9` or MCP request starts by logging in. Do not grep, curl, read config files, start servers, or run CLI commands to "figure out" auth.
 
 1. Call **`mcp_auth`** on the engine9 MCP server with **`{}`**.
 2. Cursor opens a **sign-in prompt for the user** — wait for them to complete it.
@@ -32,6 +45,8 @@ After login, if MCP tools still fail, see [e9-cli — troubleshooting](../e9-cli
 ## MCP tool errors — stop immediately
 
 engine9 MCP tools return failures with **`isError: true`** (MCP standard) plus optional **`structuredContent`**:
+
+**Rule:** Stop the current workflow on an MCP error unless the response explicitly marks it safe to retry automatically.
 
 | Field | Meaning |
 |-------|---------|
@@ -119,6 +134,8 @@ In all cases: stop. Do not call `task` or other account tools afterward. For `ge
 
 When interacting with an engine9 MCP server, **discover capabilities and accounts exclusively from the MCP server**. Do not search, read, or infer behavior from local workspace code (`server/workers/`, `plugins/`, `interfaces/`, etc.).
 
+**Rule:** If MCP does not return an account, plugin path, method, or option, report that result and do not guess or search local catalogs.
+
 Local code is an **unreliable** source for MCP work because:
 
 - The connected MCP server may be a different deployment, version, or branch than the workspace on disk.
@@ -132,8 +149,8 @@ Account discovery when using MCP should only be through that MCP, not through an
 
 | Need | MCP source |
 |------|------------|
-| Who am I / which accounts can I use? | `user` (`accounts` map) |
-| Find accounts by prefix, parent, name, type, tags, plugin | `account` `command: "search"` (one call) |
+| Who am I / which accounts can I use? | `user` (`accounts` flat map with `parent_ids`) |
+| Find accounts by prefix, parent, name, type, tags, plugin | `account` `command: "search"` (one call; flat rows with same listing fields) |
 | One account’s plugins / methods | `account` `command: "plugins"` |
 
 When an account or parent is not found, do NOT dig deeper into compiled account catalogs, etc. Do **not** read `accounts.d/`, `accounts.compiled.json5`, `account-config.json`, `account.<slug>.json5`, `.e9_parameters`, `.e9_config.json5`, or account trees on disk. Report that MCP did not return the account or parent, and stop.
@@ -159,11 +176,13 @@ If a path, method, or option is not present in MCP responses, report that to the
 
 **Prefer explicit native MCP tools when there is a quality match.** Only fall back to `task` when no native tool covers the request.
 
+**Rule:** Use a native MCP tool whenever it covers the request with equal or better fidelity; treat `task` as the catch-all.
+
 | User intent | Prefer |
 |-------------|--------|
 | Am I connected / signed in? | `ok`, then `user` |
-| Who am I / which accounts do I have? | `user` |
-| Find accounts by prefix, parent, type, tags, or installed plugin | `account` with `command: "search"` (one call — do not fan out) |
+| Who am I / which accounts do I have? | `user` (flat `accounts` map with `parent_ids`) |
+| Find accounts by prefix, parent, type, tags, or installed plugin | `account` with `command: "search"` (one call — do not fan out; flat rows) |
 | List plugins / methods on one account | `account` with `account_id` (or `command: "plugins"`) |
 | Search people by email, phone, name, or id | `search` |
 | List available person-search form options for an account | `searchOptions` |
@@ -198,7 +217,7 @@ Returns server status, current time, and whether the request is authenticated. N
 
 ### `user`
 
-Returns the current authenticated user: uid, email, admin flag, and account access map. **Prefer this** over `task` for identity and account-list questions.
+Returns the current authenticated user: uid, email, admin flag, and a **flat** account access map. Each `accounts[account_id]` entry shares listing fields with `account` search: `name`, `type`, `parent_ids`, `disabled`, `tags`, plus auth `level`. **No nested children** — rebuild hierarchy from `parent_ids` on the client. **Prefer this** over `task` for identity and full account-list questions. See [How MCP lists accounts](../../server/api/mcp/accounts.md).
 
 ### `account`
 
@@ -215,6 +234,7 @@ Two commands:
 - Requires at least one filter: `prefix` / `prefixes`, `parents`, `ids`, `name`, `type`, `tags`, or `plugins`
 - Optional: `recursive` (with `parents`), `include_disabled`, `include_plugins`, `include_plugin_metadata`, `limit` (default 50), `max_scan` (default 100 for plugin probes), `concurrency`
 - Returns: `{ ok: true, command: "search", count, accounts: [...], warnings, filters, truncated* }`
+- Each `accounts[]` row is **flat** with the same core fields as `user.accounts` (`name`, `type`, `parent_ids`, `disabled`, `tags`) plus `account_id`. `parents` / `recursive` only filter which rows appear; they do not nest children.
 - `include_plugins` attaches lite plugin rows (`id` / `name` / `path` / `table_prefix`) per account. `include_plugin_metadata` adds one marketplace metadata map keyed by plugin path — do not fan out `command: plugins` per account to build a method catalog.
 - `plugins` filter matches installed plugin `path` / `name` / `table_prefix` substrings (e.g. `["acoustic"]`). Apply `prefix`/`parents` first so DB probes stay bounded.
 - Per-account DB failures go into `warnings` (do not fail the whole search).
@@ -226,7 +246,7 @@ Example — accounts matching a prefix with a plugin installed:
 { "command": "search", "prefixes": ["<prefix>"], "plugins": ["acoustic"] }
 ```
 
-Example — direct children of a parent:
+Example — direct children of a parent (flat list):
 
 ```json
 { "command": "search", "parents": ["<parent_account_id>"] }
@@ -606,16 +626,16 @@ Do **not** use remote-legacy dotted paths (`channelbots.RENxtBot.People`).
 
 ### Example: scheduling a plugin method
 
-User: "List custom fields on RENxt people for account bfred_lambda_legal"
+User: "List custom fields on RENxt people for account `<account_id>`"
 
 1. No native tool for this specific plugin method → fallback path.
-2. Call `account` with `{ "account_id": "bfred_lambda_legal" }`.
+2. Call `account` with `{ "account_id": "<account_id>" }`.
 3. Find plugin with alias `renxt`, submodule `People`, method `listCustomFields`.
 4. Call `task`:
 
 ```json
 {
-  "account_id": "bfred_lambda_legal",
+  "account_id": "<account_id>",
   "path": "@frakture-com/channelbots/RENxtBot:People",
   "method": "listCustomFields"
 }
@@ -722,3 +742,14 @@ After [Step 0 — Log in](#step-0--log-in-always-first):
 2. If account id is unknown, call `account` with `command: "search"` and the known filters (prefix/parent/plugin). If `count` is `0`, **stop** — do not read compiled catalogs. Otherwise set scope via `/e9a <account_id>` or call `account` plugins to cache methods.
 3. Call `search` with a known email to validate account-scoped data access.
 4. For parent/all **remote flow-run** requests, skip step 2–3 per-child probes — use multi-account remote filters only.
+
+## Related documentation
+
+| Topic | Documentation |
+|-------|---------------|
+| How MCP lists accounts (flat `parent_ids`) | [server/api/mcp/accounts.md](../../server/api/mcp/accounts.md) |
+| Cursor setup and `/e9` commands | [e9-cli](../e9-cli/SKILL.md) |
+| API-key creation and scope rules | [e9-api-key](../e9-api-key/SKILL.md) |
+| Direct HTTP task and flow execution | [e9-tasks-api](../e9-tasks-api/SKILL.md) |
+| EQL query syntax | [e9-eql](../e9-eql/SKILL.md) |
+| Plugin-installed reports | [e9-reports](../e9-reports/SKILL.md) |

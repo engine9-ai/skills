@@ -1,24 +1,25 @@
 ---
 name: e9-export
-description: >-
-  Explains engine9 export packages for receivers: directory layout,
-  inventory.json5, warehouse table parquet, input-store .idv1.parquet files,
-  metadata.json fields, common entry_type_ids, person-search CSVs, and how to
-  join the pieces. Use when reading or consuming an export, interpreting
-  metadata.json or inventory.json5, joining person / transaction / timeline
-  files, or asking what is in an export. Create, run, and debug with the e9
-  CLI: [building.md](building.md).
+description: "Read and interpret engine9 export packages, including inventory.json5, warehouse Parquet tables, input-store idv1 files, metadata.json, person-search CSVs, entry types, joins, and export diagnostics. Use when consuming an export, determining what it contains, joining person, transaction, message, and timeline data, or validating package completeness."
 ---
 
 # engine9 exports
 
-An **export** is a self-contained snapshot of one account’s warehouse data. A receiver gets files — not a live database. Typical contents are **table parquet**, **idv1 file copies** with each store’s **`metadata.json`**, and sometimes **person-search CSVs**.
+An **export** is a self-contained snapshot of one account’s warehouse data; a receiver gets files, not a live database. Typical contents are warehouse table Parquet, idv1 file copies with each store’s `metadata.json`, and optional person-search CSVs. Use this skill to inspect, consume, join, or validate those files; use the export-building documentation when creating or running a package.
 
-This document is for **reading** an export. Creating, running, and debugging one is [building.md](building.md).
+## Quick reference
 
-Related: warehouse inventory [e9-inventory](../e9-inventory/SKILL.md); person identity [e9-person-id](../e9-person-id/SKILL.md); remotes [e9-person-remote](../e9-person-remote/SKILL.md); timeline entries [e9-timeline](../e9-timeline/SKILL.md); source codes [e9-source-code](../e9-source-code/SKILL.md).
+| Need | Start here |
+|------|------------|
+| Discover package contents | Export-root `inventory.json5` |
+| Understand an input store | Its `metadata.json`, then its `.idv1.parquet` files |
+| Join warehouse entities | `person_id`, `input_id`, `plugin_id`, and `source_code_id` |
+| Inspect a named audience extract | `search/*.export.csv` and its metadata sidecar |
+| Create or debug an export | Export building documentation |
 
-## What’s in the package
+Rule: `inventory.json5` is authoritative. Do not infer artifact locations from the default directory structure; use its paths and `relative_path` values.
+
+## File format
 
 Default root: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 
@@ -57,7 +58,9 @@ Bundle exports write this at the export root (`format_version` **2**). It is a *
 
 Use it to confirm every expected parquet exists, to recover relative paths, and to see why a table or store was omitted.
 
-## Warehouse tables
+## Concepts
+
+### Warehouse tables
 
 Table parquet is a dump of the named warehouse table at export time. Columns match the live table; `DESCRIBE` / parquet schema is the authority. Bundles choose a subset — a typical dump includes people, messages, source codes, and transactions, not every warehouse table.
 
@@ -79,13 +82,17 @@ Table parquet is a dump of the named warehouse table at export time. Columns mat
 | `global_message_summary` / `_by_date` | Per-message rollups (sends, attributed revenue; daily spend/impressions) | Message / plugin |
 | `timeline` | Warehouse entry log (when the bundle includes it): `id`, `ts`, `person_id`, `entry_type_id`, `input_id` | Same keys as idv1 rows |
 
-Identity: [e9-person-id](../e9-person-id/SKILL.md). One person may have many emails, phones, remotes, and hashes. Do not treat `email` as a person key. Hash-only accounts typically ship `person_hash_email` / `person_hash_phone` and omit plaintext contact tables from the default export when `settings.exclude_pii` is set (an explicit `tables` list is an operator override).
+One person may have many emails, phones, remotes, and hashes.
 
-Say **transaction**, never donation. Revenue questions use `transaction` (and summary tables), not timeline `TRANSACTION_*` rows.
+Rule: Do not treat `email` as a person key; resolve it to `person_id`.
 
-Say **entry**, never event. A timeline / idv1 row is an **entry**.
+Hash-only accounts typically ship `person_hash_email` / `person_hash_phone` and omit plaintext contact tables from the default export when `settings.exclude_pii` is set (an explicit `tables` list is an operator override).
 
-## Input stores: `metadata.json` + idv1
+Rule: Say **transaction**, never donation. Revenue questions use `transaction` and summary tables, not timeline `TRANSACTION_*` rows.
+
+Rule: Say **entry**, never event. A timeline or idv1 row is an entry.
+
+### Input stores: `metadata.json` + idv1
 
 Each selected **input** is one stream — usually one message, one form, or one named extract. The export copies:
 
@@ -158,9 +165,9 @@ These are **Timeline ID** files: already resolved to `person_id` and a stable en
 
 Extra columns (URL, amount, user agent, …) are plugin **detail** fields. They vary by file.
 
-A click is not automatically an open. Filter on `entry_type_id`; do not infer one type from another.
+Rule: A click is not automatically an open. Filter on `entry_type_id`; do not infer one type from another.
 
-## Entry types
+### Entry types
 
 Parquet stores **`entry_type_id` (integer)**. `metadata.json` `entry_types` uses the **string name**. Full catalog: [e9-timeline](../e9-timeline/SKILL.md#entry-types).
 
@@ -186,7 +193,9 @@ Parquet stores **`entry_type_id` (integer)**. `metadata.json` `entry_types` uses
 
 Email-oriented bundles typically ship stores whose `entry_types` include `EMAIL_*`. SMS-oriented bundles ship `SMS_*`.
 
-## How the pieces join
+## Workflow
+
+### Join the pieces
 
 ```
 plugin.id  =  input.plugin_id
@@ -205,11 +214,11 @@ source_code_dictionary.source_code_id  =  transaction.source_code_id
                                        =  idv1 / timeline.source_code_id
 ```
 
-Plugin scope for remotes is **not** a column on `person_remote`. Join `person_remote.source_input_id` → `input.id` → `input.plugin_id`.
+Rule: Plugin scope for remotes is not a column on `person_remote`. Join `person_remote.source_input_id` → `input.id` → `input.plugin_id`.
 
 A message input’s `input.id` is the handle for that send. Opens and clicks for that send live in stores whose `metadata.json` `input_id` (or `entry_types`) points at that activity; they share `person_id` with `person` / `transaction`.
 
-## Person-search CSVs
+### Read person-search CSVs
 
 A named search export is one CSV plus a sidecar:
 
@@ -229,7 +238,7 @@ The sidecar records how the file was built:
 | `sample_person_ids` | Sample of matched ids |
 | `deduplicated` / `deduplicated_against` | Present when prior export files were used as a dedupe set |
 
-## Reading the files
+## Examples
 
 Parquet is the native format. DuckDB example:
 
@@ -254,8 +263,20 @@ WHERE entry_type_id = 42
 LIMIT 20;
 ```
 
-Resolve email → `person_id` via `person_email`, then join other files on `person_id`. Do not treat timeline `id` as a person key.
+Resolve email → `person_id` via `person_email`, then join other files on `person_id`.
 
-## Building and debugging
+Rule: Do not treat timeline `id` as a person key.
 
-Create, run, and debug with `e9 exportworker export`: [building.md](building.md). Pre-run warehouse snapshot: [e9-inventory](../e9-inventory/SKILL.md).
+## Troubleshooting
+
+Start with `inventory.json5`: verify expected artifacts, inspect `skipped_tables` and `skipped_files`, and compare planned counts with Parquet counts when metadata may be stale. For creation, execution, and deeper export diagnostics, use the export-building guide.
+
+## Related documentation
+
+- [Build and debug exports](building.md)
+- [Warehouse inventory](../e9-inventory/SKILL.md)
+- [Person identity](../e9-person-id/SKILL.md)
+- [Plugin-scoped remote identities](../e9-person-remote/SKILL.md)
+- [Timeline entries and entry types](../e9-timeline/SKILL.md)
+- [Timeline input file shapes](../inputs/timeline/SKILL.md)
+- [Source codes and attribution](../e9-source-code/SKILL.md)

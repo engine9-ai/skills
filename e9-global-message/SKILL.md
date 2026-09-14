@@ -1,32 +1,34 @@
 ---
 name: e9-global-message
-description: >-
-  Explains how to read and consume engine9 global message warehouse views
-  (global_message_summary, global_message_summary_by_date): message identity,
-  plugin context (legacy bot_* columns), platform engagement, last-click
-  attributed_* metrics, and primary-source-code dictionary fields. Use when
-  querying message performance, attributed revenue, spend/impressions by day,
-  message grids/reports, or choosing between lifetime vs by-date summary views.
-  Not for building messaging plugins or the attribution pipeline (see
-  e9-source-code).
+description: "Read and consume engine9 global message warehouse views, including message identity, plugin context in legacy bot_* columns, platform engagement, native conversions, last-click attributed_* metrics, and primary-source-code dictionary fields. Use when querying message performance, attributed revenue, spend or impressions by day, building message grids and reports, interpreting inventory message statistics, or choosing between lifetime and by-date summary views; do not use it to build messaging plugins or the attribution pipeline."
 ---
 
 # engine9 global message tables
 
-Warehouse **views** that put one message’s identity, platform engagement, last-click attribution, and (via primary source code) dictionary / legacy origin fields on a single row. Most message performance reports and data grids read these views rather than joining the underlying tables by hand.
+Global message warehouse views put a message’s identity, platform engagement, last-click attribution, and primary-source-code dictionary or legacy origin fields on a single row. Most message performance reports and data grids read these views instead of joining the underlying tables by hand. Use this skill to select a view, choose the correct metric family, and avoid double counting or incorrect attribution.
 
-This skill is about **reading and consuming** those views. For how last-click attribution is computed, see [e9-source-code](../e9-source-code/SKILL.md). For acquisition / LTV models, see [e9-model](../e9-model/SKILL.md).
+## Quick reference
 
 | View | Grain | Date column |
 |------|--------|-------------|
 | `global_message_summary` | One row per `message_id` | Use `publish_date` for “when the message went out” |
 | `global_message_summary_by_date` | One row per `message_id` + `date` | `date` is the stats day (engagement day and/or transaction day — see below) |
 
-Both sit under the account `global_table_prefix` (often empty). They are views over `global_message`, `global_message_stats` / `_by_date`, plugin metadata, and `source_code_summary` / `_by_date` — not base tables you write to.
+Both sit under the account `global_table_prefix` (often empty). They are views over `global_message`, `global_message_stats` / `_by_date`, plugin metadata, and `source_code_summary` / `_by_date`; they are not base tables you write to.
 
-Say **transaction**, never donation. Prefer **`attributed_*`** for cross-platform fundraising truth; platform `revenue` / `transactions` are native conversions only.
+## Rules
 
-## Column categories
+Rule: Say **transaction**, never donation.
+
+Rule: Prefer `attributed_*` for cross-platform fundraising truth; platform `revenue` and `transactions` are native conversions only.
+
+Rule: Do not add platform `revenue` to `attributed_revenue`; the metric families overlap and would double count.
+
+Rule: Do not sum `origin_*` across messages that share a primary source code; those values are code-level totals repeated on each message.
+
+## Concepts
+
+### Column categories
 
 Treat columns as separate categories. Mixing them (e.g. adding `revenue` + `attributed_revenue`, or treating `origin_*` as message-level last click) double-counts or misattributes.
 
@@ -96,9 +98,11 @@ Joined on `message.final_primary_source_code = summary.source_code` (and matchin
 | `source_code_date_parsed` / `source_code_parsed_date` | Date embedded in the code string (often ≠ `publish_date`) |
 | `origin_person_count`, `origin_transaction_*`, `origin_initial_*`, `origin_subsequent_*`, `origin_refund_*` | **Legacy** origin-model rollups for that **source code**. Not message-scoped last click. Prefer current `{prefix}_*` model tables ([e9-model](../e9-model/SKILL.md)) |
 
-**Important:** `origin_*` (and element fields) on a message row are properties of the primary source code, not of the message alone. If several messages share one primary code, they each show the **same** code-level origin totals. Do not sum `origin_*` across messages that share a code.
+`origin_*` and element fields on a message row are properties of the primary source code, not of the message alone. If several messages share one primary code, they each show the same code-level origin totals.
 
-## Which view and which metrics
+## Workflow
+
+### Choose a view and metrics
 
 | Question | Use |
 |----------|-----|
@@ -109,7 +113,7 @@ Joined on `message.final_primary_source_code = summary.source_code` (and matchin
 | Acquisition / LTV by first touch or CRM origin? | Current model tables (`{prefix}_*`), not `origin_*` on these views |
 | ROI for ads? | `sum(attributed_revenue) / sum(spend)` (reports usually do this) |
 
-## Related objects
+### Trace related objects
 
 | Object | Role |
 |--------|------|
@@ -121,7 +125,32 @@ Joined on `message.final_primary_source_code = summary.source_code` (and matchin
 
 Stale `attributed_*` with good `transaction_summary.recommended_message_id` usually means attribution stats have not run for that publish window — diagnose with [e9-source-code](../e9-source-code/SKILL.md) pipeline A–F, not by rewriting these views.
 
-## Inventory statistics
+## Examples
+
+### Query lifetime and daily metrics
+
+```sql
+-- Lifetime performance by publish month
+SELECT
+  date_trunc('month', publish_date) AS month,
+  sum(sent) AS sent,
+  sum(impressions) AS impressions,
+  sum(clicks) AS clicks,
+  sum(attributed_revenue) AS attributed_revenue
+FROM global_message_summary
+WHERE publish_date >= DATE '2026-01-01'
+GROUP BY 1
+ORDER BY 1;
+
+-- Calendar-day attribution uses the transaction day
+SELECT date, sum(attributed_revenue) AS attributed_revenue
+FROM global_message_summary_by_date
+WHERE date >= DATE '2026-01-01'
+GROUP BY date
+ORDER BY date;
+```
+
+### Interpret inventory statistics
 
 [e9-inventory](../e9-inventory/SKILL.md) warehouse statistics read these views. Grain is **month** (`YYYY-MM`). `impressions` is platform opens.
 
@@ -135,4 +164,18 @@ These blocks are **aggregate** message stats (`kind: aggregate`) — the usual i
 
 Use the lifetime summary (`messages`) for publish-month totals; use `message_activity` for calendar-month engagement (opens/clicks after send day, ads, SMS). Do not use `message_summary_by_date` for email activity — it drops rows without spend. Do not use `inputs.by_plugin_entry_type_month` as a substitute for these views.
 
-Home mapping: [e9-inventory using statistics](../e9-inventory/SKILL.md#using-statistics).
+## Troubleshooting
+
+| Symptom | Check |
+|---------|-------|
+| `attributed_*` is stale but `recommended_message_id` is correct | Attribution statistics may not have run for the publish window |
+| Revenue appears duplicated | Confirm native `revenue` was not added to `attributed_revenue` |
+| `origin_*` totals repeat across rows | Check whether messages share `final_primary_source_code` |
+| Email activity is missing from inventory | Use `message_activity`, not spend-filtered `message_summary_by_date` |
+
+## Related documentation
+
+- [Source codes and last-click attribution](../e9-source-code/SKILL.md)
+- [Acquisition and LTV models](../e9-model/SKILL.md)
+- [Inventory statistics and Home mapping](../e9-inventory/SKILL.md#using-statistics)
+- [Timeline per-person message entries](../e9-timeline/SKILL.md)

@@ -12,11 +12,27 @@ description: >-
 
 # engine9 `person_remote`
 
-`person_remote` answers: **does this `person_id` have a vendor/CRM id for plugin X?** It is an **attribute** table written by the people pipeline — not a timeline load, and not `{table_prefix}person` (e.g. `tatango_kic_person`).
+`person_remote` records whether a warehouse `person_id` has a vendor or CRM
+identifier for a particular plugin. Use this skill when loading, exporting, or
+debugging plugin-scoped `remote_person_id` values. The table is written by the
+people pipeline; it is not a timeline table or a plugin-prefixed people table.
 
-Person **identity** matching on remotes (lookup keys, first-wins): [e9-person-id](../e9-person-id/SKILL.md). Timeline ID files: [e9-timeline/loading.md](../e9-timeline/loading.md).
+## Quick reference
 
-## Table shape
+| Need | Use |
+| --- | --- |
+| Understand columns and plugin scope | [File format](#file-format) |
+| Populate `person_remote` | [Workflow](#workflow) |
+| Verify required IDs and upserts | [Rules](#rules) |
+| Diagnose an empty export or segment | [Troubleshooting](#troubleshooting) |
+
+## Concepts
+
+Plugin scope is not stored directly on `person_remote`. It is derived by joining
+`person_remote.source_input_id` to an `input.id` and filtering on
+`input.plugin_id`.
+
+## File format
 
 | Column | Role |
 |--------|------|
@@ -27,7 +43,8 @@ Person **identity** matching on remotes (lookup keys, first-wins): [e9-person-id
 
 Unique: `(source_input_id, remote_person_id, person_id)`.
 
-**Plugin scoping is not a column on `person_remote`.** It comes from joining `input`:
+Rule: Plugin scoping is not a column on `person_remote`; always derive it by
+joining `input`.
 
 ```sql
 FROM person_remote
@@ -37,13 +54,17 @@ INNER JOIN input ON person_remote.source_input_id = input.id
 
 That is exactly what `@engine9/interfaces/person_remote:search:all` compiles when given `pluginId` — the filter used by export universes (“remote people for plugin X”).
 
-Empty export / segment for “Tatango remotes ∩ transactions” almost always means: **no `person_remote` rows whose `source_input_id` belongs to the Tatango `input.plugin_id`**, not “no transactions.”
+An empty export or segment for “plugin remotes ∩ transactions” almost always
+means there are no `person_remote` rows whose `source_input_id` belongs to that
+`input.plugin_id`, not that there are no transactions.
 
-## When rows are written
+## Workflow
+
+### When rows are written
 
 `person_remote` is upserted inside the **inbound people pipeline**, after `person_id` is assigned:
 
-```
+```text
 … → person_remote:transforms:extractRemotePersonIds  # extract remote_person_id → identifiers
   → … appendInputId / appendPersonId …
   → person_remote:transforms:upsertPersonRemote # requires pluginId; needs remote_person_id + person_id + input_id
@@ -73,15 +94,21 @@ Built by `buildInboundTransforms` (`@engine9/core/lib/peoplePipeline/getInboundT
 
 So: use **`idFiles` (or `loadPeople`) to populate Tatango-scoped `person_remote` without a Tatango people-table load or a timeline load.** Skip `do_not_upsert` / `doNotUpsert` (those run identity lookup only and **skip** all upserts, including `person_remote`).
 
-## Required options so a plugin-scoped search sees people
+## Rules
 
 For `@engine9/interfaces/person_remote:search:all` with `pluginId = <Tatango uuid>` (or the equivalent export SQL) to return rows after an id/load:
 
-1. **`plugin_id` / `pluginId`** = that plugin’s UUID (must be a UUID, not `remote_plugin_id` / `tatango_kic`).
-2. **`input_id` / `default_input_id`** = an `input.id` whose **`input.plugin_id` is that same plugin**. `person_remote.source_input_id` is set from the row’s `input_id` (via `appendInputId` + upsert). If you stamp an Engaging Networks input while passing Tatango as `plugin_id`, search-by-Tatango will still miss the rows.
+1. Rule: **`plugin_id` / `pluginId`** must be that plugin’s UUID, not
+   `remote_plugin_id` or a plugin slug.
+2. Rule: **`input_id` / `default_input_id`** must be an `input.id` whose
+   **`input.plugin_id` is the same plugin**. `person_remote.source_input_id` is
+   set from the row’s `input_id` through `appendInputId` and upsert. If the
+   input belongs to another plugin, a search scoped to the intended plugin
+   misses the rows.
 3. **File/stream rows** with a non-empty **`remote_person_id`**. Without it, extract and upsert no-op for remotes (email/phone-only rows still create people, but no `person_remote`).
 4. Prefer an **email and/or phone** on the same row so new remotes attach to existing donors instead of creating orphan people — identity still follows [e9-person-id](../e9-person-id/SKILL.md).
-5. **`do_not_upsert` must be false** (default).
+5. Rule: **`do_not_upsert` must be false** (the default), or identity lookup
+   runs without writing `person_remote`.
 
 ### `idFiles` sketch
 
@@ -112,11 +139,11 @@ await personWorker.loadPeople({
 - **Upsert** (`person_remote:transforms:upsertPersonRemote`): looks up existing remotes for **this `pluginId`** via `person_remote` ⨝ `input`; inserts with `source_input_id = row.input_id`, or updates the existing row for the same person+remote under that plugin.
 - Rows lacking `remote_person_id` or `person_id` are skipped by upsert.
 
-## Outbound / exports
+### Outbound and exports
 
 `person_remote:transforms:appendRemotePersonId` joins remotes for a plugin onto an export file (the inverse of inbound upsert). Search `all` only filters existence by plugin; append is for writing the vendor id column back out.
 
-## Debugging empty remotes for a plugin
+## Troubleshooting
 
 1. Confirm plugin UUID: `account` plugins (or `SELECT id, name, path FROM plugin`).
 2. Count remotes for that plugin (join `input`) — not a bare `COUNT(*)` on `person_remote`.
@@ -124,7 +151,16 @@ await personWorker.loadPeople({
 4. If bot tables exist but remotes do not, those people were never run through `loadPeople`/`id` with that plugin’s `plugin_id` + matching `input_id`.
 5. If remotes exist under the wrong plugin’s inputs, fix the input ownership / re-id with the correct `plugin_id` + `input_id` pair — do not only change the export filter unless that matches product intent.
 
-## Code map
+## Related documentation
+
+| Topic | Documentation |
+| --- | --- |
+| Person identity matching, lookup keys, and first-wins behavior | [e9-person-id](../e9-person-id/SKILL.md) |
+| Timeline ID files | [e9-timeline loading](../e9-timeline/loading.md) |
+| Schema, search, and transforms | `@engine9/interfaces/person_remote` |
+| Pipeline wiring | `@engine9/core/lib/peoplePipeline/getInboundTransforms.js` |
+
+### Code map
 
 | Piece | Location |
 |-------|----------|

@@ -8,21 +8,46 @@ description: >-
   global_message_summary). Use when working with source_code,
   source_code_dictionary, message_source_code, transaction_summary, attributed
   revenue, last click, recommended_message_id, or diagnosing a source-code
-  attribution issue. Current timeline models are
-  e9-model (`{prefix}_*` tables). `source_code_summary.origin_*` is legacy.
+  attribution issue. Distinguishes current timeline-model `{prefix}_*` output
+  from legacy `source_code_summary.origin_*` fields.
 ---
 
 # engine9 source codes
 
-engine9 indexes source codes from messages (email, ads, SMS, mail), transactions, and CRM person origins into a single **Source Code Dictionary**. Performance metrics, parsed elements, and attribution all hang off that hub.
+engine9 indexes source codes from messages, transactions, and CRM person
+origins in a shared Source Code Dictionary. Use this skill to understand source
+code parsing and overrides, interpret attribution metrics, or diagnose a
+last-click attribution gap. Performance metrics, parsed elements, and
+attribution all connect through the dictionary.
 
-Assume each source code is unique to a single message. In reporting, **source code** and **message** are interchangeable when that uniqueness holds.
+## Quick reference
 
-Say **transaction**, never donation. Last-click debug uses `transaction_summary`; the base table is `transaction`.
+| Need | Start here |
+| --- | --- |
+| Understand attribution versus origin models | [Concepts](#concepts) |
+| Look up warehouse tables and fields | [File format](#file-format) |
+| Parse codes, labels, and overrides | [Workflow](#workflow) |
+| Apply safety constraints | [Rules](#rules) |
+| Trace missing or wrong revenue | [Troubleshooting](#troubleshooting) |
 
-For the element catalog, see [elements.md](elements.md). For conversion-tracking methods and how **attribution** joins a transaction to a message, see [attribution.md](attribution.md). Timeline long-term value is a [model](../e9-model/SKILL.md) (`{prefix}_*` tables — not `source_code_summary.origin_*`). For a broken last-click number, walk [pipeline debug A–F](#last-click-pipeline-debug-af) in order.
+## Concepts
 
-## Warehouse tables
+Rule: Assume each source code is unique to a single message. In reporting,
+source code and message are interchangeable only when that uniqueness holds.
+
+Rule: Say transaction, never donation, in schema and field discussions.
+
+### Last-click attribution versus origin models
+
+Last-click attribution rolls up on `source_code_summary`. Current origin and
+other timeline models roll up on `{prefix}_person_stats` and
+`{prefix}_transaction_stats`. They answer different questions.
+
+Rule: Do not mix attributed revenue and model revenue into one “value” number.
+
+## File format
+
+### Warehouse tables
 
 | Table / view | Role |
 |--------------|------|
@@ -36,9 +61,7 @@ For the element catalog, see [elements.md](elements.md). For conversion-tracking
 
 Attributed transaction counts and revenue appear on both `global_message_summary` (per message) and `source_code_summary` (per source).
 
-## Last-click attribution vs origin model
-
-Last-click **attribution** rolls up on `source_code_summary`. Current origin (and other timeline models) roll up on `{prefix}_person_stats` / `{prefix}_transaction_stats`. They answer different questions; do not mix them into one “value” number.
+### Attribution and origin fields
 
 **Last click** is **attribution**: it connects a transaction to a message. The source code on the transaction, usually carried through the payment form URL, is matched to a message’s outbound-link source codes. Those matches are **attributed transactions** / **attributed revenue**.
 
@@ -55,7 +78,9 @@ Some codes are origin-only (list acquisition). Some are last-click-only (an appe
 
 **Refunds** are not subtracted from raw revenue unless a report explicitly says so.
 
-## Extracting source codes from message links
+## Rules
+
+### Extract source codes from message links
 
 Scan message links for these query parameters (complete list). If several are present, keep them all; the first twelve are ranked in this order when choosing the message’s **primary** source code. `utm_term` and `utm_campaign` are used only when present **and** they are the longest candidate.
 
@@ -76,9 +101,14 @@ Scan message links for these query parameters (complete list). If several are pr
 
 Example: `?src=EM_FR_20221215_donorappeal_3` → message source `EM_FR_20221215_donorappeal_3`. A later transaction with that exact code is attributed to the message.
 
-No other link parameter is treated as a source code.
+Rule: No other link parameter is treated as a source code.
 
-## Auto-parsing
+Rule: Exact source-code string matches matter. Case changes, trailing spaces,
+and other rewrites produce different codes.
+
+## Workflow
+
+### Auto-parsing
 
 Formats extract elements from the full source-code string. Multiple formats per account are normal (legacy vs new, mail vs digital). During parse, engine9 tries formats in order; the matching format and extracted elements land on the dictionary. Humans can override any non-revenue element afterward.
 
@@ -91,7 +121,7 @@ Formats must be distinguishable. `Campaign-Channel-Targeting` and `Appeal-Fund-G
 
 The matched format name is stored with the dictionary row.
 
-## Labels
+### Labels
 
 Optional human names for parsed values (`EM` → `Email`). Configured in Source Codes → Dictionary Labels; applied on the next parser run.
 
@@ -101,7 +131,7 @@ Optional human names for parsed values (`EM` → `Email`). Configured in Source 
 
 Same tokens with different spellings (`FB`, `ADS`, `Facebook`, `12`) should share a label so reports roll up as one channel.
 
-## Dictionary columns (common)
+### Dictionary columns
 
 Revenue from last-click **attribution** (may differ from a message system’s native revenue):
 
@@ -129,7 +159,7 @@ Common parsed elements (full list in [elements.md](elements.md)): `source_code_c
 
 Recommended message hierarchy: **Campaign → Message set → Message** (`campaign`, `message_set`, `variant`).
 
-## Overrides
+### Overrides
 
 Override values are stored separately from parsed defaults. Clearing an override restores the bot value.
 
@@ -141,7 +171,7 @@ Override values are stored separately from parsed defaults. Clearing an override
 
 **Message — primary source override** (`primary_source_code_override`): a message may have many attached codes; one is primary (categorizes the message). Heuristics pick the primary; override to change grouping or attribution. Entering a value (A) attaches that code for last-click matching and (B) makes it primary for reports. Both can wait for an overnight attribution cycle.
 
-## Conversion tracking
+### Conversion tracking
 
 Prefer **source-code** conversion tracking over native CRM tracking or tags/pixels. Source codes are auditable (every transaction has a code, including blank / white mail), channel-agnostic (mail through social), fail visibly, and need no JavaScript. Downsides: every message/link must be coded, codes must be unique and documented, and message stats (impressions, clicks, spend) must be joined to conversions — that join **is** attribution.
 
@@ -149,13 +179,19 @@ Native and tag/pixel metrics may still be loaded; they are estimates (cookies, J
 
 Details and method comparison: [attribution.md](attribution.md).
 
-## Last-click pipeline debug (A–F)
+## Troubleshooting
+
+### Last-click pipeline debug (A–F)
 
 Use this when diagnosing a **Source coding / attribution** issue (wrong/zero attributed revenue, message not credited, source code missing in engine9). Diagnose from the live link and payment platform first; SQL confirms a named code. Do **not** inspect application code.
 
-The usual last-click path is two platforms joined by one string. Walk **A → F in order**. Stop at the first gap; later steps are meaningless until that gap is explained. `DESCRIBE` tables first if column names differ. Filter to **one** example source code (here `SC_EG_123`) and LIMIT probes.
+The usual last-click path is two platforms joined by one string.
 
-```
+Rule: Walk A → F in order and stop at the first gap; later steps are meaningless
+until that gap is explained. `DESCRIBE` tables first if column names differ,
+filter to one example source code (here `SC_EG_123`), and limit probes.
+
+```text
 Last-click pipeline:
 - [ ] A: Outbound payment link carries SC_EG_123
 - [ ] B: Payment-platform transaction carries SC_EG_123
@@ -275,3 +311,13 @@ LIMIT 20;
 **Gap:** E has `recommended_message_id` but summary is zero/stale/wrong → stats job has not run or is aggregating a different set (overrides, date filters, refunds). A UI report that still disagrees after F matches is a report/UI issue, not this pipeline.
 
 Record the first failing step (other accounts; messaging vs payment remotes).
+
+## Related documentation
+
+| Topic | Documentation |
+| --- | --- |
+| Full source-code element catalog | [Elements](elements.md) |
+| Conversion tracking and transaction-to-message attribution | [Attribution](attribution.md) |
+| Current person-level models and `{prefix}_*` tables | [e9-model](../e9-model/SKILL.md) |
+| Timeline entries used by models | [e9-timeline](../e9-timeline/SKILL.md) |
+| Message performance summary views | [e9-global-message](../e9-global-message/SKILL.md) |

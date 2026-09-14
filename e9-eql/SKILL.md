@@ -9,11 +9,13 @@ description: >-
 
 # engine9 EQL
 
-EQL is engine9’s SQL-like expression language plus a JSON **query object** that compiles to a SELECT. The primary way to submit EQL from Cursor is the engine9 MCP **`eql`** tool.
+EQL is engine9’s SQL-like expression language plus a JSON query object that
+compiles to a `SELECT`. Use this skill to build structured account queries,
+compile expression fragments, or choose between EQL and adjacent data tools.
+The primary way to submit an EQL query object from Cursor is the engine9 MCP
+`eql` tool.
 
-For MCP login, account scope, and tool-error handling, follow [e9-mcp](../e9-mcp/SKILL.md). For `/e9` / `/e9a`, see [e9-cli](../e9-cli/SKILL.md).
-
-## When to use which MCP tool
+## Quick reference
 
 | Intent | Tool |
 |--------|------|
@@ -25,10 +27,11 @@ For MCP login, account scope, and tool-error handling, follow [e9-mcp](../e9-mcp
 
 Prefer **`eql`** over raw SQL when the user is describing a structured query (table + columns + filters). Prefer **`analyze`** when they want a profile, not a custom SELECT.
 
-## MCP workflow (primary)
+## Workflow
 
 1. **Log in** — `mcp_auth` → user completes prompt → `ok` / `user` ([e9-mcp Step 0](../e9-mcp/SKILL.md#step-0--log-in-always-first)).
-2. **Know `account_id`** — from `/e9a`, this chat’s session scope, or `account` search. Do not guess; do not read leftover CLI files (`.e9_parameters`, etc.) for scope — ask or suggest `/e9a` instead.
+2. **Know `account_id`** — from `/e9a`, this chat’s session scope, or `account`
+   search.
 3. **Optional discovery** — `sql` `tables` / `describe` / `analyze` to learn table and column names before writing EQL.
 4. **Call `eql`**:
 
@@ -47,7 +50,11 @@ Prefer **`eql`** over raw SQL when the user is describing a structured query (ta
 
 5. **Read the response** — `{ ok: true, sql, data, columns }`. The generated `sql` is useful for debugging; `data` / `columns` are the rows.
 
-On MCP errors (`isError`, unauthorized, DB unreachable), **stop** — do not retry with `sql`/`task` as a workaround. See [e9-mcp tool errors](../e9-mcp/SKILL.md#mcp-tool-errors--stop-immediately).
+Rule: On MCP errors (`isError`, unauthorized, or database unreachable), stop.
+Do not retry with `sql` or `task` as a workaround.
+
+Rule: Do not guess account scope or read leftover CLI files such as
+`.e9_parameters`; ask or suggest `/e9a` instead.
 
 ### Expression-only: `compile_eql`
 
@@ -64,7 +71,9 @@ When you need a fragment (not a full SELECT), use `sql`:
 
 Returns a cleaned SQL fragment and `refsByTable`. Do **not** use the `eql` tool for fragments alone.
 
-## Query object shape
+## File format
+
+### Query object shape
 
 `buildSqlFromEQLObject` / MCP `eql` accept a non-array object:
 
@@ -83,7 +92,7 @@ Returns a cleaned SQL fragment and `refsByTable`. Do **not** use the `eql` tool 
 
 `having` is **not** part of this MCP query-object builder (segment search may use it elsewhere). Express filters with `conditions` / `groupBy` + column EQL, or use raw `sql`.
 
-## Column specs
+### Column specifications
 
 Any of:
 
@@ -100,10 +109,12 @@ Rules:
 
 - Plain strings without `(` are treated as column names (optional `table.column`).
 - Strings with `(` are parsed as EQL expressions.
-- `{ eql: "..." }` **requires** `name` (alias).
+- `{ eql: "..." }` requires `name` as an alias.
 - `*` / `{ "column": "*" }` selects all columns from the table.
 
-## Condition specs
+Rule: Every `{ eql: "..." }` column specification must include `name`.
+
+### Condition specifications
 
 AND’d together. Prefer EQL strings for clarity:
 
@@ -127,7 +138,7 @@ Typed conditions (UI-style):
 
 Supported `type` values: `EQUALS`, `NOT_EQUALS`, `LESS_THAN`, `LESS_THAN_OR_EQUAL`, `GREATER_THAN`, `GREATER_THAN_OR_EQUAL`, `LIKE`, `NOT_LIKE`, `CONTAINS`, `DOES_NOT_CONTAIN`, `IS_NULL`, `IS_NOT_NULL`.
 
-## Joins
+### Joins
 
 ```json
 {
@@ -155,7 +166,9 @@ Supported `type` values: `EQUALS`, `NOT_EQUALS`, `LESS_THAN`, `LESS_THAN_OR_EQUA
 
 Each join needs `table` + `join_eql`. Optional `alias` (defaults to table name) and `type`.
 
-## Expression language (samples)
+## Concepts
+
+### Expression language
 
 EQL expressions appear inside `columns[].eql`, `conditions[].eql`, `groupBy`, and `join_eql`. Syntax is SQL-like; the server dialectizes functions.
 
@@ -226,7 +239,7 @@ when amount > 100 then '$100+' end
 
 More expression round-trips live in [examples.md](examples.md).
 
-## Sample query objects
+## Examples
 
 ### Simple select
 
@@ -297,7 +310,9 @@ Outer `table` is the alias for the nested SELECT:
 }
 ```
 
-## Agent checklist
+## Rules
+
+Rule: Stop and report MCP tool errors; do not invent SQL workarounds.
 
 - [ ] Authenticated via MCP; `account_id` known
 - [ ] Prefer MCP `eql` for query objects; `sql` `compile_eql` for fragments
@@ -305,9 +320,12 @@ Outer `table` is the alias for the nested SELECT:
 - [ ] Every `{ eql: "..." }` column has a `name`
 - [ ] Joins use objects with `table` + `join_eql` (not bare strings)
 - [ ] Discover table/column names via `sql` / `analyze`, not local schema guesses when MCP is connected
-- [ ] On tool error, stop and report — do not invent SQL workarounds
+- [ ] On tool error, stop and report
 
-## Additional resources
+## Related documentation
 
-- Expression samples: [examples.md](examples.md)
-- MCP tool strategy: [e9-mcp](../e9-mcp/SKILL.md)
+| Topic | Documentation |
+| --- | --- |
+| Additional expression round-trips | [Examples](examples.md) |
+| MCP login, account scope, and tool-error handling | [e9-mcp](../e9-mcp/SKILL.md) |
+| `/e9` and `/e9a` command-style interactions | [e9-cli](../e9-cli/SKILL.md) |

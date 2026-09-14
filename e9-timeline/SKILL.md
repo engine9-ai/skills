@@ -1,29 +1,35 @@
 ---
 name: e9-timeline
-description: >-
-  Explains the engine9 person activity timeline: one entry per row (send, open,
-  click, transaction, signup), entry types, warehouse tables (timeline, input,
-  detail, summary), how plugins load entries, the console Timeline tab,
-  querying, segments, and missing-entry debug. Timeline rows are entries, never
-  events. Use when working with timeline,
-  entry_type_id, EMAIL_OPEN, EMAIL_CLICK, EMAIL_SEND, person's activity,
-  person_entry_summary, timeline_detail, missing opens/clicks, or diagnosing
-  a missing Timeline entry.
+description: "Understand and troubleshoot the engine9 person activity timeline, including entry types, timeline and input tables, detail and summary views, plugin loading, queries, segments, and missing-entry diagnosis. Use when working with timeline, entry_type_id, EMAIL_OPEN, EMAIL_CLICK, EMAIL_SEND, person_entry_summary, timeline detail, person activity, or absent opens, clicks, sends, transactions, and other entries; timeline rows are entries, never events."
 ---
 
 # engine9 timeline
 
-The **timeline** is each person’s activity log. One row is one **entry**: one fact about one person at one time — an email send, open, or click; an SMS; a transaction; a signup; a form submit; a segment add.
+The **timeline** is each person’s activity log, with one entry for one fact about one person at one time: an email send, open, or click; an SMS; a transaction; a signup; a form submission; or a segment change. Plugins load activity recorded by remote systems after identity is resolved to `person_id`; engine9 does not invent timeline rows from aggregate reports. Use this skill to understand storage, query activity, design engagement segments, or diagnose a missing entry.
 
-Say **entry**, never event. A `timeline` row is an **entry** (`entry_type_id`, `person_entry_summary`, `getTimelineEntryUUID`). Vendor systems may call the same facts events; once they land in engine9 they are entries.
+## Quick reference
 
-engine9 does not invent timeline rows from reports. Plugins load activity from the systems that already recorded it (ESP, SMS, CRM, payments, forms). Identity is stamped first (`person_id`); the **entry** then lands on `timeline`. How that `person_id` is chosen is [e9-person-id](../e9-person-id/SKILL.md). Source codes on entries are [e9-source-code](../e9-source-code/SKILL.md). **Attribution** joins a transaction to a message from those codes. A **model** connects a person or transaction to an item in this history and writes `{prefix}_*` tables — [e9-model](../e9-model/SKILL.md).
+| Need | Start here |
+|------|------------|
+| Inspect current entries | `timeline` |
+| Resolve the producing stream | `timeline.input_id` → `input.id` |
+| Read entry names and plugin context | A current plugin `*_summary` view |
+| Find first, last, or count by type | `person_entry_summary` |
+| Diagnose one missing entry | Troubleshooting workflow A–F |
 
-Say **transaction**, never donation. A payment can appear both as a `transaction` row and as a timeline `TRANSACTION_*` **entry**; revenue questions use the transaction tables, not this log.
+## Rules
 
-For a missing open/click/send on a person, walk [missing-entry debug A–F](#missing-entry-debug-af) in order. Product surfaces first; do not inspect application code. Plugin file shapes: [inputs/timeline](../inputs/timeline/SKILL.md). Load jobs: [loading.md](loading.md).
+Rule: Say **entry**, never event. Vendor systems may call the same facts events, but once they land in engine9 they are entries.
 
-## Warehouse tables
+Rule: Say **transaction**, never donation. Revenue questions use transaction tables, not timeline `TRANSACTION_*` entries.
+
+Rule: A click is not automatically an open; openers and clickers are independent.
+
+Rule: For a missing entry, walk troubleshooting steps A–F in order, stop at the first gap, and inspect product data before application code.
+
+## Concepts
+
+### Warehouse tables
 
 | Table / view | Role |
 |--------------|------|
@@ -43,7 +49,9 @@ For a missing open/click/send on a person, walk [missing-entry debug A–F](#mis
 
 Detail table names vary by plugin (`…_timeline_detail`, `timeline_detail_email_open`, …). `DESCRIBE` / list tables; do not guess.
 
-## Anatomy of an entry
+## File format
+
+### Anatomy of an entry
 
 Every `timeline` row has:
 
@@ -92,9 +100,9 @@ Prefer a `*_summary` view when you want plugin name, input name, source code str
 
 `SOURCE_CODE_OVERRIDE` (0) is a dictionary override marker, not a person action.
 
-Openers and clickers are **independent**. A click is not automatically an open.
+## Workflow
 
-## How entries get onto the timeline
+### Load entries onto the timeline
 
 1. A **plugin** extracts activity from a remote system (ESP activity, CRM actions, payment rows, form posts, …).
 2. Each extract is an **input** — usually one message, one form, or one named stream (`input.remote_input_name`).
@@ -104,7 +112,7 @@ Openers and clickers are **independent**. A click is not automatically an open.
 
 Until step 3 succeeds, the row is not on `timeline`. A file that only has an email is not a timeline entry yet.
 
-## Related models (do not mix)
+### Choose the correct data model
 
 | Question | Where to look |
 |----------|----------------|
@@ -117,7 +125,9 @@ Until step 3 succeeds, the row is not on `timeline`. A file that only has an ema
 
 **Email engagement segments** (30/60/90-day openers and clickers) read `timeline` joined to `input`. The **universe** chooses which sends can contribute (typically email messages published in the last 90 days). The **search** chooses people with `EMAIL_OPEN` or `EMAIL_CLICK` in the rolling window. An open on a message outside that universe does not count, even if the open itself is recent.
 
-## Querying
+## Examples
+
+### Querying
 
 `DESCRIBE` first if column names differ. Filter to **one** person (and one entry type when known). LIMIT.
 
@@ -170,9 +180,13 @@ ORDER BY effective_date DESC
 LIMIT 100;
 ```
 
-Resolve email → `person_id` via `person_email` ([e9-person-id](../e9-person-id/SKILL.md#debugging-identity)), then query `timeline`. Do not treat `timeline.id` as a person key. For legacy inspect, pair via email / `person_metadata` / `person_id_int` — never join `person_id_int` to current `person.id`.
+Resolve email → `person_id` via `person_email`, then query `timeline`.
 
-## Missing-entry debug (A–F)
+Rule: Do not treat `timeline.id` as a person key. For legacy inspection, pair via email, `person_metadata`, or `person_id_int`; never join `person_id_int` to current `person.id`.
+
+## Troubleshooting
+
+### Missing-entry workflow A–F
 
 Use this when diagnosing a **Timeline** issue (person Timeline tab empty/wrong, missing open/click/send, engagement segment empty, “we sent this but engine9 has no entry”). Find the person and input from the product first; SQL confirms one named entry. Do **not** inspect application code.
 
@@ -264,10 +278,11 @@ The `timeline` row is present and correctly typed/joined, but the complaint is a
 
 Record the first failing step (other accounts; ESP/CRM/payment remotes).
 
-## Additional resources
+## Related documentation
 
 - Load path (ID files → tables): [loading.md](loading.md)
 - File shapes for plugins: [inputs/timeline](../inputs/timeline/SKILL.md)
 - Person identity: [e9-person-id](../e9-person-id/SKILL.md)
 - Source codes / attribution (transaction ↔ message): [e9-source-code](../e9-source-code/SKILL.md)
 - Models (timeline long-term value): [e9-model](../e9-model/SKILL.md)
+- Aggregate message performance: [e9-global-message](../e9-global-message/SKILL.md)

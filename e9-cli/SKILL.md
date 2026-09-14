@@ -5,15 +5,24 @@ description: Connect Cursor to engine9 MCP — log in first via mcp_auth, set ac
 
 # engine9 CLI
 
-Use this skill when setting up or troubleshooting an MCP connection to an engine9 server from Cursor (or another MCP client), and when handling `/e9` and `/e9a` command-style requests.
+Use this skill to configure or troubleshoot an engine9 MCP connection in Cursor or another MCP client. It also defines `/e9` and `/e9a` command behavior, including account scope, person search, reports, segments, API keys, and task scheduling.
 
-For MCP tool selection and invocation strategy, see [e9-mcp](../e9-mcp/SKILL.md).
+## Quick reference
 
-**On any MCP tool error, follow [e9-mcp — MCP tool errors — stop immediately](../e9-mcp/SKILL.md#mcp-tool-errors--stop-immediately).** Do not call downstream account-scoped tools after a failed `account`, `task`, `search`, or similar call.
+| Need | Action |
+|------|--------|
+| Sign in | Call `mcp_auth` with `{}`, then verify with `ok` and `user` |
+| Select one account | `/e9a <account_id>` |
+| Select children of a parent | `/e9a parent <parent_account_id>` |
+| Search people | `/e9 search <terms>` |
+| Run an on-demand method | `/e9 task <plugin-path-or-alias> <method> [options...]` |
+| Configure Cursor | Add the server to `~/.cursor/mcp.json` and permissions to `~/.cursor/permissions.json` |
+
+**Rule:** On any MCP tool error, follow [e9-mcp — MCP tool errors — stop immediately](../e9-mcp/SKILL.md#mcp-tool-errors--stop-immediately); do not call downstream account-scoped tools after a failed `account`, `task`, `search`, or similar call.
 
 ## Step 0 — Log in (always first)
 
-**Every `/e9` request starts here.** Do not grep, curl, read config files, start servers, or run CLI commands to "figure out" auth — just log in.
+**Rule:** Every `/e9` request starts by logging in. Do not grep, curl, read config files, start servers, or run CLI commands to "figure out" auth.
 
 1. Call **`mcp_auth`** on the engine9 MCP server with **`{}`**.
 2. Cursor opens a **sign-in prompt for the user** — wait for them to complete it.
@@ -43,7 +52,9 @@ When handling `/e9` or `/e9a` requests, **do not read local workspace code** to 
 
 When an account or parent is not found, do NOT dig deeper into compiled account catalogs, etc. Account discovery when using MCP should only be through that MCP, not through any other mechanisms. Do not read `accounts.d/`, `accounts.compiled.json5`, or other on-disk catalogs.
 
-## What this skill covers
+**Rule:** Discover accounts, plugins, methods, paths, and options from the connected MCP server only.
+
+## Concepts
 
 1. Cursor MCP config (`mcp.json`, `permissions.json`)
 2. Auth expectations (OAuth vs `localdev` bearer)
@@ -143,11 +154,11 @@ The CLI bin script (`server/bin/e9a`) writes `.e9_parameters` for subsequent **l
 
 **`/e9a parent <parent_id>` or `/e9a all`:**
 
-1. Resolve ids **only via MCP**. Parent: `account` `{ "command": "search", "parents": ["<parent_id>"] }` (comma-separated parents → `parents` array). All: MCP `user` and take active keys of `accounts` (`disabled` not true).
+1. Resolve ids **only via MCP**. Parent: `account` `{ "command": "search", "parents": ["<parent_id>"] }` (comma-separated parents → `parents` array; results are flat rows with `parent_ids`). All: MCP `user` and take active keys of `accounts` (`disabled` not true); each entry includes flat `parent_ids` (no nested tree).
 2. If search `count` is `0` or `user.accounts` is empty: **stop**. Report that MCP did not find the parent or any accounts. Do **not** read `accounts.d` / compiled catalogs.
 3. Set `engine9.account_ids` to the MCP list; set `engine9.account_id` to the first id (label only — not a DB probe target). Clear `engine9.plugins`.
 4. Do **not** load plugins for every account (or for the first id). Do **not** call MCP `account` plugins / open account databases to “check access” across children. Report the resolved ids and count.
-5. For **remote task listing** under parent/all scope, see [Multi-account remote tasks](#multi-account-remote-tasks-parent--all) — those calls must not fan out per-child DB access.
+5. For **remote task listing** under parent/all scope, see [Multi-account remote flow runs](#multi-account-remote-flow-runs-parent--all) — those calls must not fan out per-child DB access.
 
 ### Session persistence
 
@@ -298,11 +309,11 @@ The MCP server also resolves slash/colon paths against the account plugin table 
 ### Example MCP `task` payload
 
 User: `/e9 task renxt/people listCustomFields`  
-Account: `bfred_lambda_legal` (from `/e9a`)
+Account: `<account_id>` (from `/e9a`)
 
 ```json
 {
-  "account_id": "bfred_lambda_legal",
+  "account_id": "<account_id>",
   "path": "@frakture-com/channelbots/RENxtBot:People",
   "method": "listCustomFields",
   "label": "renxt/people listCustomFields"
@@ -310,3 +321,13 @@ Account: `bfred_lambda_legal` (from `/e9a`)
 ```
 
 Use `action: "listTasks"` with `flow_run_id` and optional `task_run_ids` from the schedule response to poll status. That MCP action calls remote-legacy `POST /task_runs/filter`.
+
+## Related documentation
+
+| Topic | Documentation |
+|-------|---------------|
+| MCP tools and invocation rules | [e9-mcp](../e9-mcp/SKILL.md) |
+| API-key management | [e9-api-key](../e9-api-key/SKILL.md) |
+| Direct HTTP Task API | [e9-tasks-api](../e9-tasks-api/SKILL.md) |
+| Plugin-installed reports | [e9-reports](../e9-reports/SKILL.md) |
+| Flow deployment | [deploy-flow.md](../e9-tasks-api/deploy-flow.md) |

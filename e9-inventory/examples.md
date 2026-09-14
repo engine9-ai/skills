@@ -323,15 +323,15 @@ Audit **Messages** (aggregate) more often than **Timeline → Messages** (per-pe
 
 | Home surface | Statistics source |
 |--------------|-------------------|
-| Total revenue | `transaction` `months[].revenue` vs same month last year |
-| Donations | `transaction` `months[].records` |
-| Average gift | `revenue / records` vs same month last year |
+| Total revenue | `transaction` `months[].revenue` (latest month; no year-over-year) |
+| Donations | `transaction` `months[].records` (latest month; no year-over-year) |
+| Average gift | `revenue / records` for the latest month (no year-over-year) |
 | Active people | `timeline` `months[].people` |
 | People created chart | person `created_months` (fallback: person `months[]` when `date_column` is a created-date column) |
 | Emails sent / SMS sent | `message_activity.by_channel_month` filtered by `channel`, field `sent` |
-| Channel activity (sends, opens, clicks) | `message_activity.by_channel_month`: `sent`, `impressions`, `clicks` (last 12 months) |
+| Channel activity (sends, opens, clicks) | `message_activity.by_channel_month`: `sent`, `impressions`, `clicks` (first–last month, max 36). Use `messages` when activity is one month, ends earlier, or later months are record-only (no sends/opens/clicks). |
 
-Fallback if `message_activity` is skipped: `messages.by_channel_month`, then `inputs` entry types. Ad coverage (not Home activity) stays on `message_summary_by_date`.
+Fallback if `message_activity` is skipped or stale: `messages.by_channel_month`. Do not use timeline `inputs` for Home email/SMS. Ad coverage (not Home activity) stays on `message_summary_by_date`.
 
 ## Bundle export `inventory.json5`
 

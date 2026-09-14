@@ -12,15 +12,22 @@ description: >-
 
 # engine9 Task API
 
-Use this skill when calling the Task API from scripts, curl, or integrations — or when troubleshooting auth, account scoping, and run state.
+The engine9 Task API schedules predefined flows and on-demand worker methods over HTTP, then exposes asynchronous flow and task run state. Use this skill for scripts, curl, and integrations, or when troubleshooting direct-HTTP authentication, account scoping, scheduling, and run state.
 
-**Deploy / schedule a multi-step flow for one account (identity rebuild, etc.):** follow [deploy-flow.md](./deploy-flow.md) — MCP `task` with `flow_id` (or local `e9 task runFlow` fallback).
+## Quick reference
 
-When the user is working through **MCP** (not REST/curl), use MCP `account` and MCP `task` per [e9-mcp](../e9-mcp/SKILL.md). To **create or manage** Task API keys and scopes, use MCP `apiKey` ([e9-api-key](../e9-api-key/SKILL.md)). This skill is for direct HTTP against the Task API.
+| Need | Route or requirement |
+|------|----------------------|
+| Production base URL | `https://data.engine9.ai` |
+| Authentication | `Authorization: Bearer e9key_…` plus `X-ENGINE9-ACCOUNT-ID` |
+| Discover flows | `GET /flows` with `tasks:read` |
+| Schedule a predefined flow | `POST /flow_runs/` with `flow_id` |
+| Schedule an on-demand task | `POST /tasks/schedule` with `path` + `method` |
+| Poll task runs | `POST /task_runs/filter` |
 
-For designing and building flow JSON5 files (developers only), see [e9-dev-tasks](../e9-dev-tasks/SKILL.md).
+**Rule:** Do not mix Task API key authentication with MCP session authentication.
 
-## Two schedule endpoints
+## Concepts
 
 Pick the endpoint that matches the work. They both call `scheduleTasks` and return `flow_run_id` / `task_run_ids`.
 
@@ -33,33 +40,15 @@ An on-demand task does **not** need a `flow_id`. A predefined flow does **not** 
 
 **On-demand names** (REST and MCP): built-in engine9 Workers use `@engine9/plugins/e9workers:<Worker>` — no plugin-id lookup. Echo smoke test: `path: "@engine9/plugins/e9workers:EchoWorker"`, `method: "echo"`. See [echo-walkthrough.md](./echo-walkthrough.md#on-demand-task-names).
 
-## Documentation
+Routes live at the API origin root (`/flows`, `/tasks/schedule`, `/task_runs/filter`, `/flow_runs/`, …), not under `/api/task`. Read operations require `tasks:read`; scheduling and control operations require `tasks:schedule`. Requests do not block until execution finishes, so poll `POST /task_runs/filter` until terminal. `completed_since` on flow runs is computed from timestamps (`last_completed` ≤ `dataflow_last_completed`; equal is true) as described in [concepts.md](./concepts.md#completed-since).
 
-| Doc | Use when |
-|-----|----------|
-| [concepts.md](./concepts.md) | Terminology: flows, runs, IDs, async execution, `completed_since`, checkpoints |
-| [authentication.md](./authentication.md) | **API keys (`e9key_…`), scopes (`tasks:read` / `tasks:schedule`), account header** |
-| [getting-started.md](./getting-started.md) | First requests in five minutes |
-| [**deploy-flow.md**](./deploy-flow.md) | **Check + schedule a built-in/account flow for one account (MCP or CLI) — start here for identity rebuild etc.** |
-| [echo-walkthrough.md](./echo-walkthrough.md) | **Agent-runnable** end-to-end Echo demo: schedule → poll → completion, with expected responses |
-| [endpoints.md](./endpoints.md) | Every route with curl examples |
-| [errors.md](./errors.md) | HTTP status codes |
+**Rule:** Use `POST /flow_runs/` only for a published `flow_id`, and use `POST /tasks/schedule` only for an on-demand `path` plus `method`.
 
-## Quick reference
-
-- **Base URL:** `https://data.engine9.ai` (production default)
-- Routes at API origin root (`/flows`, `/tasks/schedule`, `/task_runs/filter`, `/flow_runs/`, … — not under `/api/task`)
-- Auth: `Authorization: Bearer e9key_…` (or `X-API-Key`) + `X-ENGINE9-ACCOUNT-ID`
-- Scopes: `tasks:read` (discover/list), `tasks:schedule` (schedule) — see [authentication.md](./authentication.md)
-- **`POST /tasks/schedule`** — on-demand task (`path` + `method`, e.g. `@engine9/plugins/e9workers:EchoWorker` + `echo`). **`POST /flow_runs/`** — predefined flow (`flow_id` required). **`POST /task_runs/filter`** — list/poll task runs.
-- Does not block until execution finishes — poll `POST /task_runs/filter` until terminal
-- `completed_since` on flow runs is computed from timestamps (`last_completed` ≤ `dataflow_last_completed`; **equal is true**) — [concepts.md](./concepts.md#completed-since)
-
-## Agent demo (prove an account/key works)
+## Examples
 
 Follow [echo-walkthrough.md](./echo-walkthrough.md) end to end: **ask the user for an account id and `e9key_` API key** (offer the default base URL `https://data.engine9.ai`), then schedule the Echo task, poll until it completes, and report the output — explaining each call and each response as you go. Never print the full API key.
 
-## Typical workflow
+## Workflow
 
 1. **Discover flows** — `GET /flows` (or `POST /flows/filter`) lists published slugs; `GET /flows/:id` shows each step's `task_key` and default `options`
 2. `POST /flow_runs/filter` with `{"limit":20}` — list recent **remote** runs for the account (default `remote: true`; no `flow_run_id`)
@@ -92,7 +81,7 @@ Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
 
 Details: [endpoints.md](./endpoints.md).
 
-## Common errors
+## Troubleshooting
 
 | Status | Fix |
 |--------|-----|
@@ -105,3 +94,18 @@ Details: [endpoints.md](./endpoints.md).
 | 503 | API or `api_key` table not configured — administrator: MCP `apiKey` create, or `e9 sqlworker createApiKey` |
 
 Full list: [errors.md](./errors.md).
+
+## Related documentation
+
+| Documentation | Use when |
+|---------------|----------|
+| [concepts.md](./concepts.md) | Terminology: flows, runs, IDs, async execution, `completed_since`, checkpoints |
+| [authentication.md](./authentication.md) | API keys, task scopes, and account headers |
+| [getting-started.md](./getting-started.md) | First requests in five minutes |
+| [deploy-flow.md](./deploy-flow.md) | Check and schedule a built-in or account flow with MCP or CLI |
+| [echo-walkthrough.md](./echo-walkthrough.md) | Run the end-to-end Echo schedule, poll, and completion demo |
+| [endpoints.md](./endpoints.md) | Review every HTTP route and curl examples |
+| [errors.md](./errors.md) | Interpret HTTP status codes |
+| [e9-mcp](../e9-mcp/SKILL.md) | Schedule and inspect work through an MCP session |
+| [e9-api-key](../e9-api-key/SKILL.md) | Create and manage Task API credentials |
+| [e9-dev-tasks](../e9-dev-tasks/SKILL.md) | Design and build flow JSON5 files |
