@@ -675,11 +675,15 @@ When the user asks for **all accounts**, **parent** children, or other multi-acc
 - Do **not** use the first id in a parent/all list as a required DB-connected `account_id` before the remote list.
 - Drive the request with remote multi-account filters (`parent_account_id`, `account_ids`, etc.) and status filters. Use Prefect `state_type` values only (`FAILED`, `RUNNING`, `COMPLETED`, `PAUSED`, …). Legacy Mongo tokens (`complete`, `error`, `in_progress`) are **rejected with 422**. Account database connectivity is not a prerequisite for remote-legacy flow-run list reads.
 - The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `search`, `timelinePerson`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
-- Listing is one request. **Archiving or bulk-retrying** those runs is also one request: reuse the same `parent_account_id` / `account_ids` and send every `flow_run_id` together ([bulk archive](#bulk-archive--retry-of-flow-runs)). Do **not** fan out one MCP call per child.
+- Listing is one request. **Counting or metrics** for those runs is also one request (`task` `action: "count"` / `"metrics"` — same `parent_account_id` / `account_ids`). **Archiving or bulk-retrying** those runs is also one request: reuse the same `parent_account_id` / `account_ids` and send every `flow_run_id` together ([bulk archive](#bulk-archive--retry-of-flow-runs)). Do **not** fan out one MCP call per child.
 
 ### `task` action `list` — remote flow runs
 
 MCP `task` with `action: "list"` calls `TaskWorker.listRemoteFlowRuns` (`POST /flow_runs/filter` on the remote-legacy Task API). Returns **flow runs only** — nested `task_runs` are not included. Each flow run includes `account_id`, `parent_account_id` (first id in that account's `parent_ids`, or `null`), and `parent_ids`.
+
+MCP `task` with `action: "count"` calls `POST /flow_runs/count` (same filters as list). Returns `{ count }`. Use with the current `status` filter for “N of total”.
+
+MCP `task` with `action: "metrics"` calls `POST /flow_runs/metrics`. Returns `{ count, total, FAILED, RUNNING, COMPLETED }` (extra types such as `PAUSED` only when matching). Rule: omit `status` so pills ignore the current state filter.
 
 MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listRemoteTaskRuns` (`POST /task_runs/filter` on the remote-legacy Task API) for a specific `flow_run_id` / `task_run_ids`. The result is `{ task_runs: [ … ], flow_run? }` — the same shape as REST `POST /task_runs/filter`. Pass `remote: false` to list local runs. Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`. Each `task_run` includes **`log_link`** (`/task_runs/{id}/log` on the Task API). Listings omit **`checkpoints`**. Display `state.name` (aka `state_name`); color/group by `state.type` (`state_type`). Render commands from `allowed_actions` (`pause`, `resume`, `retry`, `stop`, `update_options`, `reset_checkpoints`). Do **not** read deprecated `status` (Mongo vocabulary).
 
@@ -701,6 +705,8 @@ MCP `task` per-task-run controls (Firebase / MCP session — **do not** send `e9
 | `resetCheckpoints` | `POST /task_runs/:id/reset_checkpoints` | Walk back checkpoints. `{ "start_index": 0 }` (default) is RESET ALL; `N` keeps the first N (oldest) and drops later ones. Cannot yank from the middle. Retry does not clear. Alias: `reset_checkpoints` |
 | `log` / `output` | `GET /task_runs/:id/log` / `/output` | `{ log_link, log, truncated }` and optional signed **`log_url`** from remote-legacy; prefer **`log_link`** for integrations |
 | `archive` / bulk `retry` | `POST /flow_runs/archive` / `/retry` | All `flow_run_ids` in one call. After parent/all list, pass `parent_account_id`. **`user_id` is not required**. See [bulk archive](#bulk-archive--retry-of-flow-runs) |
+| `count` | `POST /flow_runs/count` | Same filters as `list`. `{ count }`. Ignores limit |
+| `metrics` | `POST /flow_runs/metrics` | FAILED / RUNNING / COMPLETED pills. Omit `status` so pills ignore the current state filter |
 
 Same account-scope auth as `action: "list"` (account header + bearer). Do **not** ask the user for a remote-legacy `user_id`.
 
@@ -726,6 +732,16 @@ Example — errored flow runs under a parent:
   "parent_account_id": "<parent_account_id>",
   "status": ["FAILED"],
   "limit": 300
+}
+```
+
+Status pills for the same parent (no `status` so FAILED / RUNNING / COMPLETED are independent of the list filter):
+
+```json
+{
+  "action": "metrics",
+  "account_id": "<parent_account_id>",
+  "parent_account_id": "<parent_account_id>"
 }
 ```
 

@@ -47,7 +47,7 @@ Prefixes: `e9key_…` for normal scopes; `e9publickey_…` when the key includes
 | Route | Scope |
 |-------|--------|
 | `GET /flows`, `GET /flows/:id`, `POST /flows/filter`, `GET /flows_dir` | `tasks:read` |
-| `GET /flow_runs/:id`, `POST /flow_runs/filter` | `tasks:read` |
+| `GET /flow_runs/:id`, `POST /flow_runs/filter`, `POST /flow_runs/count`, `POST /flow_runs/metrics` | `tasks:read` |
 | `POST /flow_runs/archive`, `POST /flow_runs/retry` | `tasks:schedule` |
 | `GET /task_runs/:id`, `GET /task_runs/:id/log`, `GET /task_runs/:id/output`, `POST /task_runs/filter` | `tasks:read` |
 | `POST /tasks/schedule` | `tasks:schedule` |

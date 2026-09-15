@@ -89,7 +89,7 @@ List those task runs with **`POST /task_runs/filter`** (`{ "flow_run_id": "…" 
 | `parent_account_id` | First id in `account.parent_ids`, or `null` if the account has no parent |
 | `parent_ids` | Full `parent_ids` array (an account can have more than one parent) |
 
-`POST /flow_runs/filter` also accepts `parent_account_id` as a **filter** (default **remote-legacy** listing): it selects runs whose account contains that id anywhere in `parent_ids` (`"none"` = accounts with no parent). That filter is "has this parent", which is not always the same as "this is the first parent" on the response. Pass `"remote": false` to list local runs instead.
+`POST /flow_runs/filter` also accepts `parent_account_id` as a **filter** (default **remote-legacy** listing): it selects runs whose account contains that id anywhere in `parent_ids` (`"none"` = accounts with no parent). That filter is "has this parent", which is not always the same as "this is the first parent" on the response. `POST /flow_runs/count` and `POST /flow_runs/metrics` accept the same filter. Pass `"remote": false` to list local runs instead.
 
 ### Completed since
 
@@ -118,12 +118,25 @@ Prefect **`tags` on a flow run** map to Frakture **`tracking_code`**: one string
 | **Storage** | Single string. `tags: ["batch-1"]` is stored as `tracking_code: "batch-1"`. Extra tags on write are ignored. |
 | **Reads** | Flow run includes `tags: ["batch-1"]` (or `[]`) and `tracking_code`. |
 | **Schedule** | `POST /tasks/schedule` and `POST /flow_runs/` accept `tags` or `tracking_code`. Explicit `tracking_code` wins if both are sent. |
-| **Filter** | `POST /flow_runs/filter` accepts `tags` / `flow_runs.tags.any_` (OR) / `all_` (single tag) / `is_null_`, plus `tracking_code`. |
-| **Search** | `POST /flow_runs/filter` `search` / `q` — case-insensitive substring on flow name, task name, method, or plugin/bot path. |
+| **Filter** | `POST /flow_runs/filter`, `/count`, and `/metrics` accept `tags` / `flow_runs.tags.any_` (OR) / `all_` (single tag) / `is_null_`, plus `tracking_code`. |
+| **Search** | The same three routes accept `search` / `q` — case-insensitive substring on flow name, task name, method, or plugin/bot path. |
 
 **Not supported:** tags on **task runs**; `POST /task_runs/filter` by tags; `PATCH` to change tags; multiple stored tags (`all_` with two distinct values matches nothing); mapping flow-definition tags to `tracking_code`.
 
 Third-party Prefect clients should send **one** flow-run tag. `tracking_code` remains a valid alias.
+
+### Count and metrics
+
+`POST /flow_runs/filter` is paged (HTTP default 20, max 500) and does not report how many runs matched. Use these read-only routes for totals and status pills. Both reuse the **same filters** as filter (`status`, `tags` / `tracking_code`, `search` / `q`, `parent_account_id`, `account_ids`, `completed_since`, `archived`, date range). They never load nested task runs. Default `remote: true` (Frakture); pass `"remote": false` for local runs.
+
+| Route | Response |
+|-------|----------|
+| `POST /flow_runs/count` | `{ "ok": true, "count": N }` |
+| `POST /flow_runs/metrics` | `{ "ok": true, "count": N, "total": N, "FAILED": …, "RUNNING": …, "COMPLETED": … }` |
+
+`metrics.total` equals `count`. Extra state types (e.g. `PAUSED`) appear only when matching runs have that status.
+
+Rule: For UI pills next to a filtered list, send metrics **without** `status` so FAILED / RUNNING / COMPLETED reflect the other filters; send count **with** the current `status` for “N of total”.
 
 ## Task (step)
 

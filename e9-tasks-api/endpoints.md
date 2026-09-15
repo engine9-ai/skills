@@ -432,6 +432,61 @@ Computation: `completed_since` is `true` when `dataflow_last_completed` exists a
 
 ---
 
+### `POST /flow_runs/count`
+
+**Scope:** `tasks:read`
+
+Total matching flow runs. Same filters as [`POST /flow_runs/filter`](#post-flow_runsfilter); ignores `limit`, `cursor`, `offset`, and `include_task_runs`. Default `remote: true`.
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parent_account_id": "<parent_account_id>",
+    "status": ["FAILED"]
+  }' \
+  "$BASE_URL/flow_runs/count"
+```
+
+**Response:** `{ "ok": true, "count": N }`
+
+---
+
+### `POST /flow_runs/metrics`
+
+**Scope:** `tasks:read`
+
+FAILED / RUNNING / COMPLETED status-pill counts. Same filters as filter. Omit `status` so pills ignore the current state filter. Extra types (e.g. `PAUSED`) appear only when matching runs have that status.
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parent_account_id": "<parent_account_id>",
+    "search": "EchoWorker"
+  }' \
+  "$BASE_URL/flow_runs/metrics"
+```
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "count": 7,
+  "total": 7,
+  "FAILED": 2,
+  "RUNNING": 1,
+  "COMPLETED": 4
+}
+```
+
+`total` equals `count`. See [concepts.md — Count and metrics](./concepts.md#count-and-metrics). MCP: `task` `action: "metrics"` (pills) or `"count"` (total).
+
+---
+
 ### `POST /flow_runs/archive`
 
 **Scope:** `tasks:schedule`
@@ -916,9 +971,11 @@ curl -X POST ... -d '{"flow_id":"nightly-sync","options":{"start":"2024-01-01","
 curl -X POST ... -d '{"flow_run_id":"'"$FLOW_RUN_ID"'"}' \
   "$BASE_URL/task_runs/filter"
 
-# 4. Optional: list history
+# 4. Optional: list history and status pills
 curl -X POST ... -d '{"flow_runs":{"flow_id":{"eq_":"nightly-sync"}},"limit":10}' \
   "$BASE_URL/flow_runs/filter"
+curl -X POST ... -d '{"search":"EchoWorker"}' "$BASE_URL/flow_runs/metrics"
+curl -X POST ... -d '{"status":["FAILED"]}' "$BASE_URL/flow_runs/count"
 
 # 5. Optional: retry a specific task, or the flow's failed task
 curl -X POST ... -d '{"force":false}' "$BASE_URL/task_runs/$TASK_RUN_ID/retry"

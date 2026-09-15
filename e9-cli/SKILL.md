@@ -203,7 +203,7 @@ Account/domain create and secrets: use **e9-account** (`cloud-services/e9-accoun
 
 ### Multi-account remote flow runs (parent / all)
 
-Use this for requests like “list current errored tasks”, cross-account job status, or anything backed by MCP `task` `action: "list"` → `TaskWorker.listRemoteFlowRuns` / remote-legacy `POST /flow_runs/filter` when the user wants **parent** or **all** scope. To list tasks inside one flow run, use MCP `action: "listTasks"` → `TaskWorker.listRemoteTaskRuns` / remote-legacy `POST /task_runs/filter` (or REST `POST /task_runs/filter`).
+Use this for requests like “list current errored tasks”, cross-account job status, or anything backed by MCP `task` `action: "list"` → `TaskWorker.listRemoteFlowRuns` / remote-legacy `POST /flow_runs/filter` when the user wants **parent** or **all** scope. For FAILED / RUNNING / COMPLETED totals without paging the list, use `action: "metrics"` (`POST /flow_runs/metrics`) and omit `status`; use `action: "count"` with the current `status` for “N of total”. To list tasks inside one flow run, use MCP `action: "listTasks"` → `TaskWorker.listRemoteTaskRuns` / remote-legacy `POST /task_runs/filter` (or REST `POST /task_runs/filter`).
 
 - Prefer remote multi-account filters: `parent_account_id` for parent scope, or the remote API’s multi-account / auth-scoped listing for all — **not** a loop of per-account MCP calls.
 - Use Prefect `state_type` filters only (`FAILED`, `RUNNING`, `COMPLETED`, `PAUSED`, …). Legacy Mongo tokens (`complete`, `error`, `in_progress`) are rejected with 422.

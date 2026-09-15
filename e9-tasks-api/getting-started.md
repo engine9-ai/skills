@@ -38,6 +38,16 @@ curl $CURL_TLS -sS -X POST \
 
 Pass `"remote": false` to list local runs instead.
 
+Optional totals (same filters; omit `status` on metrics so pills ignore the list filter):
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  "$BASE_URL/flow_runs/metrics"
+```
+
 **401/403?** Check key, account header, and scopes — [authentication.md](./authentication.md).
 
 Optional: `GET /flows` lists published flow slugs (may be `[]` if none are published). On-demand Echo does not need a flow.

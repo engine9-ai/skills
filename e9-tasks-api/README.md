@@ -38,6 +38,9 @@ POST /tasks/schedule
 POST /task_runs/filter
 POST /flow_runs/
 GET  /flow_runs/:id
+POST /flow_runs/filter
+POST /flow_runs/count
+POST /flow_runs/metrics
 GET  /task_runs/:id
 GET  /task_runs/:id/log
 GET  /task_runs/:id/output

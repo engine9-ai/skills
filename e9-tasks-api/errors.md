@@ -187,6 +187,15 @@ These mutate existing flow runs. The `result` field of the 200 body reflects whi
 | 422 | Status filter used a legacy Mongo token (`complete`, `error`, `in_progress`, …) instead of a Prefect state type |
 | 503 | API not fully configured |
 
+### `POST /flow_runs/count` / `POST /flow_runs/metrics`
+
+| Status | Cause |
+|--------|-------|
+| 422 | Status filter used a legacy Mongo token (`complete`, `error`, `in_progress`, …) instead of a Prefect state type |
+| 503 | Remote count/metrics is not reachable/configured |
+
+Same filters as `POST /flow_runs/filter`. Count returns `{ count }`; metrics returns `{ count, total, FAILED, RUNNING, COMPLETED }`.
+
 ### `GET /flows` / `POST /flows/filter`
 
 | Status | Cause |
