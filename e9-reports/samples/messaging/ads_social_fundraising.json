@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "name": "Ads & Social Fundraising",
+  "description": "Ad and social spend versus last-click attributed revenue, ROI, and transactions. Optionally restrict to one channel. Queries global_message_summary_by_date (date_column date). Default channels are the persuasion set plus bing. ROI is sum(attributed_revenue)/sum(spend). Do not add platform revenue to attributed_revenue.",
+  "tags": ["Ads", "Social", "Fundraising", "Sample"],
+  "data_sources": {
+    "default": {
+      "table": "global_message_summary_by_date",
+      "date_column": "date",
+      "conditions": [
+        {
+          "eql": "channel in ('ad', 'facebook_ad', 'google_ad', 'doubleclick_ad', 'promoted_tweet', 'organic_tweet', 'instagram', 'bing')"
+        }
+      ]
+    }
+  },
+  "filters": {
+    "title": "Filters",
+    "type": "object",
+    "properties": {
+      "channel": {
+        "type": "string",
+        "title": "Channel",
+        "description": "Optional. Further restrict to one channel in the default ad/social fundraising set.",
+        "enum": [
+          "ad",
+          "facebook_ad",
+          "google_ad",
+          "doubleclick_ad",
+          "promoted_tweet",
+          "organic_tweet",
+          "instagram",
+          "bing"
+        ],
+        "filter": { "column": "channel", "operator": "=" }
+      }
+    }
+  },
+  "sections": [
+    {
+      "title": "Key metrics",
+      "components": [
+        {
+          "id": "spend",
+          "component": "StatCard",
+          "name": "Spend",
+          "metric": { "eql": "sum(spend)", "format": "currency" }
+        },
+        {
+          "id": "revenue",
+          "component": "StatCard",
+          "name": "Attributed Revenue",
+          "metric": { "eql": "sum(attributed_revenue)", "format": "currency" }
+        },
+        {
+          "id": "roi",
+          "component": "StatCard",
+          "name": "ROI",
+          "metric": { "eql": "sum(attributed_revenue)/sum(spend)", "format": "percent" }
+        },
+        {
+          "id": "transactions",
+          "component": "StatCard",
+          "name": "Transactions",
+          "metric": { "eql": "sum(attributed_transactions)" }
+        }
+      ]
+    },
+    {
+      "title": "Revenue and spend",
+      "components": [
+        {
+          "id": "revenue_spend_history",
+          "component": "ComposedChart",
+          "isDate": true,
+          "dimension": { "eql": "date" },
+          "metrics": [
+            { "name": "Spend", "eql": "sum(spend)", "format": "currency", "type": "bar" },
+            { "name": "Revenue", "eql": "sum(attributed_revenue)", "format": "currency", "type": "bar" },
+            {
+              "name": "ROI",
+              "eql": "sum(attributed_revenue)/sum(spend)",
+              "yaxis": "right",
+              "format": "percent",
+              "type": "line"
+            }
+          ],
+          "sort": { "eql": "date" }
+        }
+      ]
+    },
+    {
+      "title": "By channel",
+      "components": [
+        {
+          "id": "channel_summary",
+          "component": "Table",
+          "dimensions": [{ "name": "Channel", "eql": "channel" }],
+          "metrics": [
+            { "name": "Spend", "eql": "sum(spend)", "format": "currency" },
+            { "name": "Revenue", "eql": "sum(attributed_revenue)", "format": "currency" },
+            { "name": "ROI", "eql": "sum(attributed_revenue)/sum(spend)", "format": "percent" },
+            { "name": "Transactions", "eql": "sum(attributed_transactions)" }
+          ],
+          "orderBy": { "eql": "sum(attributed_revenue)", "orderByDirection": "DESC" }
+        }
+      ]
+    }
+  ]
+}

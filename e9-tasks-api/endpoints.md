@@ -802,6 +802,68 @@ curl $CURL_TLS -sS -X POST \
 
 ---
 
+### `POST /task_runs/:id/reset_checkpoints`
+
+**Scope:** `tasks:schedule`
+
+Truncate worker checkpoints on a remote task run (GraphQL `job_reset_checkpoint` / Console **RESET ALL**). A task can have **multiple** checkpoints, ordered oldest → newest. Reset only walks **back from the most recent**: it keeps `checkpoints[0 .. start_index)` and drops the rest. You cannot yank a checkpoint out of the middle. **Retry does not clear checkpoints** — reset first when the next run should not resume from `table_progress`.
+
+Not status-gated. `allowed_actions` includes `reset_checkpoints` when the job has at least one checkpoint.
+
+```bash
+# Clear all (default) — same as Console RESET ALL
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{ "start_index": 0 }' \
+  "$BASE_URL/task_runs/$TASK_RUN_ID/reset_checkpoints"
+```
+
+Walk back the most recent snapshot, keeping the first two (drop later `table_progress` updates):
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{ "start_index": 2 }' \
+  "$BASE_URL/task_runs/$TASK_RUN_ID/reset_checkpoints"
+```
+
+**200:**
+
+```json
+{
+  "ok": true,
+  "action": "reset_checkpoints",
+  "task_run_id": "…",
+  "flow_run_id": "…",
+  "start_index": 0,
+  "checkpoints": [],
+  "task_run": { "checkpoints": [], "allowed_actions": ["pause", "retry"] }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `start_index` | Omitted / `0` clears all. `N` keeps the first N entries (oldest) and drops later ones. Cannot remove a checkpoint from the middle |
+
+MCP `task`:
+
+```json
+{
+  "action": "resetCheckpoints",
+  "account_id": "<account_id>",
+  "task_run_id": "<task_run_id>",
+  "start_index": 2
+}
+```
+
+Alias `reset_checkpoints` is accepted. Omit `start_index` (or pass `0`) to RESET ALL.
+
+**422** — `start_index` is not a non-negative integer. **503** — checkpoint reset is not configured.
+
+---
+
 ### `PATCH /task_runs/:id`
 
 **Scope:** `tasks:schedule`

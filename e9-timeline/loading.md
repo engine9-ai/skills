@@ -73,3 +73,9 @@ Email/SMS/form workers often start from **Raw**-like vendor activity: `ts`, `ent
 | `loadTimelineTables` | `timeline` + detail table + summary view |
 
 Classic flow: **`id` → `loadTimelineTables`**. Keep plugin output close to the input-tools timeline schema so ID conversion is mechanical.
+
+## Related documentation
+
+- [Input files and `remote_input_id` grain](../e9-input/SKILL.md)
+- [Timeline Raw vs Timeline ID](../inputs/timeline/SKILL.md)
+- [Person identity](../e9-person-id/SKILL.md)

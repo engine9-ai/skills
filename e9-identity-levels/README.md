@@ -1,8 +1,8 @@
-# Delegate Identity Levels
+# engine9 Identity Levels
 
-**Purpose:** A simple, user-friendly way to describe how much confidence Delegate has in the identity behind a website interaction.
+**Purpose:** A simple, user-friendly way to describe how much confidence engine9 has in the identity behind a website interaction.
 
-Delegate Identity Levels are intended to help product teams answer questions such as:
+engine9 Identity Levels are intended to help product teams answer questions such as:
 
 - "Is an unconfirmed email address enough for this feature?"
 - "Should we require a confirmed contact method?"
@@ -12,7 +12,7 @@ Delegate Identity Levels are intended to help product teams answer questions suc
 
 The levels intentionally combine the most useful parts of modern web identity into a single practical ladder, while retaining more detailed standards information underneath when needed.
 
-> **Important:** Delegate Identity Levels describe **identity confidence**, not authorization.
+> **Important:** engine9 Identity Levels describe **identity confidence**, not authorization.
 >
 > A user may be strongly identified but still not be authorized to perform an action. Roles, permissions, membership, entitlement, employment status, and other authorization decisions are separate.
 
@@ -35,7 +35,7 @@ The levels intentionally combine the most useful parts of modern web identity in
 
 ## The Most Important Boundary
 
-Delegate treats Levels **0–4** and Levels **5–7** as fundamentally different categories.
+engine9 treats Levels **0–4** and Levels **5–7** as fundamentally different categories.
 
 ```text
             DIGITAL / PSEUDONYMOUS IDENTITY                     REAL-WORLD IDENTITY
@@ -51,14 +51,14 @@ Delegate treats Levels **0–4** and Levels **5–7** as fundamentally different
 
 A person can legitimately reach **Level 4 while remaining anonymous or pseudonymous**.
 
-For example, Delegate may be highly confident that:
+For example, engine9 may be highly confident that:
 
 - the visitor controls a particular Google identity;
 - that Google identity has a stable provider identifier;
 - Google strongly authenticated the visitor using MFA or a passkey; and
 - the current authentication is fresh enough for the intended use.
 
-Delegate still may have **no basis for asserting that the visitor's legal name is Bob Smith**.
+engine9 still may have **no basis for asserting that the visitor's legal name is Bob Smith**.
 
 That transition begins at **Level 5**.
 
@@ -70,7 +70,7 @@ That transition begins at **Level 5**.
 
 ### Meaning
 
-Delegate has information that appears to relate to the visitor, but the visitor has neither supplied nor confirmed it.
+engine9 has information that appears to relate to the visitor, but the visitor has neither supplied nor confirmed it.
 
 ### Examples
 
@@ -102,7 +102,7 @@ Level 0 may be useful for personalization, analytics, fraud signals, or deciding
 
 ### Meaning
 
-The visitor has directly supplied identity or contact information, but Delegate has not independently confirmed it.
+The visitor has directly supplied identity or contact information, but engine9 has not independently confirmed it.
 
 ### Examples
 
@@ -114,9 +114,9 @@ Email: bob@example.com
 Phone: +1 555 555 0100
 ```
 
-Delegate knows that the visitor **said** these things.
+engine9 knows that the visitor **said** these things.
 
-Delegate does not yet know whether any of them are true.
+engine9 does not yet know whether any of them are true.
 
 ### What this establishes
 
@@ -152,13 +152,13 @@ The visitor has demonstrated control of at least one contact mechanism.
 
 ### What this establishes
 
-If Delegate sends a code to:
+If engine9 sends a code to:
 
 ```text
 bob@example.com
 ```
 
-and the visitor successfully returns it, Delegate has reasonable evidence that the visitor currently has access to `bob@example.com`.
+and the visitor successfully returns it, engine9 has reasonable evidence that the visitor currently has access to `bob@example.com`.
 
 ### What this does **not** establish
 
@@ -187,7 +187,7 @@ These similarly distinguish a verified communication channel from broader real-w
 
 ### Meaning
 
-A trusted identity provider has authenticated the visitor and supplied Delegate with a stable digital identity that Delegate accepts.
+A trusted identity provider has authenticated the visitor and supplied engine9 with a stable digital identity that engine9 accepts.
 
 Examples may include:
 
@@ -207,7 +207,7 @@ Level 3 establishes something closer to:
 
 > "A trusted provider recognizes and authenticated this visitor as the controller of this established digital identity."
 
-For OpenID Connect, Delegate should normally identify the provider identity using the combination of the trusted issuer and the provider's stable subject identifier, rather than relying solely on an email address.
+For OpenID Connect, engine9 should normally identify the provider identity using the combination of the trusted issuer and the provider's stable subject identifier, rather than relying solely on an email address.
 
 Conceptually:
 
@@ -215,18 +215,18 @@ Conceptually:
 issuer  = https://trusted-provider.example
 subject = 248289761001
 
-Delegate identity key = issuer + subject
+engine9 identity key = issuer + subject
 ```
 
 An email address may change. The provider subject identifier is intended to identify the provider-side digital identity.
 
 ### Requirements for a "Trusted Provider"
 
-Delegate should maintain an explicit provider trust policy.
+engine9 should maintain an explicit provider trust policy.
 
 A provider should not qualify for Level 3 merely because it supports OAuth or OpenID Connect.
 
-Delegate should consider:
+engine9 should consider:
 
 - provider reputation and operational maturity;
 - secure OIDC/federation implementation;
@@ -235,7 +235,7 @@ Delegate should consider:
 - stable subject identifiers;
 - documented account recovery practices;
 - availability and meaning of relevant identity claims;
-- whether Delegate understands the provider's security semantics.
+- whether engine9 understands the provider's security semantics.
 
 ### What this establishes
 
@@ -261,7 +261,7 @@ Typical qualifying mechanisms may include:
 - a passkey;
 - a FIDO/WebAuthn security key;
 - another cryptographic authenticator;
-- another provider-specific authentication method that Delegate's policy recognizes as sufficiently strong.
+- another provider-specific authentication method that engine9's policy recognizes as sufficiently strong.
 
 ### The key distinction from Level 3
 
@@ -275,14 +275,14 @@ Typical qualifying mechanisms may include:
 
 ### Strong authentication must be demonstrated
 
-Delegate should **not** award Level 4 simply because:
+engine9 should **not** award Level 4 simply because:
 
 - the provider supports MFA;
 - the user's provider account is capable of MFA;
 - a passkey happens to be registered;
 - the provider is a large or well-known company.
 
-Instead, Delegate should have sufficient evidence that the required authentication strength was satisfied for the relevant authentication event.
+Instead, engine9 should have sufficient evidence that the required authentication strength was satisfied for the relevant authentication event.
 
 Depending on the provider, this may come from:
 
@@ -305,7 +305,7 @@ Modern OpenID specifications also define authentication contexts for phishing-re
 
 ### Not all Level 4 authentication is equally strong
 
-Delegate should retain detailed properties below the friendly level.
+engine9 should retain detailed properties below the friendly level.
 
 For example:
 
@@ -328,20 +328,20 @@ The detailed characteristics remain available to policies that care about them.
 
 ### Examples
 
-| Authentication                                                           | Delegate level | Notes                                      |
+| Authentication                                                           | engine9 level | Notes                                      |
 | ------------------------------------------------------------------------ | -------------- | ------------------------------------------ |
 | Trusted provider, authentication strength unknown                        | 3              | Provider identity confirmed                |
 | Trusted provider + password only                                         | 3              | Usually not enough for Level 4             |
 | Trusted provider + password + OTP                                        | 4              | Stronger authentication / MFA              |
 | Trusted provider + passkey                                               | 4              | Cryptographic; commonly phishing-resistant |
 | Trusted provider + hardware security key                                 | 4              | Strong cryptographic authentication        |
-| Provider supports MFA, but Delegate cannot determine whether it was used | 3              | Do not infer Level 4                       |
+| Provider supports MFA, but engine9 cannot determine whether it was used | 3              | Do not infer Level 4                       |
 
 ---
 
 # The Real-World Identity Boundary
 
-Starting with Level 5, Delegate is no longer primarily answering:
+Starting with Level 5, engine9 is no longer primarily answering:
 
 > "Who controls this digital identity?"
 
@@ -357,7 +357,7 @@ This is the domain that NIST calls **identity proofing** and describes with **Id
 
 ### Meaning
 
-Delegate has evidence supporting the existence of the claimed real-world identity and has taken steps to associate the visitor with that identity.
+engine9 has evidence supporting the existence of the claimed real-world identity and has taken steps to associate the visitor with that identity.
 
 ### Typical techniques
 
@@ -376,7 +376,7 @@ Current NIST SP 800-63A-4 describes IAL1 as supporting the real-world existence 
 
 ### Important wording
 
-Delegate should use:
+engine9 should use:
 
 > **Identity Checked**
 
@@ -394,7 +394,7 @@ The goal is to communicate that meaningful real-world proofing has begun without
 
 ### Meaning
 
-Delegate has high confidence that the visitor is the real-world person they claim to be, based on stronger identity evidence and a more rigorous verification process.
+engine9 has high confidence that the visitor is the real-world person they claim to be, based on stronger identity evidence and a more rigorous verification process.
 
 ### Examples
 
@@ -419,7 +419,7 @@ NIST IAL2 requires additional evidence and more rigorous evidence validation and
 
 A process should only be described as **NIST IAL2 compliant** when it actually satisfies the applicable NIST requirements.
 
-Delegate Level 6 may be **mapped to** or **inspired by** IAL2 without automatically constituting a compliance claim.
+engine9 Level 6 may be **mapped to** or **inspired by** IAL2 without automatically constituting a compliance claim.
 
 ---
 
@@ -427,7 +427,7 @@ Delegate Level 6 may be **mapped to** or **inspired by** IAL2 without automatica
 
 ### Meaning
 
-The visitor's real-world identity has been established using the strongest identity-proofing process recognized by Delegate.
+The visitor's real-world identity has been established using the strongest identity-proofing process recognized by engine9.
 
 ### Typical characteristics
 
@@ -492,7 +492,7 @@ Level 7   "This identity passed a highest-assurance proofing process."
 
 # Relationship to NIST
 
-Delegate Identity Levels are intentionally easier to use than the underlying NIST model.
+engine9 Identity Levels are intentionally easier to use than the underlying NIST model.
 
 NIST SP 800-63-4 separates digital identity into multiple dimensions:
 
@@ -502,13 +502,13 @@ NIST SP 800-63-4 separates digital identity into multiple dimensions:
 | **AAL — Authenticator Assurance Level** | How confident are we that the current claimant controls the authenticators associated with the subscriber? |
 | **FAL — Federation Assurance Level**    | How strongly is the federated assertion protected between identity provider and relying party?             |
 
-Delegate does **not** attempt to replace these standards.
+engine9 does **not** attempt to replace these standards.
 
-Instead, Delegate Identity Levels provide a simple decision-making layer over them.
+Instead, engine9 Identity Levels provide a simple decision-making layer over them.
 
 ### Approximate conceptual mapping
 
-| Delegate level                              | Primary concept                     | Approximate standards relationship                        |
+| engine9 level                              | Primary concept                     | Approximate standards relationship                        |
 | ------------------------------------------- | ----------------------------------- | --------------------------------------------------------- |
 | **0 — Inferred**                            | Inference                           | No identity proofing                                      |
 | **1 — Provided**                            | Self-assertion                      | No identity proofing                                      |
@@ -525,21 +525,21 @@ AAL2 includes requirements beyond "the user used two factors."
 
 It includes requirements around the authenticators, protocol, session management, replay resistance, and related security controls.
 
-Delegate should therefore avoid automatically claiming formal AAL2 compliance simply because an upstream provider reports MFA.
+engine9 should therefore avoid automatically claiming formal AAL2 compliance simply because an upstream provider reports MFA.
 
 A more defensible statement is:
 
-> Delegate Level 4 represents strong provider-authenticated control and can use NIST AAL concepts when evaluating authentication strength.
+> engine9 Level 4 represents strong provider-authenticated control and can use NIST AAL concepts when evaluating authentication strength.
 
 ---
 
 # Relationship to OpenID Connect
 
-OpenID Connect provides useful building blocks for Delegate Levels 2–4.
+OpenID Connect provides useful building blocks for engine9 Levels 2–4.
 
 ## Useful standard claims
 
-| Claim                   | Delegate use                                          |
+| Claim                   | engine9 use                                          |
 | ----------------------- | ----------------------------------------------------- |
 | `iss`                   | Identifies the identity provider                      |
 | `sub`                   | Stable provider-side subject identifier               |
@@ -583,7 +583,7 @@ The OpenID Identity Assurance specifications define a `verified_claims` structur
 - verification process;
 - verification evidence.
 
-This is closely aligned with Delegate Levels 5–7.
+This is closely aligned with engine9 Levels 5–7.
 
 A simplified conceptual representation might be:
 
@@ -600,17 +600,17 @@ verified_identity:
     birth_date: 1980-04-12
 ```
 
-Delegate should retain this detailed provenance even when the application only consumes:
+engine9 should retain this detailed provenance even when the application only consumes:
 
 ```text
-Delegate Identity Level 6
+engine9 Identity Level 6
 ```
 
 ---
 
 # The Level Is a Summary, Not the Entire Identity Record
 
-The Delegate Identity Level should be treated as a convenient summary.
+The engine9 Identity Level should be treated as a convenient summary.
 
 It should not replace the evidence used to derive it.
 
@@ -647,7 +647,7 @@ This distinction should be preserved.
 
 # Recommended Policy Model
 
-Applications should generally specify a **minimum Delegate Identity Level**, rather than directly coding assumptions about providers or verification technologies.
+Applications should generally specify a **minimum engine9 Identity Level**, rather than directly coding assumptions about providers or verification technologies.
 
 For example:
 
@@ -678,7 +678,7 @@ minimum_identity_level: 6
 
 The exact thresholds are business decisions.
 
-Delegate provides a common vocabulary for making those decisions.
+engine9 provides a common vocabulary for making those decisions.
 
 ---
 
@@ -705,11 +705,11 @@ These are starting points, not mandatory rules.
 
 # Example Provider Comparison
 
-One of the main purposes of Delegate Identity Levels is to make provider capabilities understandable without requiring every application owner to understand federation standards.
+One of the main purposes of engine9 Identity Levels is to make provider capabilities understandable without requiring every application owner to understand federation standards.
 
 For example:
 
-| Provider       | Minimum Delegate level                      | Interpretation                                                           |
+| Provider       | Minimum engine9 level                      | Interpretation                                                           |
 | -------------- | ------------------------------------------- | ------------------------------------------------------------------------ |
 | **Provider X** | **2 — Contact Confirmed**                   | Provider establishes control of a communication channel                  |
 | **Provider Y** | **3 — Trusted Provider Confirmed**          | Provider supplies a trusted federated digital identity                   |
@@ -731,7 +731,7 @@ The product team does not need to understand `acr`, `amr`, WebAuthn, MFA semanti
 
 Not every website visit needs to begin at the highest required level.
 
-Delegate should support **step-up identity**.
+engine9 should support **step-up identity**.
 
 Example:
 
@@ -797,7 +797,7 @@ Google OIDC with sufficiently strong authentication evidence
     → Level 4
 ```
 
-Likewise, an identity-proofing provider should not automatically equal Level 6 unless Delegate understands what evidence and verification process were actually used.
+Likewise, an identity-proofing provider should not automatically equal Level 6 unless engine9 understands what evidence and verification process were actually used.
 
 ---
 
@@ -805,11 +805,11 @@ Likewise, an identity-proofing provider should not automatically equal Level 6 u
 
 The word **Trusted** in Levels 3 and 4 is intentional.
 
-OpenID Connect tells Delegate **how** to receive and validate an identity assertion.
+OpenID Connect tells engine9 **how** to receive and validate an identity assertion.
 
-It does not automatically tell Delegate **which providers should be trusted for a particular purpose**.
+It does not automatically tell engine9 **which providers should be trusted for a particular purpose**.
 
-Delegate should therefore maintain policy describing:
+engine9 should therefore maintain policy describing:
 
 - accepted providers;
 - accepted issuer identifiers;
@@ -819,7 +819,7 @@ Delegate should therefore maintain policy describing:
 - maximum authentication age where applicable;
 - whether phishing resistance is required;
 - provider-specific exceptions;
-- mappings from external assurance frameworks to Delegate levels.
+- mappings from external assurance frameworks to engine9 levels.
 
 Conceptually:
 
@@ -939,9 +939,9 @@ This keeps the public model simple without sacrificing precision.
 
 ---
 
-# What Delegate Identity Levels Are Not
+# What engine9 Identity Levels Are Not
 
-Delegate Identity Levels do **not** directly describe:
+engine9 Identity Levels do **not** directly describe:
 
 - permissions;
 - roles;
@@ -957,7 +957,7 @@ Delegate Identity Levels do **not** directly describe:
 - risk score;
 - whether an action is permitted.
 
-Those may consume Delegate Identity Levels as inputs.
+Those may consume engine9 Identity Levels as inputs.
 
 They remain separate decisions.
 
@@ -998,7 +998,7 @@ End users and application owners should not need to understand:
 - X.509;
 - authentication context classes.
 
-Delegate translates those concepts into understandable confidence levels.
+engine9 translates those concepts into understandable confidence levels.
 
 ## 2. Preserve the technical evidence
 
@@ -1043,7 +1043,7 @@ A user should be able to move to a higher identity level only when a feature req
 
 # Standards Reference
 
-Delegate Identity Levels are influenced by, but do not replace, the following standards.
+engine9 Identity Levels are influenced by, but do not replace, the following standards.
 
 ## NIST Digital Identity Guidelines
 
@@ -1065,7 +1065,7 @@ NIST intentionally separates:
 - Authenticator Assurance Level (AAL)
 - Federation Assurance Level (FAL)
 
-Delegate uses those distinctions internally while presenting a simpler product-facing model.
+engine9 uses those distinctions internally while presenting a simpler product-facing model.
 
 ## OpenID Connect
 
@@ -1132,4 +1132,4 @@ The Identity Assurance specifications define structures such as `verified_claims
 
 ## Working Definition
 
-> **Delegate Identity Levels provide a simple, progressive measure of how confidently a website can understand who is behind an interaction — beginning with inferred or self-provided information, progressing through confirmed digital identity and strong authentication, and finally reaching verified real-world identity.**
+> **engine9 Identity Levels provide a simple, progressive measure of how confidently a website can understand who is behind an interaction — beginning with inferred or self-provided information, progressing through confirmed digital identity and strong authentication, and finally reaching verified real-world identity.**

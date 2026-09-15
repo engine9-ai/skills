@@ -1,7 +1,5 @@
 # Transaction schema reference
 
-Canonical documentation: [Frakture Transactions Data](https://frakture.notion.site/Frakture-Transactions-Data-442349ac436a4f7db8e7d732359e7d8f).
-
 This file summarizes the schema as implemented in `interfaces/transaction/core/schema.js` and how the inbound transform and input-tools use it.
 
 ## Table: transaction

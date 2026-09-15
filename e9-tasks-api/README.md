@@ -43,6 +43,7 @@ GET  /task_runs/:id/log
 GET  /task_runs/:id/output
 POST /task_runs/:id/retry
 POST /task_runs/:id/pause
+POST /task_runs/:id/reset_checkpoints
 PATCH /task_runs/:id
 ...
 ```

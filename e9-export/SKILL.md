@@ -67,7 +67,7 @@ Table parquet is a dump of the named warehouse table at export time. Columns mat
 | Table | Role | Join |
 |-------|------|------|
 | `plugin` | Installed integration (`id`, `path`, `name`) | `input.plugin_id` |
-| `input` | One stream (message, form, extract): `id`, `plugin_id`, `remote_input_id`, `remote_input_name`, `input_type`, `min_timeline_ts`, `max_timeline_ts`, `records` | Folder `{input_id}`; `timeline.input_id`; `transaction.input_id` |
+| `input` | One inbound stream (message, form, ad, SQL extract, …): `id`, `plugin_id`, `remote_input_id`, `remote_input_name`, `input_type`, `min_timeline_ts`, `max_timeline_ts`, `records` | Folder `{input_id}`; `timeline.input_id`; `transaction.input_id` |
 | `person` | Canonical person. `id` **is** `person_id` (`given_name`, `family_name`) | Every other `person_id` |
 | `person_email` | Emails on a person (`email`, `subscription_status`, `email_hash_v1`) | `person_id` |
 | `person_phone` | Phones (`phone`, `sms_status`, `call_status`) | `person_id` |
@@ -94,7 +94,7 @@ Rule: Say **entry**, never event. A timeline or idv1 row is an entry.
 
 ### Input stores: `metadata.json` + idv1
 
-Each selected **input** is one stream — usually one message, one form, or one named extract. The export copies:
+Each selected **input** is one inbound stream — a message, form, ad, SQL extract, or other named source. The export copies:
 
 1. Every `.idv1.parquet` in that store
 2. That store’s `metadata.json`
@@ -279,4 +279,5 @@ Start with `inventory.json5`: verify expected artifacts, inspect `skipped_tables
 - [Plugin-scoped remote identities](../e9-person-remote/SKILL.md)
 - [Timeline entries and entry types](../e9-timeline/SKILL.md)
 - [Timeline input file shapes](../inputs/timeline/SKILL.md)
+- [Producing input files](../e9-input/SKILL.md)
 - [Source codes and attribution](../e9-source-code/SKILL.md)

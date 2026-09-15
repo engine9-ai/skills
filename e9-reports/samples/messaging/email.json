@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "name": "Email Engagement",
+  "description": "Email sends, open rate, click rate, unsubscribes, and bounces for the selected date range, plus a per-message table. Queries global_message_summary where channel='email'; start/end apply to publish_date. Opens are stored as impressions.",
+  "tags": ["Email", "Sample"],
+  "data_sources": {
+    "default": {
+      "table": "global_message_summary",
+      "date_column": "publish_date",
+      "conditions": [{ "eql": "channel='email' and publish_date is not null" }]
+    }
+  },
+  "sections": [
+    {
+      "title": "Key metrics",
+      "components": [
+        {
+          "id": "messages",
+          "component": "StatCard",
+          "name": "Messages",
+          "metric": { "eql": "count(distinct message_id)" }
+        },
+        {
+          "id": "sent",
+          "component": "StatCard",
+          "name": "Sent",
+          "metric": { "eql": "sum(sent)" }
+        },
+        {
+          "id": "open_rate",
+          "component": "StatCard",
+          "name": "Open Rate",
+          "metrics": [
+            { "name": "Open Rate", "eql": "sum(impressions)/sum(sent)", "format": "percent" },
+            { "name": "Opened", "eql": "sum(impressions)" }
+          ]
+        },
+        {
+          "id": "click_rate",
+          "component": "StatCard",
+          "name": "Click Rate",
+          "metrics": [
+            { "name": "Click Rate", "eql": "sum(clicks)/sum(sent)", "format": "percent" },
+            { "name": "Clicked", "eql": "sum(clicks)" }
+          ]
+        },
+        {
+          "id": "unsubscribes",
+          "component": "StatCard",
+          "name": "Unsubscribes",
+          "metric": { "eql": "sum(unsubscribes)" }
+        },
+        {
+          "id": "bounces",
+          "component": "StatCard",
+          "name": "Bounces",
+          "metric": { "eql": "sum(soft_bounces+hard_bounces)" }
+        }
+      ]
+    },
+    {
+      "title": "Emails by date",
+      "components": [
+        {
+          "id": "opens_clicks",
+          "component": "ComposedChart",
+          "isDate": true,
+          "dimension": { "eql": "publish_date" },
+          "metrics": [
+            { "name": "Sent", "eql": "sum(sent)", "yaxis": "left" },
+            { "name": "Opened", "eql": "sum(impressions)", "yaxis": "right" },
+            { "name": "Clicked", "eql": "sum(clicks)", "yaxis": "right" }
+          ],
+          "sort": { "eql": "publish_date" }
+        }
+      ]
+    },
+    {
+      "title": "Messages",
+      "components": [
+        {
+          "id": "message_details",
+          "component": "Table",
+          "dimensions": [
+            { "name": "Publish Date", "eql": "publish_date", "format": "date" },
+            { "name": "Subject", "eql": "subject" }
+          ],
+          "metrics": [
+            { "name": "Sent", "eql": "sum(sent)", "format": "number" },
+            { "name": "Open Rate", "eql": "sum(impressions)/sum(sent)", "format": "percent" },
+            { "name": "Click Rate", "eql": "sum(clicks)/sum(sent)", "format": "percent" },
+            { "name": "Unsubscribed", "eql": "sum(unsubscribes)" },
+            { "name": "Bounces", "eql": "sum(soft_bounces+hard_bounces)" }
+          ],
+          "orderBy": { "eql": "publish_date", "orderByDirection": "DESC" }
+        }
+      ]
+    }
+  ]
+}

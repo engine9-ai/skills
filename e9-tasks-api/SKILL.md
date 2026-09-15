@@ -57,7 +57,7 @@ Follow [echo-walkthrough.md](./echo-walkthrough.md) end to end: **ask the user f
    - **Predefined flow:** `GET /flows` then `POST /flow_runs/` with `{ "flow_id": "<slug>", "options"? }` — optional top-level `options` (e.g. `start` / `end`) merges into every step; optional `tasks: [{ task_key, options }]` for per-step overrides. `flow_id` is required. Optional `tags` same as on-demand (not flow-definition tags). See also `POST /tasks/schedule`.
    → save `flow_run_id` / `task_run_ids`
 4. `POST /task_runs/filter` — `{ "flow_run_id": "…" }` until complete (each `task_run` includes **`log_link`**; no `checkpoints`)
-5. Remote output: `GET /task_runs/:id` (`output`, `resolved_options`, **`checkpoints`**) or `GET /task_runs/:id/output`. Logs: `GET /task_runs/:id/log` (`log`, `truncated`, optional `log_url`). Per-task **Run now**: `POST /task_runs/:id/retry`. Checkpoints are worker-written option snapshots and appear only on this single-task read — not on `POST /task_runs/filter`.
+5. Remote output: `GET /task_runs/:id` (`output`, `resolved_options`, **`checkpoints`**) or `GET /task_runs/:id/output`. Logs: `GET /task_runs/:id/log` (`log`, `truncated`, optional `log_url`). Per-task **Run now**: `POST /task_runs/:id/retry`. Checkpoints are worker-written option snapshots (a task can have **multiple**, oldest first) and appear only on this single-task read — not on `POST /task_runs/filter`. **Retry does not clear them.** To RESET ALL or walk back the most recent checkpoint(s), `POST /task_runs/:id/reset_checkpoints` `{ start_index? }` (0 / omitted clears all; `N` keeps the first N). You cannot yank a checkpoint out of the middle.
 
 Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
 
@@ -76,7 +76,7 @@ Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
 | POST | `/flow_runs/:id/set_state` | `tasks:schedule` |
 | GET | `/task_runs/:id`, `/task_runs/:id/log`, `/task_runs/:id/output` | `tasks:read` |
 | POST | `/task_runs/filter` | `tasks:read` |
-| POST | `/task_runs/:id/retry`, `/pause`, `/resume`, `/stop`, `/set_state` | `tasks:schedule` |
+| POST | `/task_runs/:id/retry`, `/pause`, `/resume`, `/stop`, `/set_state`, `/reset_checkpoints` | `tasks:schedule` |
 | PATCH | `/task_runs/:id` | `tasks:schedule` |
 
 Details: [endpoints.md](./endpoints.md).

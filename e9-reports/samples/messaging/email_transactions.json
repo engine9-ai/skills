@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "name": "Email Fundraising",
+  "description": "Last-click attributed revenue and transactions for email, shown next to send, open, and click performance. Use this to see which messages raised money, not only who opened. Same global_message_summary email slice as Email Engagement (channel='email', date_column publish_date). Fundraising metrics are attributed_revenue and attributed_transactions, not platform revenue.",
+  "tags": ["Email", "Fundraising", "Sample"],
+  "data_sources": {
+    "default": {
+      "table": "global_message_summary",
+      "date_column": "publish_date",
+      "conditions": [{ "eql": "channel='email' and publish_date is not null" }]
+    }
+  },
+  "sections": [
+    {
+      "title": "Top line",
+      "components": [
+        {
+          "id": "sent",
+          "component": "StatCard",
+          "name": "Sent",
+          "metric": { "eql": "sum(sent)" }
+        },
+        {
+          "id": "open_rate",
+          "component": "StatCard",
+          "name": "Open Rate",
+          "metric": { "eql": "sum(impressions)/sum(sent)", "format": "percent" }
+        },
+        {
+          "id": "click_rate",
+          "component": "StatCard",
+          "name": "Click Rate",
+          "metric": { "eql": "sum(clicks)/sum(sent)", "format": "percent" }
+        },
+        {
+          "id": "transactions",
+          "component": "StatCard",
+          "name": "Transactions",
+          "metrics": [
+            { "name": "Revenue", "eql": "sum(attributed_revenue)", "format": "currency" },
+            { "name": "Transactions", "eql": "sum(attributed_transactions)" }
+          ]
+        },
+        {
+          "id": "average_amount",
+          "component": "StatCard",
+          "name": "Average Amount",
+          "metric": { "eql": "sum(attributed_revenue)/sum(attributed_transactions)", "format": "currency" }
+        }
+      ]
+    },
+    {
+      "title": "Revenue and sends",
+      "components": [
+        {
+          "id": "amount_over_time",
+          "component": "ComposedChart",
+          "isDate": true,
+          "dimension": { "eql": "publish_date" },
+          "metrics": [
+            {
+              "name": "Revenue",
+              "eql": "sum(attributed_revenue)",
+              "yaxis": "right",
+              "type": "bar",
+              "format": "currency"
+            },
+            { "name": "Emails Sent", "eql": "sum(sent)" }
+          ],
+          "sort": { "eql": "publish_date" }
+        }
+      ]
+    },
+    {
+      "title": "Messages",
+      "components": [
+        {
+          "id": "performance",
+          "component": "Table",
+          "dimensions": [
+            { "name": "Publish Date", "eql": "publish_date", "format": "date" },
+            { "name": "Subject", "eql": "subject" }
+          ],
+          "metrics": [
+            { "name": "Sent", "eql": "sum(sent)", "format": "number" },
+            { "name": "Click Rate", "eql": "sum(clicks)/sum(sent)", "format": "percent" },
+            { "name": "Transactions", "eql": "sum(attributed_transactions)" },
+            { "name": "Revenue", "eql": "sum(attributed_revenue)", "format": "currency" },
+            {
+              "name": "Average",
+              "eql": "sum(attributed_revenue)/sum(attributed_transactions)",
+              "format": "currency"
+            }
+          ],
+          "orderBy": { "eql": "publish_date", "orderByDirection": "DESC" }
+        }
+      ]
+    }
+  ]
+}

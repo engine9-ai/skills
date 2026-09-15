@@ -149,12 +149,12 @@ A **task run** is one execution of one task within a flow run.
 | `bot_location_id` | Job server label |
 | `state_type` | `PENDING`, `RUNNING`, `PAUSED`, `COMPLETED`, `FAILED`, … |
 | `state_name` / `state.name` | Display name (`Pending`, `Scheduled`, `Running`, `Cancelling`, `Paused`, …) |
-| `allowed_actions` | `pause`, `resume`, `retry`, `stop`, `update_options` — render exactly these commands |
+| `allowed_actions` | `pause`, `resume`, `retry`, `stop`, `update_options`, `reset_checkpoints` — render exactly these commands |
 | `allowed_state_types` | Valid `set_state` types (`PAUSED`, `SCHEDULED`, `PENDING`, `CANCELLED`, `CANCELLING`) |
 | `errors` | Alert banners: `{ level, message, ts }[]` |
 | `options` / `task_inputs.options` | Options as scheduled (before server-side merge) |
 | `resolved_options` | Options the worker actually ran with (on `GET /task_runs/:id`). Includes rolled-up checkpoint values |
-| `checkpoints` | Worker-written option snapshots (`[{ modified, options }]`). **Only** on `GET /task_runs/:id` / MCP `task` `action: "get"`. Listings omit this field — it can exceed 1MB. Read-only; workers write via modify/checkpoint, not `PATCH` |
+| `checkpoints` | Worker-written option snapshots (`[{ modified, options }]`), oldest first. A task can have multiple. **Only** on `GET /task_runs/:id` / MCP `get` (and on the reset response). Listings omit this field — it can exceed 1MB. Workers write via modify/checkpoint, not `PATCH`. Truncate by walking back from the most recent with `reset_checkpoints` / `resetCheckpoints` — you cannot yank one from the middle |
 | `output` / `records` | Worker JSON result and a records count when present |
 | `expected_start_time` | Dependency/time gate ("Starting after …") |
 | `updated` | Last modification timestamp |
@@ -191,9 +191,21 @@ Workers emit these through a modify/checkpoint call while the task is running (f
 | Surface | `checkpoints` |
 |---------|---------------|
 | `GET /task_runs/:id` / MCP `task` `action: "get"` | Included (single-task detail) |
-| `POST /task_runs/filter`, `POST /flow_runs/filter`, MCP `list` / `listTasks` / `debug` | **Omitted** — the list can exceed 1MB |
+| `POST /task_runs/:id/reset_checkpoints` / MCP `task` `action: "resetCheckpoints"` | Included on the response (`task_run.checkpoints` and top-level `checkpoints`) after truncate |
+| `POST /task_runs/filter`, `POST /flow_runs/filter`, MCP `list` / `listTasks` / `debug` | **Omitted** — the list can exceed 1MB. `allowed_actions` still includes `reset_checkpoints` when the job has checkpoints |
 
-`progress` is the live status message, not this list. `options` on the task run is the original scheduled options. On the single-task read, `resolved_options` is the rolled-up view (stdin + options + every checkpoint).
+`progress` is the live status message, not this list. `options` on the task run is the original scheduled options. On the single-task read, `resolved_options` is the rolled-up view (stdin + options + every remaining checkpoint).
+
+A task can have **multiple** checkpoints, ordered oldest → newest. Reset only walks **one direction: back from the most recent**. `start_index` is how many prefix entries to keep. You cannot yank a checkpoint out of the middle while leaving later ones in place.
+
+| Current `checkpoints` | `start_index` | Result |
+|-----------------------|---------------|--------|
+| `[A, B, C, D]` | omitted or `0` | `[]` (RESET ALL) |
+| `[A, B, C, D]` | `3` | `[A, B, C]` (drop the most recent) |
+| `[A, B, C, D]` | `2` | `[A, B]` (drop the two most recent) |
+| `[A, B, C, D]` | — | cannot keep `A, C, D` without `B` |
+
+**Retry does not clear checkpoints.** A retried `syncTables` job resumes from the last `table_progress`. To start over (Console RESET ALL) or drop later snapshots, call [`POST /task_runs/:id/reset_checkpoints`](./endpoints.md#post-task_runsidreset_checkpoints) or MCP `task` `action: "resetCheckpoints"` with `{ "start_index": 0 }` (default) to clear all, or `start_index: N` to keep the first N entries. Same as GraphQL `job_reset_checkpoint`; not status-gated. Offer the command when `allowed_actions` contains `reset_checkpoints`.
 
 ## Run states
 

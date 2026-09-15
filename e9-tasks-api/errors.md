@@ -145,6 +145,16 @@ Prefect task run state updates: [Set Task Run State](https://docs.prefect.io/v3/
 | 404 | Unknown task run id |
 | 409 | Action is not allowed in the current state (Prefect-styled message lists `allowed_actions`) |
 
+### `POST /task_runs/:id/reset_checkpoints`
+
+| Status | Cause |
+|--------|-------|
+| 404 | Unknown task run id |
+| 422 | `start_index` is not a non-negative integer |
+| 503 | Checkpoint reset is not configured |
+
+Truncates `modify_history` to `[0, start_index)`. Omitted / `0` clears all (Console RESET ALL). Walks back from the most recent checkpoint — you cannot yank one out of the middle. Not status-gated. Retry does not clear checkpoints. MCP: `task` `action: "resetCheckpoints"`.
+
 ### `PATCH /task_runs/:id`
 
 | Status | Cause |

@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "name": "SMS Summary",
+  "description": "Text-message sends, clicks, click rate, and bounces for the selected date range, plus a per-message table. Queries global_message_summary where channel='sms'; start/end apply to publish_date.",
+  "tags": ["SMS", "Sample"],
+  "data_sources": {
+    "default": {
+      "table": "global_message_summary",
+      "date_column": "publish_date",
+      "conditions": [{ "eql": "channel='sms'" }]
+    }
+  },
+  "sections": [
+    {
+      "title": "Key metrics",
+      "components": [
+        {
+          "id": "messages",
+          "component": "StatCard",
+          "name": "Messages",
+          "metric": { "eql": "count(distinct message_id)" }
+        },
+        {
+          "id": "sent",
+          "component": "StatCard",
+          "name": "Sent",
+          "metric": { "eql": "sum(sent)" }
+        },
+        {
+          "id": "clicks",
+          "component": "StatCard",
+          "name": "Clicked",
+          "metric": { "eql": "sum(clicks)" }
+        },
+        {
+          "id": "click_rate",
+          "component": "StatCard",
+          "name": "Click Rate",
+          "metric": { "eql": "sum(clicks)/sum(sent)", "format": "percent" }
+        },
+        {
+          "id": "bounces",
+          "component": "StatCard",
+          "name": "Bounces",
+          "metric": { "eql": "sum(soft_bounces+hard_bounces)" }
+        }
+      ]
+    },
+    {
+      "title": "Click rate by date",
+      "components": [
+        {
+          "id": "click_rate_by_date",
+          "component": "ComposedChart",
+          "isDate": true,
+          "dimension": { "eql": "publish_date" },
+          "metrics": [
+            { "name": "Click Rate", "eql": "sum(clicks)/sum(sent)", "format": "percent", "yaxis": "right" }
+          ],
+          "sort": { "eql": "publish_date" }
+        }
+      ]
+    },
+    {
+      "title": "Messages",
+      "components": [
+        {
+          "id": "message_details",
+          "component": "Table",
+          "dimensions": [
+            { "name": "Publish Date", "eql": "publish_date", "format": "date" },
+            { "name": "Label", "eql": "label" }
+          ],
+          "metrics": [
+            { "name": "Sent", "eql": "sum(sent)" },
+            { "name": "Clicked", "eql": "sum(clicks)" },
+            { "name": "Click Rate", "eql": "sum(clicks)/sum(sent)", "format": "percent" },
+            { "name": "Bounces", "eql": "sum(soft_bounces+hard_bounces)" }
+          ],
+          "orderBy": { "eql": "publish_date", "orderByDirection": "DESC" }
+        }
+      ]
+    }
+  ]
+}

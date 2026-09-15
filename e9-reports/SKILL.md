@@ -1,11 +1,11 @@
 ---
 name: e9-reports
-description: "Author and consume engine9 plugin reports: JSON dashboard definitions with EQL-backed StatCard, ComposedChart, and Table components installed through plugins and executed by ReportWorker, HTTP, or MCP. Use when adding reports/, defining filters and optionsToEQL, compiling date and option variables into conditions, rendering plugin-installed dashboards, or debugging report list, get, and run payloads."
+description: "Author and consume engine9 reports: JSON dashboards with EQL-backed StatCard, ComposedChart, and Table widgets. Definitions are installed with plugins or hosted as portable JSON. ReportWorker compiles declarative filters and start/end into SQL. Use when adding reports/, defining filters, running via MCP/HTTP with path or definition, or rendering dashboards."
 ---
 
 # engine9 reports
 
-Reports are **JSON dashboards installed with a plugin**. `ReportWorker` lists what the account has installed, turns run options into EQL conditions, and compiles/runs SQL. Consumers (HTTP, MCP, or a UI elsewhere) only pass `path` + options and render the returned `sections` data — they never write SQL.
+Reports are **JSON dashboards**. The usual source is an installed plugin; the same JSON can be hosted elsewhere and passed to `run` as `definition`. `ReportWorker` turns run options into EQL conditions and compiles/runs SQL. Consumers pass `path` **or** `definition` plus filter options and render `sections` data — they never write SQL.
 
 Use this skill when defining a report, wiring filters to EQL, executing it through supported surfaces, or implementing a consumer for report results.
 
@@ -14,9 +14,11 @@ Use this skill when defining a report, wiring filters to EQL, executing it throu
 | Task | Contract |
 |------|----------|
 | Install | Plugin exports `reports.<key>` and `default.reports` |
-| List | Catalog plus merged JSON Schema `filters` |
+| List | Catalog of **installed plugin** reports plus merged JSON Schema `filters` |
 | Get | Definition selected by report `path` |
-| Run | `path` + options → `sections[].components[].data` and debug SQL |
+| Run | `path` **or** portable JSON `definition` + options → `sections[].components[].data` and debug SQL |
+| Hosted | Artifact (or any host) fetches HTTPS JSON, then MCP `run` with `definition` |
+| Samples | Simplified messaging JSON in [samples/messaging](samples/messaging/README.md), usable as a remote report URL |
 | Render | Preserve section and component order |
 
 ## Workflow
@@ -77,13 +79,15 @@ Ship only reports that belong on that plugin. Email send/engagement and fundrais
 
 | Field | Required | Notes |
 |-------|----------|--------|
+| `schema_version` | no | Portable JSON version. Omit or `1`. Unknown versions are rejected on `run` with `definition` |
 | `name` | yes | Catalog title |
 | `description` | no | Catalog subtitle |
 | `tags` | no | String tags for catalog grouping |
 | `data_sources.default` | for metric/stat/chart components | `{ table, date_column?, conditions? }` — `date_field` is accepted as an alias of `date_column` |
 | `filters` | no | JSON Schema of accepted run variables. Merged with standard `start`/`end` (when a date column exists) and `limit`/`offset` |
 | `sections` | yes | Ordered layout: `{ title?, components: [{ id, component, … }] }` |
-| `optionsToEQL` | no | `(options, ctx) => conditions` — custom option → EQL mapping (same idea as search `optionsToEQL`) |
+
+Rule: Definitions are JSON only. Static predicates belong in `data_sources.conditions`. Run-time filters belong in `filters.properties` with `filter: { column, operator }`.
 
 #### Layout: sections
 
@@ -199,9 +203,11 @@ Surfaces accept the same bag of options (nested `options` and/or top-level alias
 }
 ```
 
-- **Worker:** `run({ path, options })` or flattened `start` / `end` / `limit` / `offset`
-- **HTTP:** `GET|POST /data/reports/run` — query string and/or JSON body (`path` + options)
-- **MCP:** `report` `command: run` — same fields; extra keys (e.g. `plugin_name`) merge into options
+- **Worker:** `run({ path, options })` or `run({ definition, options })` or flattened `start` / `end` / `limit` / `offset`
+- **HTTP:** `GET|POST /data/reports/run` — query string and/or JSON body (`path` **or** `definition` + options)
+- **MCP:** `report` `command: run` — `path` **or** `definition`; extra keys (e.g. `plugin_name`) merge into options
+
+Rule: `path` and `definition` are mutually exclusive.
 
 `flattenRunOptions` merges nested `options` with top-level `start`/`end`/`limit`/`offset`/`days`.
 
@@ -215,11 +221,6 @@ For each widget, `buildComponentQuery` concatenates, in order:
 3. **Declarative filters** — for each `filters.properties` entry that has `filter: { column, operator }` and a non-empty option value, emit an EQL condition.  
    `operator`: `=` (default), `LIKE` (wraps `%value%` unless `%` already present), `IN`, `GREATER_THAN` / `>`, `LESS_THAN` / `<`.  
    Reserved / not mapped this way: `start`, `end`, `limit`, `offset`, `days` (dates use step 2; limit/offset set query paging).
-4. **`optionsToEQL(options, { dataSource, component })`** — optional author function for anything declarative filters cannot express. Return value is normalized to conditions:
-   - `[{ eql: "…" }, …]`
-   - `{ conditions: […] }`
-   - search-like `{ eql: { conditions: […] } }`  
-   (`optionsToConditions` is accepted as an alias of the same hook.)
 
 Then SQL is compiled with `buildSqlFromEQLObject` and executed.
 
@@ -231,16 +232,9 @@ Then SQL is compiled with `buildSqlFromEQLObject` and executed.
 | `channel` | `conditionsFromFilterSchema` | `channel='email'` |
 | (none) | static `data_sources.conditions` if any | e.g. `publish_date is not null` |
 
-If channel logic is multi-column or computed, skip `filter.column` and use `optionsToEQL` instead:
+If a predicate is not a run option (always true for that dashboard), put it in `data_sources.conditions` instead of `filters`.
 
-```javascript
-optionsToEQL(options) {
-  if (!options.channel) return [];
-  return [{ eql: `channel='${String(options.channel).replace(/'/g, "''")}'` }];
-}
-```
-
-Rule: Prefer declarative `filter: { column }` when a simple column predicate is enough; use `optionsToEQL` only for joins, OR groups, or option-dependent shapes.
+Rule: Use `filter: { column }` for run-time option predicates.
 
 Reports only append conditions; each component already owns its table and columns.
 
@@ -304,11 +298,39 @@ SQL is generated only in `ReportWorker` (`compileReport` → `buildSqlFromEQLObj
 
 | Surface | List | Definition | Execute |
 |---------|------|------------|---------|
-| Worker | `list()` | `get({ path })` | `run({ path, options })` or flattened `start`/`end`/`limit` |
-| HTTP (`X-ENGINE9-ACCOUNT-ID` + session) | `GET /data/reports` | `GET /data/reports/get?path=` | `GET` or `POST /data/reports/run` |
-| MCP | `report` `command: list` (default) | `command: get` | `command: run` |
+| Worker | `list()` | `get({ path })` | `run({ path, options })` or `run({ definition, options })` |
+| HTTP (`X-ENGINE9-ACCOUNT-ID` + session) | `GET /data/reports` | `GET /data/reports/get?path=` | `GET` or `POST /data/reports/run` (`path` or POST `definition`) |
+| MCP | `report` `command: list` (default) | `command: get` | `command: run` with `path` or `definition` |
 
 Rule: Do not hardcode report maps. Prefer native MCP `report` over `task` for interactive queries.
+
+### Hosted (third-party) definitions
+
+Plugin `path` is a locator for installed modules. A host can also load the same JSON from HTTPS and pass it as `definition`.
+
+Rule: The artifact host fetches the definition. MCP does not fetch URLs. SQL stays in `ReportWorker`.
+
+| Step | Who | What |
+|------|-----|------|
+| Load | Host (`fetch` HTTPS, or http on localhost) | Portable JSON (`schema_version` 1, no functions) |
+| Run | MCP `report` `command: run` | `{ definition, options, start, end }` |
+| Render | `@engine9/components` `Report` | Same `sections` + `data` as a plugin run |
+
+Conductor: `/report https://…` sets `definitionUrl`. CORS is the publisher’s problem. `list` stays installed plugins only.
+
+Published samples (simplified `@engine9/plugins/reports/messaging` dashboards) live in this skill so they can be fetched from GitHub after they land on `main`:
+
+```
+https://raw.githubusercontent.com/engine9-ai/skills/main/e9-reports/samples/messaging/email.json
+```
+
+```
+/report https://raw.githubusercontent.com/engine9-ai/skills/main/e9-reports/samples/messaging/email.json
+```
+
+Use the `raw.githubusercontent.com` URL (JSON), not a GitHub `blob` HTML page. Consumer and developer notes for every file: [samples/messaging/README.md](samples/messaging/README.md).
+
+Rule: `run` with `definition` rejects unknown `schema_version` and component types other than `StatCard` / `ComposedChart` / `Table`. Caps: 32 sections, 32 components, 200KB.
 
 ### List payload
 
@@ -386,6 +408,30 @@ Rule: Preserve section order and component order within each section.
 }
 ```
 
+```json
+{
+  "command": "run",
+  "account_id": "<account_id>",
+  "definition": {
+    "name": "People count",
+    "data_sources": { "default": { "table": "person" } },
+    "sections": [
+      {
+        "components": [
+          { "id": "people", "component": "StatCard", "name": "People", "metric": { "eql": "count(*)" } }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Hosted sample (host fetches the URL, then `run` with `definition`):
+
+```
+https://raw.githubusercontent.com/engine9-ai/skills/main/e9-reports/samples/messaging/email.json
+```
+
 ### Authentication constraints
 
 Today reports run as:
@@ -404,7 +450,7 @@ Recommendation only: add a future `reports:read` or `data:read` scope on `GET/PO
 - [ ] File under `reports/<key>.js`; key is the path tail
 - [ ] `name`, `description`, `tags`, `sections` with stable component `id`s
 - [ ] `data_sources.default.table` (and `date_column` if callers should pass `start`/`end`)
-- [ ] Extra run variables as JSON Schema + `filter: { column, operator }`, or `optionsToEQL` when declarative is not enough
+- [ ] Extra run variables as JSON Schema + `filter: { column, operator }`
 - [ ] Component names `StatCard` / `ComposedChart` / `Table` only
 - [ ] Exported on `reports` **and** `default.reports`
 - [ ] Documented in the package `README.md` (path, who it is for, filters)
@@ -415,5 +461,6 @@ Recommendation only: add a future `reports:read` or `data:read` scope on `GET/PO
 - [engine9 EQL](../e9-eql/SKILL.md)
 - [Global message view grain and metrics](../e9-global-message/SKILL.md)
 - [API key capabilities](../e9-api-key/SKILL.md)
+- [Sample messaging reports](samples/messaging/README.md) (GitHub-hosted JSON, remote report URLs)
 - Reference implementation: `plugins/reports/people/reports/subscription_status.js`
 - Reference implementation: `plugins/reports/messaging/reports/email.js`

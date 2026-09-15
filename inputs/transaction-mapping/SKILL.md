@@ -169,6 +169,7 @@ function mapRefund(row) {
 
 ## Related documentation
 
+- [Input files and `remote_input_id` grain](../../e9-input/SKILL.md)
 - [Complete transaction column reference](reference.md)
 - [Canonical Transaction schema](https://frakture.notion.site/Frakture-Transactions-Data-442349ac436a4f7db8e7d732359e7d8f)
 - `interfaces/transaction/core/schema.js`

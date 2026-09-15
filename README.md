@@ -14,6 +14,7 @@ This directory contains public skills for working with engine9 deployments, data
 | Author task flows | [Dev tasks](e9-dev-tasks/SKILL.md) |
 | Understand person activity | [Timeline](e9-timeline/SKILL.md) |
 | Build timeline input files | [Timeline files](inputs/timeline/SKILL.md) |
+| Structure inputs (forms, blasts, ads, SQL, …) | [Input files](e9-input/SKILL.md) |
 | Map payment records | [Transaction mapping](inputs/transaction-mapping/SKILL.md) |
 | Build or consume exports | [Exports](e9-export/SKILL.md) |
 
@@ -45,6 +46,7 @@ When using an engine9 MCP server, discover plugins, methods, and tool parameters
 | Timeline | [e9-timeline/SKILL.md](e9-timeline/SKILL.md) | Understand person activity entries, entry types, queries, and missing-entry diagnosis |
 | Timeline loading | [e9-timeline/loading.md](e9-timeline/loading.md) | Load InputWorker ID files into timeline and detail tables; developers only |
 | Timeline files | [inputs/timeline/SKILL.md](inputs/timeline/SKILL.md) | Choose Timeline Raw or Timeline ID shapes and use `@engine9/input-tools` |
+| Input files | [e9-input/SKILL.md](e9-input/SKILL.md) | Produce one engine9 input per named inbound stream (form, email blast, ad, SQL table, extract) |
 | Transaction mapping | [inputs/transaction-mapping/SKILL.md](inputs/transaction-mapping/SKILL.md) | Map third-party payment data into the Transaction schema |
 | Source codes | [e9-source-code/SKILL.md](e9-source-code/SKILL.md) | Work with dictionaries, parsing, last-click attribution, and overrides |
 | Global message tables | [e9-global-message/SKILL.md](e9-global-message/SKILL.md) | Read `global_message_summary` and `global_message_summary_by_date` engagement and attribution data |
@@ -54,7 +56,7 @@ When using an engine9 MCP server, discover plugins, methods, and tool parameters
 | Exports | [e9-export/SKILL.md](e9-export/SKILL.md) | Understand tables, ID files, metadata, and entry types in an export |
 | Export building | [e9-export/building.md](e9-export/building.md) | Create, run, and debug exports with `e9 exportworker` |
 | Inventory | [e9-inventory/SKILL.md](e9-inventory/SKILL.md) | Run warehouse inventory and monthly statistics with `e9 inventoryworker` |
-| Reports | [e9-reports/SKILL.md](e9-reports/SKILL.md) | Install JSON dashboards, list filters, and execute reports through MCP or HTTP |
+| Reports | [e9-reports/SKILL.md](e9-reports/SKILL.md) | Install JSON dashboards, list filters, execute reports, or open [GitHub-hosted sample definitions](e9-reports/samples/messaging/README.md) |
 
 ## Related documentation
 

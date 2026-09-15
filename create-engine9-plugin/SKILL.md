@@ -151,7 +151,7 @@ Export an object map, not an array. Each value has `name`, optional `universe` E
 
 ### Report definition
 
-Each report contains `name`, `description`, `tags`, optional `data_sources`, `filters` expressed as JSON Schema, optional `optionsToEQL`, and `sections`. A section has an optional `title` and `components` such as `StatCard`, `ComposedChart`, or `Table`.
+Each report contains `name`, `description`, `tags`, optional `data_sources`, `filters` expressed as JSON Schema, and `sections`. A section has an optional `title` and `components` such as `StatCard`, `ComposedChart`, or `Table`. Use declarative `filter: { column }` and static `data_sources.conditions`.
 
 ### Native plugin layout
 

@@ -34,7 +34,7 @@ engine9 API keys require a **non-empty scopes list** at creation. A request is a
 | `tables:write` | Core `POST /upsert/:table` | Allowlisted table upserts |
 | `data:read` | Core `GET /read/:name` | Configured reads |
 | `tasks:read` | Task API | List/read flows; check run status and logs (`GET /flows*`, `POST /task_runs/filter`, `GET /flow_runs/:id`, `GET /task_runs/:id`, `GET /task_runs/:id/log`, `GET /task_runs/:id/output`) |
-| `tasks:schedule` | Task API | Schedule and control work (`POST /tasks/schedule`, `POST /flow_runs/`, retry/pause/resume/stop, `PATCH /task_runs/:id`, `*/set_state`) |
+| `tasks:schedule` | Task API | Schedule and control work (`POST /tasks/schedule`, `POST /flow_runs/`, retry/pause/resume/stop/reset_checkpoints, `PATCH /task_runs/:id`, `*/set_state`) |
 | `admin` | Any | All scopes (use this instead of the old `*` wildcard) |
 | `public` | Inbound | Public forms / e9-inbound (`e9publickey_` prefix; same `api_key` table) |
 
@@ -53,7 +53,7 @@ Prefixes: `e9key_…` for normal scopes; `e9publickey_…` when the key includes
 | `POST /tasks/schedule` | `tasks:schedule` |
 | `POST /flow_runs/` | `tasks:schedule` |
 | `POST /flow_runs/:id/set_state`, `POST /task_runs/:id/set_state` | `tasks:schedule` |
-| `POST /task_runs/:id/retry`, `/pause`, `/resume`, `/stop` | `tasks:schedule` |
+| `POST /task_runs/:id/retry`, `/pause`, `/resume`, `/stop`, `/reset_checkpoints` | `tasks:schedule` |
 | `PATCH /task_runs/:id` | `tasks:schedule` |
 
 `POST /flow_runs/archive` and `POST /flow_runs/retry` use the **same identity as listing** (`POST /flow_runs/filter`). A `user_id` is **not** a request field and is **not** required — callers that can list can archive/retry. For parent/all, send `parent_account_id` or `account_ids` in the body so one POST can span children. See [endpoints — archive](./endpoints.md#post-flow_runsarchive).

@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "name": "Ads & Social Persuasion",
+  "description": "Impressions, clicks, CTR, and spend for ads and organic social in the selected date range. Optionally restrict to one channel. Queries global_message_summary_by_date; start/end apply to date (the stats day, not publish_date). Default channels: ad, facebook_ad, google_ad, doubleclick_ad, promoted_tweet, organic_tweet, instagram.",
+  "tags": ["Ads", "Social", "Persuasion", "Sample"],
+  "data_sources": {
+    "default": {
+      "table": "global_message_summary_by_date",
+      "date_column": "date",
+      "conditions": [
+        {
+          "eql": "channel in ('ad', 'facebook_ad', 'google_ad', 'doubleclick_ad', 'promoted_tweet', 'organic_tweet', 'instagram')"
+        }
+      ]
+    }
+  },
+  "filters": {
+    "title": "Filters",
+    "type": "object",
+    "properties": {
+      "channel": {
+        "type": "string",
+        "title": "Channel",
+        "description": "Optional. Further restrict to one channel in the default ad/social set.",
+        "enum": [
+          "ad",
+          "facebook_ad",
+          "google_ad",
+          "doubleclick_ad",
+          "promoted_tweet",
+          "organic_tweet",
+          "instagram"
+        ],
+        "filter": { "column": "channel", "operator": "=" }
+      }
+    }
+  },
+  "sections": [
+    {
+      "title": "Key metrics",
+      "components": [
+        {
+          "id": "impressions",
+          "component": "StatCard",
+          "name": "Impressions",
+          "metric": { "eql": "sum(impressions)" }
+        },
+        {
+          "id": "clicks",
+          "component": "StatCard",
+          "name": "Clicks",
+          "metric": { "eql": "sum(clicks)" }
+        },
+        {
+          "id": "ctr",
+          "component": "StatCard",
+          "name": "CTR",
+          "metric": { "eql": "sum(clicks)/sum(impressions)", "format": "percent" }
+        },
+        {
+          "id": "spend",
+          "component": "StatCard",
+          "name": "Spend",
+          "metric": { "eql": "sum(spend)", "format": "currency" }
+        }
+      ]
+    },
+    {
+      "title": "Impressions and clicks",
+      "components": [
+        {
+          "id": "impressions_clicks",
+          "component": "ComposedChart",
+          "isDate": true,
+          "dimension": { "eql": "date" },
+          "metrics": [
+            { "name": "Impressions", "eql": "sum(impressions)" },
+            { "name": "Clicks", "eql": "sum(clicks)", "yaxis": "right" }
+          ],
+          "sort": { "eql": "date" }
+        }
+      ]
+    },
+    {
+      "title": "By channel",
+      "components": [
+        {
+          "id": "channel_summary",
+          "component": "Table",
+          "dimensions": [{ "name": "Channel", "eql": "channel" }],
+          "metrics": [
+            { "name": "Impressions", "eql": "sum(impressions)" },
+            { "name": "Clicks", "eql": "sum(clicks)" },
+            { "name": "CTR", "eql": "sum(clicks)/sum(impressions)", "format": "percent" },
+            { "name": "Spend", "eql": "sum(spend)", "format": "currency" }
+          ],
+          "orderBy": { "eql": "sum(impressions)", "orderByDirection": "DESC" }
+        }
+      ]
+    }
+  ]
+}

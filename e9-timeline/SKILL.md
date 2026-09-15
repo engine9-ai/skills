@@ -34,7 +34,7 @@ Rule: For a missing entry, walk troubleshooting steps A–F in order, stop at th
 | Table / view | Role |
 |--------------|------|
 | `timeline` | Canonical entries. One row per entry: `id`, `ts`, `person_id`, `entry_type_id`, `input_id` |
-| `input` | The stream that produced the entries (a message, form, CRM extract, …). Owns `plugin_id`, `remote_input_name`, `min_timeline_ts` / `max_timeline_ts` |
+| `input` | The inbound stream that produced the entries (a message, form, ad, SQL extract, …). Owns `plugin_id`, `remote_input_name`, `min_timeline_ts` / `max_timeline_ts` |
 | `plugin` | Which integration owns the input |
 | `source_code_dictionary` | Optional source code on the entry (`timeline.source_code_id`) |
 | plugin **detail** tables | Extra columns (URL, amount, user agent, …) keyed by the same entry `id` |
@@ -105,7 +105,7 @@ Prefer a `*_summary` view when you want plugin name, input name, source code str
 ### Load entries onto the timeline
 
 1. A **plugin** extracts activity from a remote system (ESP activity, CRM actions, payment rows, form posts, …).
-2. Each extract is an **input** — usually one message, one form, or one named stream (`input.remote_input_name`).
+2. Each extract is an **input** — the generic wrapper for one inbound stream (a message, form, ad, SQL table, or other named extract; `input.remote_input_name`).
 3. engine9 matches each row to a **person** (email / phone / `remote_person_id`). Unknown people are created; known keys reuse the existing `person_id`.
 4. Each row gets a **stable `id`**. Same person + type + time + plugin (or a vendor `remote_entry_id` / `remote_entry_uuid`) → same UUID → upsert.
 5. Core fields go to **`timeline`**. Extra fields go to the plugin **detail** table. A **summary** view is refreshed so reports can join names without repeating that SQL.
@@ -282,6 +282,7 @@ Record the first failing step (other accounts; ESP/CRM/payment remotes).
 
 - Load path (ID files → tables): [loading.md](loading.md)
 - File shapes for plugins: [inputs/timeline](../inputs/timeline/SKILL.md)
+- Input grain (one form / blast / ad / table / extract): [e9-input](../e9-input/SKILL.md)
 - Person identity: [e9-person-id](../e9-person-id/SKILL.md)
 - Source codes / attribution (transaction ↔ message): [e9-source-code](../e9-source-code/SKILL.md)
 - Models (timeline long-term value): [e9-model](../e9-model/SKILL.md)

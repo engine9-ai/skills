@@ -151,6 +151,7 @@ The exact numeric type must come from `TIMELINE_ENTRY_TYPES`, not from a hard-co
 
 - [Timeline product model, querying, and diagnostics](../../e9-timeline/SKILL.md)
 - [Server timeline loading](../../e9-timeline/loading.md)
+- [Input files and `remote_input_id` grain](../../e9-input/SKILL.md)
 - `@engine9/input-tools`
 - `input-tools/timelineTypes.js`
 - `TIMELINE_ENTRY_TYPES`

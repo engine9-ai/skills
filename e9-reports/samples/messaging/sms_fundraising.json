@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "name": "SMS Fundraising",
+  "description": "SMS sends and click rate plus last-click attributed revenue and transactions. Use this when text messages are used for fundraising. Same global_message_summary SMS slice as SMS Summary (channel='sms', date_column publish_date). Fundraising metrics are attributed_revenue and attributed_transactions, not platform revenue.",
+  "tags": ["SMS", "Fundraising", "Sample"],
+  "data_sources": {
+    "default": {
+      "table": "global_message_summary",
+      "date_column": "publish_date",
+      "conditions": [{ "eql": "channel='sms'" }]
+    }
+  },
+  "sections": [
+    {
+      "title": "Key metrics",
+      "components": [
+        {
+          "id": "messages",
+          "component": "StatCard",
+          "name": "Messages",
+          "metric": { "eql": "count(distinct message_id)" }
+        },
+        {
+          "id": "sent",
+          "component": "StatCard",
+          "name": "Sent",
+          "metric": { "eql": "sum(sent)" }
+        },
+        {
+          "id": "click_rate",
+          "component": "StatCard",
+          "name": "Click Rate",
+          "metric": { "eql": "sum(clicks)/sum(sent)", "format": "percent" }
+        },
+        {
+          "id": "transactions",
+          "component": "StatCard",
+          "name": "Transactions",
+          "metrics": [
+            { "name": "Revenue", "eql": "sum(attributed_revenue)", "format": "currency" },
+            { "name": "Transactions", "eql": "sum(attributed_transactions)" }
+          ]
+        },
+        {
+          "id": "average_amount",
+          "component": "StatCard",
+          "name": "Average Amount",
+          "metric": { "eql": "sum(attributed_revenue)/sum(attributed_transactions)", "format": "currency" }
+        }
+      ]
+    },
+    {
+      "title": "Click rate by date",
+      "components": [
+        {
+          "id": "click_rate_by_date",
+          "component": "ComposedChart",
+          "isDate": true,
+          "dimension": { "eql": "publish_date" },
+          "metrics": [
+            { "name": "Click Rate", "eql": "sum(clicks)/sum(sent)", "format": "percent", "yaxis": "right" }
+          ],
+          "sort": { "eql": "publish_date" }
+        }
+      ]
+    },
+    {
+      "title": "Messages",
+      "components": [
+        {
+          "id": "message_details",
+          "component": "Table",
+          "dimensions": [
+            { "name": "Publish Date", "eql": "publish_date", "format": "date" },
+            { "name": "Label", "eql": "label" }
+          ],
+          "metrics": [
+            { "name": "Sent", "eql": "sum(sent)" },
+            { "name": "Clicked", "eql": "sum(clicks)" },
+            { "name": "Click Rate", "eql": "sum(clicks)/sum(sent)", "format": "percent" },
+            { "name": "Revenue", "eql": "sum(attributed_revenue)", "format": "currency" },
+            { "name": "Transactions", "eql": "sum(attributed_transactions)" }
+          ],
+          "orderBy": { "eql": "publish_date", "orderByDirection": "DESC" }
+        }
+      ]
+    }
+  ]
+}
