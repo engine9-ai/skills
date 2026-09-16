@@ -3,14 +3,14 @@ name: create-engine9-plugin
 description: >-
   Implement and extend engine9 interface packages (`@engine9/interfaces/*`) and
   native plugins (`@engine9/plugins/*`), including metadata, schemas, transforms,
-  search, segments, metrics, reports, UI configuration, and worker classes. Use
+  search, segments, metrics, reports, settings, UI configuration, and worker classes. Use
   when building plugin capabilities, wiring deployment schemas, or documenting
   an engine9 interface or native plugin.
 ---
 
 # Create an engine9 plugin or interface
 
-engine9 separates shared data contracts, called interfaces, from deployable integrations, called native plugins. Both are Node ESM modules resolved by package path from `node_modules`, a monorepo sibling checkout, or an optional install `source`; they never require a `local$` path prefix. Use this skill when adding or extending an interface, native plugin, transform, search handler, segment, report, or deployment schema.
+engine9 separates shared data contracts, called interfaces, from deployable integrations, called native plugins. Both are Node ESM modules resolved by package path from `node_modules`, a monorepo sibling checkout, or an optional install `source`; they never require a `local$` path prefix. Use this skill when adding or extending an interface, native plugin, transform, search handler, segment, report, settings, or deployment schema.
 
 ## Quick reference
 
@@ -22,6 +22,7 @@ engine9 separates shared data contracts, called interfaces, from deployable inte
 | Search capability | `<package>:search:<handler>` |
 | Segment definition | `<package>:segments:<key>` |
 | Report definition | `@engine9/plugins/reports/<area>:reports:<key>` |
+| Settings | `<package>` `settings` export or sibling `settings.js`; MCP `plugin` `command: settings` |
 | Package documentation | Package-root `README.md` |
 | Resolver and registration details | [reference.md](reference.md) |
 
@@ -154,6 +155,33 @@ Export an object map, not an array. Each value has `name`, optional `universe` E
 
 Each report contains `name`, `description`, `tags`, optional `data_sources`, `filters` expressed as JSON Schema, and `sections`. A section has an optional `title` and `components` such as `StatCard`, `ComposedChart`, or `Table`. Use declarative `filter: { column }` and static `data_sources.conditions`.
 
+### Settings
+
+Settings are per-install warehouse configuration. They are **not** marketplace authorization (`auth_fields` / vendor credentials on `account` plugin metadata).
+
+Export `settings` from `index.js` and/or ship a sibling `settings.js`. Each entry is `{ name, type?, default?, values?, description?, label?, required?, secret?, hidden?, section? }` (or a name→def object). On `PluginWorker.install`, each name is inserted into `setting` for that plugin row when it is missing. Reinstall does not overwrite an existing value. Unique native plugins with no `metadata.prefix` and no schema get an empty table prefix (settings-only packages).
+
+| Field | Purpose |
+| --- | --- |
+| `name` | Warehouse `setting.name` |
+| `type` | `string` (default), `int`, `number`, `boolean`, `json`, `email`, `url`, `password` |
+| `values` | Enum of allowed values (UI + `setSetting` validation) |
+| `default` | Inserted on first install (`default_value` is also accepted) |
+| `description` / `label` | UI copy |
+| `secret` | Redact current value in catalogs |
+| `hidden` | Omit from UI catalogs unless `include_hidden` (internal allocators) |
+
+Account-scoped discovery uses the same compile-and-aggregate path as inbound weaving, `searchOptions`, and report list:
+
+| Surface | Call |
+| --- | --- |
+| Worker | `PluginWorker.listSettings({ path?, plugin_id?, include_hidden? })` |
+| MCP | `plugin` `command: "settings"` |
+| HTTP | `GET /data/settings` |
+| Update | `PluginWorker.updateSetting` / MCP `plugin` `command: "setSetting"` / `POST /data/settings` |
+
+`listSettings` groups by plugin path, includes JSON Schema `form` plus current warehouse values per instance, and puts per-plugin `compilePlugin` failures in `errors`. Do not read settings from marketplace metadata.
+
 ### Native plugin layout
 
 Native plugins follow the same package-root `README.md` convention and may provide integration behavior, account setup, schema, and classes:
@@ -176,8 +204,6 @@ export default {
 };
 ```
 
-`settings` is an array of `{ name, type?, default?, values?, description? }` (or a name→def object). On `PluginWorker.install`, each name is inserted into `setting` for that plugin row when it is missing. Reinstall does not overwrite an existing value. Unique native plugins with no `metadata.prefix` and no schema get an empty table prefix (settings-only packages). Export `settings` from `index.js` and/or ship a sibling `settings.js`.
-
 `install(context)` is asynchronous and receives `{ account, plugin, sqlWorker }` for one-time provisioning.
 
 Worker-style classes follow `function Worker(args) { ... }`, static `Worker.metadata`, prototype methods, and method-level metadata such as `Worker.prototype.myMethod.metadata = { options: { ... } }`. Export each class as a named property on the plugin object. Concrete domain integrations may live in separate classes/files and attach to the default export.
@@ -190,7 +216,7 @@ Metadata-only plugins may declare dependencies without schema or handlers. Optio
 2. Create package metadata and declare deployment dependencies.
 3. Define tables, columns, indexes, and views.
 4. Add inbound or outbound transforms and their bindings.
-5. Add search, segments, metrics, reports, UI configuration, or worker classes where appropriate.
+5. Add search, segments, metrics, reports, settings, UI configuration, or worker classes where appropriate.
 6. Export named features and a default aggregate from `index.js`.
 7. Document behavior and every predefined segment in the package `README.md`.
 8. Register a new interface when deployment uses `deployAllSchemas` or `getActivePluginPaths`.
@@ -212,6 +238,7 @@ One-paragraph purpose. Name the package path and `metadata.dependencies`.
 ## Segments
 ## Metrics
 ## Reports and UI
+## Settings
 ```
 
 For every predefined segment, document its display name, export key, definition path, included and excluded people, search or table-condition implementation, and universe. Write `None` when membership is based on current table state.
@@ -232,6 +259,8 @@ For every predefined segment, document its display name, export key, definition 
 
 **Rule:** Segment exports must be keyed objects, and every key must be documented in the package README with membership and universe behavior.
 
+**Rule:** Declare settings on the package (`settings` export or sibling `settings.js`). Do not put warehouse settings in marketplace `auth_fields`.
+
 **Rule:** Wire only standard named exports and the default aggregate from interface `index.js`.
 
 ## Examples
@@ -250,6 +279,22 @@ const metadata = {
 ```
 
 Identifier extraction transforms set `export const type = 'id'` and mutate each batch row's `identifiers`.
+
+### Declare plugin settings
+
+```javascript
+export const settings = [
+  {
+    name: "summary_model_kind",
+    type: "string",
+    values: ["legacy", "current"],
+    default: "legacy",
+    description: "Use legacy origin/pivot models or current model_*_stats tables.",
+  },
+];
+```
+
+Discovery: MCP `plugin` `{ command: "settings", account_id }` or `PluginWorker.listSettings()`. Update: `command: "setSetting"` with `plugin_id`, `name`, `value`.
 
 ### Merge inbound rows
 
@@ -358,6 +403,7 @@ Thin, schema-first interfaces are also valid. `message/index.js` exports only me
 | Installed transform is absent | Confirm `metadata.inbound` names an exported transform and its `type` matches the slot |
 | Upsert fails on duplicate keys | Merge rows by the schema's unique key with `mergeIntoQueue` |
 | Search does not appear in discovery | Confirm the plugin is installed and the handler uses a canonical form |
+| Settings do not appear in MCP `plugin` settings | Confirm the plugin is installed, `settings` is on the default export or sibling `settings.js`, and the setting is not `hidden` |
 | Segment membership is unexpectedly broad | Inspect `universe`, search path, and optional `pluginId` scope |
 | Interface report is not available | Move it to a native `@engine9/plugins/reports/<area>` package |
 | Package cannot resolve | Use the package path and inspect resolver/registration rules; do not add `local$` |
@@ -366,6 +412,7 @@ Thin, schema-first interfaces are also valid. `message/index.js` exports only me
 ## Related documentation
 
 - [Plugin resolver and registration reference](reference.md)
+- [engine9 MCP](../e9-mcp/SKILL.md)
 - [Report authoring](../e9-reports/SKILL.md)
 - `@engine9/core/lib/peoplePipeline/README.md`
 - `stacks/standard/index.js`
@@ -386,4 +433,6 @@ Thin, schema-first interfaces are also valid. `message/index.js` exports only me
 - `job/ui.console.json5` and `person_address/ui.console.json5`
 - `person_email/index.js`, `segment/index.js`, and `timeline/index.js`
 - `e9email/install.js`, `e9email/Messages.js`, `e9email/index.js`, and `e9forms/FormTimeline.js`
+- `plugin/settings.js`
+- `plugins/models/deployment/v2026_09_16/settings.js`
 - `e9stub/index.js`, `e9workers/index.js`, and `e9console/index.js`

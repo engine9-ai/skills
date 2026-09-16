@@ -87,7 +87,7 @@ When diagnosing timeline or model results, read `sql` first. Do not re-invent th
 
 ### Hard stop — do not continue
 
-When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `inventory`, `timelinePerson`, `chat`, `file`, `apiKey`, `report`, etc.).
+When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `inventory`, `timelinePerson`, `chat`, `file`, `apiKey`, `report`, `plugin`, etc.).
 
 1. Tool result has **`isError: true`**
 2. Response text matches a fatal pattern (even when only plain text is visible):
@@ -162,6 +162,7 @@ When an account or parent is not found, do NOT dig deeper into compiled account 
 | Available MCP tools and parameters | MCP tool schemas (client tool descriptors for the connected server) |
 | Account ids, names, parents | MCP `user` / MCP `account` search only |
 | Installed plugins, submodules, methods | MCP `account` → `plugins[].metadata` |
+| Plugin settings (types, descriptions, current values), grouped by plugin | MCP `plugin` `command: "settings"` (`PluginWorker.listSettings`) |
 | Schema / tables / indexes / raw SQL | MCP `sql` (`command`: query, describe, indexes, tables, info, histo, compile_eql) |
 | Schedule or check async work | MCP `task`: on-demand = `path`+`method` (`@engine9/plugins/e9workers:EchoWorker` needs no `account` lookup); predefined flow = `flow_id` slug |
 | Analyze / summarize / profile table contents | MCP `analyze` (uses `tables` then `analyze`) |
@@ -184,6 +185,8 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Who am I / which accounts do I have? | `user` (flat `accounts` map with `parent_ids`) |
 | Find accounts by prefix, parent, type, tags, or installed plugin | `account` with `command: "search"` (one call — do not fan out; flat rows) |
 | List plugins / methods on one account | `account` with `account_id` (or `command: "plugins"`) |
+| List plugin settings (types, descriptions, current values) grouped by plugin | `plugin` with `command: "settings"` |
+| Install a plugin or list installable paths | `plugin` with `command: "install"` / `"listAvailable"` |
 | Search people by email, phone, name, or id | `search` |
 | List available person-search form options for an account | `searchOptions` |
 | Account / person timeline + identity / model health | `timelinePerson` (`command: inspect`) |
@@ -253,6 +256,36 @@ Example — direct children of a parent (flat list):
 ```
 
 Plugins command is also the **discovery step** before calling `task` when no native tool matches (see fallback workflow below).
+
+### `plugin`
+
+Install plugins and catalog **declared settings** for an account via `PluginWorker`. Settings are warehouse configuration on a plugin row (`setting` table). They are **not** marketplace authorization (`auth_fields` on `account` plugin metadata).
+
+- Required: `account_id`, `command`
+- **listAvailable** — installable package paths on this server
+- **install** — install `path` (full package path or shorthand from listAvailable)
+- **settings** — catalog grouped by plugin path: `path`, `name`, `plugin.instances`, JSON Schema `form`, `settings[]` (`type`, `description`, `values`, `default`, current `value`). Optional `path` / `plugin_id`. Hidden settings omitted unless `include_hidden: true`. Compile failures go in `errors` (call still succeeds)
+- **setSetting** — update one warehouse value. Required: `plugin_id`, `name`. Validates `values` / type when the package declares that name
+
+Example — settings UI catalog:
+
+```json
+{ "command": "settings", "account_id": "test" }
+```
+
+Example — update a declared setting:
+
+```json
+{
+  "command": "setSetting",
+  "account_id": "test",
+  "plugin_id": "<plugin uuid>",
+  "name": "summary_model_kind",
+  "value": "current"
+}
+```
+
+HTTP: `GET /data/settings`, `POST /data/settings`. Authoring: [create-engine9-plugin](../create-engine9-plugin/SKILL.md#settings).
 
 ### `search`
 
@@ -803,3 +836,4 @@ After [Step 0 — Log in](#step-0--log-in-always-first):
 | Direct HTTP task and flow execution | [e9-tasks-api](../e9-tasks-api/SKILL.md) |
 | EQL query syntax | [e9-eql](../e9-eql/SKILL.md) |
 | Plugin-installed reports | [e9-reports](../e9-reports/SKILL.md) |
+| Plugin settings (define + catalog) | [create-engine9-plugin](../create-engine9-plugin/SKILL.md#settings) |

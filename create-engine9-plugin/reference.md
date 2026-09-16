@@ -48,6 +48,20 @@ Example from `person_email/segments.js`: `@engine9/interfaces/person_email:searc
 
 Handlers export optional `title`/`description`, a JSON Schema `form` (`{ title, type: 'object', properties, required? }`), and `optionsToEQL`. Account-scoped discovery: MCP `searchOptions` / `PersonWorker.searchOptions` / `GET /data/search/options`.
 
+## Settings (warehouse configuration)
+
+Declared on the package (`export const settings` or sibling `settings.js`), stored per installed plugin row in `setting`. Distinct from marketplace `auth_fields` (authorization).
+
+Account-scoped discovery uses the same compile-and-aggregate path as inbound weaving, search, and reports: list installed plugins, `compilePlugin`, read `settings`, group by plugin path.
+
+| Surface | Call |
+|---------|------|
+| Worker | `PluginWorker.listSettings` / `updateSetting` |
+| MCP | `plugin` `command: settings` / `setSetting` |
+| HTTP | `GET /data/settings`, `POST /data/settings` |
+
+`compilePlugin` (SchemaWorker and ServerBaseWorker) attaches `settings` from the default export, a named `settings` export, or sibling `settings.js`.
+
 ## Binding paths (transforms)
 
 Documented in `ServerBaseWorker.prototype.resolveBindings`:
@@ -68,4 +82,4 @@ Core server preloads a fixed set of interface modules (see `ServerBaseWorker.js`
 |------|-----------|
 | Interface examples | `interfaces/*` (each subfolder) |
 | Native plugins | `plugins/e9email`, `plugins/e9forms`, `e9stub`, `e9workers`, `e9console` |
-| Runtime resolution | `server/utilities/resolvePluginModule.js`, `server/workers/ServerBaseWorker.js` (`compilePlugin`, `resolveTransform`, `resolveBindings`) |
+| Runtime resolution | `server/utilities/resolvePluginModule.js`, `server/workers/ServerBaseWorker.js` (`compilePlugin`, `resolveTransform`, `resolveBindings`), `@engine9/core/pluginSettings` (`listSettings`) |
