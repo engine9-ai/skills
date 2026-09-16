@@ -81,6 +81,7 @@ Reports are composed dashboards owned by native report plugins at `@engine9/plug
 | `segments.js` | Optional saved-audience definitions |
 | `metrics.js` | Optional aggregate cards |
 | `ui.console.json5` | Optional console UI configuration |
+| `settings.js` | Optional warehouse `setting` rows inserted on install |
 
 **Rule:** Do not ship `reports/` on interfaces. Put dashboards in `@engine9/plugins/reports/<area>`.
 
@@ -169,10 +170,13 @@ const metadata = {
 export default {
   metadata,
   schema,  // optional table DDL
+  settings, // optional warehouse setting rows inserted on install
   install, // optional async setup
   // Optional feature classes
 };
 ```
+
+`settings` is an array of `{ name, type?, default?, values?, description? }` (or a name→def object). On `PluginWorker.install`, each name is inserted into `setting` for that plugin row when it is missing. Reinstall does not overwrite an existing value. Unique native plugins with no `metadata.prefix` and no schema get an empty table prefix (settings-only packages). Export `settings` from `index.js` and/or ship a sibling `settings.js`.
 
 `install(context)` is asynchronous and receives `{ account, plugin, sqlWorker }` for one-time provisioning.
 

@@ -121,7 +121,9 @@ e9 exportworker export -a <account_id> \
   --credentials=s3://engine9-secrets/<account_id>/gcs-sa.json
 ```
 
-Optional: `--limit=N`, `--export_id=<uuid>`, `--start=-30d`, `--end=`, `--export_dir=<path-or-uri>`, `--credentials=<path-or-uri>`.
+Optional: `--limit=N`, `--sample=true` / `--sample=false`, `--export_id=<uuid>`, `--start=-30d`, `--end=`, `--export_dir=<path-or-uri>`, `--credentials=<path-or-uri>`.
+
+`--sample=true` is a QA dump: 100 rows per warehouse table and person-search CSV, 10 rows per sampled `.idv1.parquet`, one parquet per `(input_type, filename)` plus that store’s `metadata.json`. The destination last segment gets `_sample` so a sample cannot overwrite a full export (`exports/{export_id}_sample/{date}`, or `{export_dir}_sample`). `--sample=false` (default) is a full run. `--limit=N` without `--sample=true` still only caps SQL tables and person-search (full idv1 copies).
 
 `--export_dir` is the only destination when set. Use a local directory or an object-store URI (`s3://`, `r2://`, `gs://` / `gcs://`, `gdrive://`). The account store is not also written. Omit it to use `{store_path}/{account_id}/exports/{export_id}/{date}/`. The bucket may be customer-owned.
 

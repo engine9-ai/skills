@@ -113,6 +113,18 @@ e9 inventoryworker buildInventorySummaryFile -a <account_id> \
 
 Legacy alias: `--coverage=false` (deprecated).
 
+### Sample plan (QA, not the account cache)
+
+`--sample=true` builds a fast QA plan: one `.idv1.parquet` per `(input_type, filename)`, no monthly statistics, never `cache/inventory.json.gz`. Use `--sample=true` or `--sample=false` (not a bare `--sample`).
+
+```
+e9 inventoryworker buildInventorySummaryFile -a <account_id> \
+  --definition_path=engine9-accounts/<org>/<account>/export \
+  --sample=true --include_files=true
+```
+
+Writes `cache/inventory-plans/<slug>_sample.json.gz` with `sample: true`, `sample_table_limit` (100 unless `--limit=N`), and `sample_file_limit` (10). Bundle **export** with `--sample=true` materializes that plan under `{export_id}_sample/` (see [export building](../e9-export/building.md)).
+
 ### Tables-only override (no bundle definition)
 
 ```
@@ -200,7 +212,9 @@ The account cache is gzipped JSON. Bundle export still writes uncompressed JSON5
 | `files[]`, `directories[]` | Planned idv1 copies (export / `--include_files=true` only). |
 | `skipped_tables[]`, `skipped_files[]` | Omitted items (`does_not_exist`, selector mismatch, …). |
 | `table_records`, `file_records`, `records` | Plan totals (`file_records` omitted when files are omitted). |
-| `statistics` | Monthly warehouse statistics (see below). Omitted when `--statistics=false` or during bundle export. |
+| `statistics` | Monthly warehouse statistics (see below). Omitted when `--statistics=false`, `--sample=true`, or during bundle export. |
+| `sample` | `true` on QA sample plans/exports. |
+| `sample_table_limit` / `sample_file_limit` | Row caps used for the sample (tables/person-search vs idv1 copies). |
 
 Empty `transforms: []` arrays are omitted from serialized output.
 
@@ -290,10 +304,10 @@ Export-specific steps (F, G): [e9-export debug](../e9-export/building.md#debug-a
 
 ### Implementation notes
 
-- Core logic: `server/utilities/inventoryReport.js`, `inventoryStatistics.js`.
-- `InventoryWorker.inventory` stats `{account root}/cache/inventory.json.gz` (no parse); `InventoryWorker.buildInventorySummaryFile` writes that path **only** for account (default) builds. Export / custom builds write `cache/inventory-plans/<slug>.json.gz` and never overwrite the account cache.
-- `ExportWorker.inventory` delegates to InventoryWorker. Bundle export calls the plan builder with `statistics: false` and writes `{export_dir}/inventory.json5` **after** artifacts, without touching the account cache. `export_dir` may be a local path or an object-store URI.
-- MCP `inventory` `get` / `build` wraps those two methods.
+- Core logic: `server/utilities/inventoryReport.js`, `inventoryStatistics.js`, `inventorySample.js`.
+- `InventoryWorker.inventory` stats `{account root}/cache/inventory.json.gz` (no parse); `InventoryWorker.buildInventorySummaryFile` writes that path **only** for account (default) builds. Export / custom / `--sample=true` builds write `cache/inventory-plans/` and never overwrite the account cache.
+- `ExportWorker.inventory` delegates to InventoryWorker. Bundle export calls the plan builder with `statistics: false` and writes `{export_dir}/inventory.json5` **after** artifacts, without touching the account cache. `export_dir` may be a local path or an object-store URI. `--sample=true` writes under `{export_id}_sample/` (or `{export_dir}_sample`).
+- MCP `inventory` `get` / `build` wraps those two methods (`sample` is a build-only boolean).
 
 ## Related documentation
 
