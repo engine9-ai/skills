@@ -21,7 +21,7 @@ to snake_case, and conflicting dual spellings are rejected.
 | Method | What it does |
 |--------|----------------|
 | `inventory` | Delegates to InventoryWorker: stats `{account root}/cache/inventory.json.gz` (`ready: true` if present). Prefer `inventoryworker`. Refresh the **account** cache with `e9 inventoryworker buildInventorySummaryFile` (no definition). Export-scoped plans use `--definition_path=…` and write `cache/inventory-plans/` instead. |
-| `export` | Unified export: infers mode from `definition_path` and options (bundle dump, one person-search CSV, or tables-only). Writes `inventory.json5` (plan only) when a bundle runs; does not write the account inventory cache. |
+| `export` | Unified export: infers mode from `definition_path` and options (bundle dump, one person-search CSV, or tables-only). Bundle runs write artifacts first, then `inventory.json5` (catalog of what was written). Does not write the account inventory cache. |
 
 `exportAll` and `exportTables` were removed; both error with a message to use `export`.
 
@@ -115,9 +115,17 @@ Example:
 ```
 e9 inventoryworker buildInventorySummaryFile -a <account_id> --definition_path=engine9-accounts/<org>/<account>/export
 e9 exportworker export -a <account_id> --definition_path=engine9-accounts/<org>/<account>/export
+e9 exportworker export -a <account_id> \
+  --definition_path=engine9-accounts/<org>/<account>/export \
+  --export_dir=gs://bucket/exports/<account_id>/<export_id> \
+  --credentials=s3://engine9-secrets/<account_id>/gcs-sa.json
 ```
 
-Optional: `--limit=N`, `--export_id=<uuid>`, `--start=-30d`, `--end=`.
+Optional: `--limit=N`, `--export_id=<uuid>`, `--start=-30d`, `--end=`, `--export_dir=<path-or-uri>`, `--credentials=<path-or-uri>`.
+
+`--export_dir` is the only destination when set. Use a local directory or an object-store URI (`s3://`, `r2://`, `gs://` / `gcs://`, `gdrive://`). The account store is not also written. Omit it to use `{store_path}/{account_id}/exports/{export_id}/{date}/`. The bucket may be customer-owned.
+
+`--credentials` is a path or URI to a **destination** key file (GCS service-account JSON, AWS keys, R2 keys, or Drive JSON with `subject_to_impersonate`). FileWorker reads that file with bot/default credentials (the bootstrap store), then uses the parsed key only for the destination scheme. When omitted, account `settings.file_credentials` is used; otherwise process defaults (ADC / AWS chain / `CLOUDFLARE_R2_*`). The key file is never written into `inventory.json5` or other package artifacts.
 
 ## Person-search export
 
@@ -157,9 +165,13 @@ Without `--tables`, tables-only mode uses the standard warehouse list (`plugin`,
 
 Default directory: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 
+Override with `--export_dir`. That value is the only write root: a local path or `s3://` / `r2://` / `gs://` / `gdrive://` URI. There is no second copy under the account store.
+
 What those files mean for a receiver: [SKILL.md](SKILL.md).
 
-Bundle `export` and `inventory.json5` include `source_directory`: the export root path. Strip it from any absolute output `filename` to recover the relative path under that root (same value as `export_dir` on the export result). Input file and directory entries also carry `source_directory` for the input-store root the file was copied from.
+Bundle `export` and `inventory.json5` include `source_directory`: the export root path (local or object-store URI). Strip it from any absolute output `filename` to recover the relative path under that root (same value as `export_dir` on the export result). Input file and directory entries also carry `source_directory` for the input-store root the file was copied from.
+
+Rule: Bundle export writes tables, idv1 copies, and named person-search files first, then `inventory.json5`. Treat that file as the completion catalog: if it is missing, the run did not finish.
 
 | Path | Contents |
 |------|----------|
@@ -167,7 +179,7 @@ Bundle `export` and `inventory.json5` include `source_directory`: the export roo
 | `{input_type}/{input_id}/*.idv1.parquet` | Default copied idv1 files (`message`, `person`, `timeline`, …) |
 | `{input_type}/{input_id}/metadata.json` | Input-store descriptor (`input_id`, `input_type`, `entry_types`, listed files) |
 | Definition-owned `relative_path` | Custom universe artifact destination below `export_dir` |
-| `inventory.json5` | Bundle export: export **plan** only (paths, counts, skipped). Monthly statistics: [e9-inventory](../e9-inventory/SKILL.md). |
+| `inventory.json5` | Bundle export: catalog of what was written (paths, counts, skipped), written **last**. Monthly statistics: [e9-inventory](../e9-inventory/SKILL.md). |
 | `search/{export_name}.export.csv` + metadata | Default named person-search output during a bundle export |
 
 `directories[].files` is the **file list** (name, filename, records, source_directory), not a count.
@@ -191,7 +203,7 @@ Export pipeline:
 - [ ] C: `type: 'inputs'` selectors inventory the expected directories / idv1 files
 - [ ] D: file records are useful (not metadata zeros)
 - [ ] E: planned `relative_path` and transforms are correct and collision-free
-- [ ] F: export wrote every planned artifact under exports/{id}/{date}/
+- [ ] F: export wrote every planned artifact under `export_dir`, then `inventory.json5`
 - [ ] G: person-search file has rows (search, remotes, dates)
 ```
 
@@ -217,11 +229,11 @@ Stale `metadata.json` / `input.records` of 0 is ignored; inventory should count 
 
 ### E) Plan
 
-Check `inventory.json5` before inspecting output. Inventory format and statistics: [e9-inventory](../e9-inventory/SKILL.md).
+Pre-flight plans live in `cache/inventory-plans/`. After a completed bundle export, check `{export_dir}/inventory.json5` — it is written last. Inventory format and statistics: [e9-inventory](../e9-inventory/SKILL.md).
 
-### F) Files on disk
+### F) Files at the destination
 
-Bundle `export` returns `export_dir` and `source_directory` (same root). Every file listed by `inventory.json5` should exist at its `relative_path`. Missing copies: listing found no idv1s (C), a transform failed, or a file copy was skipped (logged).
+Bundle `export` returns `source_directory` (the resolved `export_dir`). Every file listed by `inventory.json5` should exist at its `relative_path` under that root. Missing `inventory.json5` means the run did not finish. Missing copies listed in the catalog: listing found no idv1s (C), or a file copy was skipped (logged). A transform failure aborts before `inventory.json5` is written.
 
 ### G) Person-search empty
 

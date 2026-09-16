@@ -84,7 +84,7 @@ curl $CURL_TLS -sS -X POST \
 
 | Field | Required | Description |
 |---|---|---|
-| `path` | **Yes** | Plugin or bot path (Engine9 colon path or Frakture dotted `bot.path`) |
+| `path` | **Yes** | Plugin path (Engine9 colon path). Frakture remote jobs also accept dotted `bot.path`. |
 | `method` | No | If set, clients typically pick this method from the returned plugin bag |
 | `remote` | No | Default `true` (call Frakture when marketplace defs are missing) |
 
@@ -407,7 +407,7 @@ curl $CURL_TLS -sS -X POST \
 
 Flat aliases: `{ "tags": "batch-1" }` or `{ "tracking_code": "batch-1" }`.
 
-**Free-text search** (flow name, task name, method, or plugin/bot path):
+**Free-text search** (flow name, task name, method, or plugin path):
 
 ```bash
 curl $CURL_TLS -sS -X POST \
@@ -613,7 +613,7 @@ Task runs are created by scheduling — an on-demand task (`POST /tasks/schedule
 
 ### `GET /task_runs/:id`
 
-**Scope:** `tasks:read` — default `remote=true`. Remote responses include `resolved_options`, `output`, **`checkpoints`** (worker `modify_history` as `[{ modified, options }]`; omitted from listings), display fields (`bot`, `submodule`, `method`, `bot_location_id`, `errors`, `records`, `expected_start_time`, `updated`), **`log_link`** on every task run, and **`log_url`** when the job server can sign one (single-run reads only).
+**Scope:** `tasks:read` — default `remote=true`. Remote responses include `resolved_options`, `output`, **`checkpoints`** (worker `modify_history` as `[{ modified, options }]`; omitted from listings), Frakture display fields (`bot`, `submodule`, `method`, `bot_location_id`, `errors`, `records`, `expected_start_time`, `updated`), **`log_link`** on every task run, and **`log_url`** when the job server can sign one (single-run reads only).
 
 ```bash
 curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" \
@@ -749,7 +749,7 @@ curl $CURL_TLS -sS -X POST \
 
 Does **not** 404 when ids are missing — unmatched filters return `task_runs: []` (`flow_run: null` if a single unknown `flow_run_id` was sent).
 
-Each remote `task_run` includes display fields used by the flow-run UI: `bot.path`, `submodule`, `method`, `bot_location_id`, `errors` (`{ level, message, ts }[]`), `records`, `expected_start_time`, `updated`, plus `options` / `output`. Every remote `task_run` also includes **`log_link`** (`/task_runs/{id}/log`). **`log_url`** (signed job-server URL) appears on single-run reads when the job server can sign one — not on bulk filter listing.
+Each remote `task_run` includes Frakture display fields used by the flow-run UI: `bot.path`, `submodule`, `method`, `bot_location_id`, `errors` (`{ level, message, ts }[]`), `records`, `expected_start_time`, `updated`, plus `options` / `output`. Every remote `task_run` also includes **`log_link`** (`/task_runs/{id}/log`). **`log_url`** (signed job-server URL) appears on single-run reads when the job server can sign one — not on bulk filter listing.
 
 ---
 

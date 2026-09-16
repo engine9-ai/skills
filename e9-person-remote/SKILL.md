@@ -6,7 +6,7 @@ description: >-
   by input.plugin_id, and when rows are written (loadPeople / idFiles / id,
   not loadTimeline or plugin-prefixed people tables). Use when working with
   person_remote, remote_person_id, Tatango/EN/RENxt remotes, export audiences
-  filtered by remote people, idFiles without loading bot tables, or empty
+  filtered by remote people, idFiles without loading plugin people tables, or empty
   person_remote for a plugin.
 ---
 
@@ -83,14 +83,14 @@ Built by `buildInboundTransforms` (`@engine9/core/lib/peoplePipeline/getInboundT
 | `PersonWorker.import` / console import | **Yes** | Thin wrapper over `loadPeople` with import defaults. |
 | `PersonWorker.populatePersonRemoteFromIdentifiers` | **Yes** (backfill) | Copies legacy `person_identifier` (`id_type=remote_person_id`) into `person_remote`. Migration/repair, not day-to-day loads. |
 | `InputWorker.loadTimeline` / `loadTimelineTables` | **No** | Loads `timeline` (+ detail). Assumes people already identified. |
-| Plugin-prefixed people tables (`*_person`) | **No** (by themselves) | e.g. `engaging_efr_person` / `tatango_kic_person` are bot warehouses. Remotes appear in `person_remote` only when those rows are run through `loadPeople` / `id` / `importPeople`-style flows. |
+| Plugin-prefixed people tables (`*_person`) | **No** (by themselves) | e.g. `engaging_efr_person` / `tatango_kic_person` are plugin warehouses. Remotes appear in `person_remote` only when those rows are run through `loadPeople` / `id` / `importPeople`-style flows. |
 
 ### What “without loading to the database” means here
 
 `idFiles` **does** write warehouse identity/attribute tables (`person`, `person_remote`, `person_email`, …). It does **not** require:
 
 - `loadTimeline` / `loadTimelineTables`
-- A plugin bot table such as `tatango_kic_person`
+- A plugin people table such as `tatango_kic_person`
 
 So: use **`idFiles` (or `loadPeople`) to populate Tatango-scoped `person_remote` without a Tatango people-table load or a timeline load.** Skip `do_not_upsert` / `doNotUpsert` (those run identity lookup only and **skip** all upserts, including `person_remote`).
 
@@ -148,7 +148,7 @@ await personWorker.loadPeople({
 1. Confirm plugin UUID: `account` plugins (or `SELECT id, name, path FROM plugin`).
 2. Count remotes for that plugin (join `input`) — not a bare `COUNT(*)` on `person_remote`.
 3. Confirm candidate `input` rows: `SELECT id, plugin_id, input_type, remote_input_name FROM input WHERE plugin_id = ?`.
-4. If bot tables exist but remotes do not, those people were never run through `loadPeople`/`id` with that plugin’s `plugin_id` + matching `input_id`.
+4. If plugin people tables exist but remotes do not, those people were never run through `loadPeople`/`id` with that plugin’s `plugin_id` + matching `input_id`.
 5. If remotes exist under the wrong plugin’s inputs, fix the input ownership / re-id with the correct `plugin_id` + `input_id` pair — do not only change the export filter unless that matches product intent.
 
 ## Related documentation

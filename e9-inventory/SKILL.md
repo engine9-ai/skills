@@ -52,13 +52,13 @@ Inventories take a while, so each account caches the last **account-wide** repor
 | Worker | Alias | When to use |
 |--------|-------|-------------|
 | `@engine9/plugins/e9workers:InventoryWorker` | `inventoryworker` | **Preferred.** `inventory` stats the **account** cache; `buildInventorySummaryFile` writes that cache only for default (non-export) builds. With `definition_path` / custom universe → `cache/inventory-plans/`. |
-| `@engine9/plugins/e9workers:ExportWorker` | `exportworker` | `inventory` delegates to InventoryWorker (account cache lookup only). Bundle **export** builds a plan-only `inventory.json5` in the export dir (`statistics: false`) and does not overwrite the account cache. |
+| `@engine9/plugins/e9workers:ExportWorker` | `exportworker` | `inventory` delegates to InventoryWorker (account cache lookup only). Bundle **export** writes `{export_dir}/inventory.json5` last (`statistics: false`) and does not overwrite the account cache. |
 
 ### What inventory produces
 
 Two logical parts in one JSON report (`format_version` **2**):
 
-1. **Plan** — what an export *would* write: tables, idv1 files, `relative_path`, transforms, skipped items, totals.
+1. **Plan** — what an export *would* write: tables, idv1 files, `relative_path`, transforms, skipped items, totals. `InventoryWorker.buildInventorySummaryFile` writes this to `cache/inventory-plans/` (or `{export_dir}/inventory.json.gz`). Bundle **export** writes the same shape as `{export_dir}/inventory.json5` **after** artifacts, as the completion catalog.
 2. **Statistics** — account-wide **monthly** counts and engagement (revenue, people, sends / impressions / clicks by channel) for warehouse timelines, Home KPIs, and analytics iteration (standalone `buildInventorySummaryFile` only by default). Grain is `YYYY-MM`, not daily. Message stats are **aggregate** (`statistics.messages` from `global_message_summary` — Inventory **Messages**). Per-person send/open/click rows are **Timeline → Messages** (`statistics.inputs`, `subcategory: messages`).
 
 Account cache: `{account root}/cache/inventory.json.gz` (gzipped JSON; no `files[]` unless `--include_files=true`). Custom/export plans: `{account root}/cache/inventory-plans/<slug>.json.gz`. Bundle export plan: `{export_dir}/inventory.json5` (statistics omitted; includes files). Examples: [examples.md](examples.md).
@@ -292,7 +292,7 @@ Export-specific steps (F, G): [e9-export debug](../e9-export/building.md#debug-a
 
 - Core logic: `server/utilities/inventoryReport.js`, `inventoryStatistics.js`.
 - `InventoryWorker.inventory` stats `{account root}/cache/inventory.json.gz` (no parse); `InventoryWorker.buildInventorySummaryFile` writes that path **only** for account (default) builds. Export / custom builds write `cache/inventory-plans/<slug>.json.gz` and never overwrite the account cache.
-- `ExportWorker.inventory` delegates to InventoryWorker. Bundle export calls the plan builder with `statistics: false` and writes `{export_dir}/inventory.json5` without touching the account cache.
+- `ExportWorker.inventory` delegates to InventoryWorker. Bundle export calls the plan builder with `statistics: false` and writes `{export_dir}/inventory.json5` **after** artifacts, without touching the account cache. `export_dir` may be a local path or an object-store URI.
 - MCP `inventory` `get` / `build` wraps those two methods.
 
 ## Related documentation

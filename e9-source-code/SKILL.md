@@ -161,7 +161,7 @@ Recommended message hierarchy: **Campaign → Message set → Message** (`campai
 
 ### Overrides
 
-Override values are stored separately from parsed defaults. Clearing an override restores the bot value.
+Override values are stored separately from parsed defaults. Clearing an override restores the parsed dictionary value.
 
 **Dictionary (per element):** type into the `* Override` column (e.g. Goal Override). The live element updates immediately; downstream reports follow. Deleting the override snaps back to the parse.
 

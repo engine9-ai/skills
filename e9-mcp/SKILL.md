@@ -106,7 +106,7 @@ When **any** of these is true, **stop the current workflow immediately** and rep
 3. Do **not** guess plugin paths or methods when `account` failed — plugin discovery did not succeed.
 4. Do **not** open `accounts.d/`, `accounts.compiled.json5`, `account-config.json`, `account.<id>.json5`, `.e9_parameters`, or any other local catalog to “find” ids MCP did not return.
 5. For **`Cannot connect to the <account_id> database`**: the account database is unreachable; every account-scoped operation will fail the same way until connectivity is restored.
-6. For **`getPluginMetadata`**: plugin metadata loading is broken on this server. **Abort.** That must be fixed before continuing — do not schedule via local `TaskWorker`, SQL `plugin` / `bot_metadata` lookups, guessed `bot_id/submodule` paths, or the REST Task API as a workaround. `account` plugins and `task` schedule both depend on it.
+6. For **`getPluginMetadata`**: plugin metadata loading is broken on this server. **Abort.** That must be fixed before continuing — do not schedule via local `TaskWorker`, SQL `plugin` / `bot_metadata` lookups, guessed `plugin_id`/`submodule` paths, or the REST Task API as a workaround. `account` plugins and `task` schedule both depend on it.
 
 ### Examples
 
@@ -614,7 +614,7 @@ Echo smoke test:
 
 ### Other installed plugins
 
-For account-specific bots (RENxt, …), discover `path` + `method` from MCP `account` plugins, then call `task`. Slash shorthand (`renxt/people`) is resolved against that list.
+For account-specific plugins (RENxt, …), discover `path` + `method` from MCP `account` plugins, then call `task`. Slash shorthand (`renxt/people`) is resolved against that list.
 
 ## Fallback workflow: no native match → `account` → `task`
 

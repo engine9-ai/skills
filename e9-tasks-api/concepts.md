@@ -119,7 +119,7 @@ Prefect **`tags` on a flow run** map to Frakture **`tracking_code`**: one string
 | **Reads** | Flow run includes `tags: ["batch-1"]` (or `[]`) and `tracking_code`. |
 | **Schedule** | `POST /tasks/schedule` and `POST /flow_runs/` accept `tags` or `tracking_code`. Explicit `tracking_code` wins if both are sent. |
 | **Filter** | `POST /flow_runs/filter`, `/count`, and `/metrics` accept `tags` / `flow_runs.tags.any_` (OR) / `all_` (single tag) / `is_null_`, plus `tracking_code`. |
-| **Search** | The same three routes accept `search` / `q` — case-insensitive substring on flow name, task name, method, or plugin/bot path. |
+| **Search** | The same three routes accept `search` / `q` — case-insensitive substring on flow name, task name, method, or plugin path. |
 
 **Not supported:** tags on **task runs**; `POST /task_runs/filter` by tags; `PATCH` to change tags; multiple stored tags (`all_` with two distinct values matches nothing); mapping flow-definition tags to `tracking_code`.
 
@@ -158,7 +158,7 @@ A **task run** is one execution of one task within a flow run.
 | `parent_account_id` | First id in that account's `parent_ids` (`null` if none) |
 | `parent_ids` | Full `parent_ids` array from the account document |
 | `task_key` | Which step in the flow |
-| `bot.path`, `submodule`, `method` | Worker identity (card subtitle, e.g. `Engine9Workers.ModelWorker`) |
+| `bot.path`, `submodule`, `method` | Plugin/worker identity on Frakture remote task runs (card subtitle, e.g. `Engine9Workers.ModelWorker`) |
 | `bot_location_id` | Job server label |
 | `state_type` | `PENDING`, `RUNNING`, `PAUSED`, `COMPLETED`, `FAILED`, … |
 | `state_name` / `state.name` | Display name (`Pending`, `Scheduled`, `Running`, `Cancelling`, `Paused`, …) |

@@ -23,7 +23,9 @@ Rule: `inventory.json5` is authoritative. Do not infer artifact locations from t
 
 Default root: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 
-Start with **`inventory.json5`**. It is the catalog of what was written. A definition may relocate artifacts with `relative_path`; trust the inventory, not assumed paths.
+`--export_dir` overrides that root and is the only destination: a local path or `s3://` / `r2://` / `gs://` / `gdrive://` URI. The account store is not also written. `--credentials` (or account `settings.file_credentials`) is a bootstrap path/URI to the destination key file; it is not part of the package.
+
+Start with **`inventory.json5`**. Bundle export writes it **last**. It is the catalog of what was written; its presence means the run finished. A definition may relocate artifacts with `relative_path`; trust the inventory, not assumed paths.
 
 | Path | Contents |
 |------|----------|
@@ -31,7 +33,7 @@ Start with **`inventory.json5`**. It is the catalog of what was written. A defin
 | `{input_type}/{input_id}/*.idv1.parquet` | Activity rows for one input (`message`, `person`, `timeline`, …) |
 | `{input_type}/{input_id}/metadata.json` | Descriptor for that input store |
 | `search/{export_name}.export.csv` + `.metadata.json5` | Named person-search extract |
-| `inventory.json5` | Export **plan**: paths, counts, skipped items |
+| `inventory.json5` | Catalog of what was written (paths, counts, skipped), written after artifacts |
 
 **Not included**
 
@@ -43,7 +45,7 @@ Start with **`inventory.json5`**. It is the catalog of what was written. A defin
 
 ## `inventory.json5`
 
-Bundle exports write this at the export root (`format_version` **2**). It is a **plan**, not monthly statistics.
+Bundle exports write this at the export root (`format_version` **2**) after artifacts. It is the catalog of what was written, not monthly statistics.
 
 | Key | Purpose |
 |-----|---------|
@@ -269,7 +271,7 @@ Rule: Do not treat timeline `id` as a person key.
 
 ## Troubleshooting
 
-Start with `inventory.json5`: verify expected artifacts, inspect `skipped_tables` and `skipped_files`, and compare planned counts with Parquet counts when metadata may be stale. For creation, execution, and deeper export diagnostics, use the export-building guide.
+Start with `inventory.json5`: if it is missing the run did not finish. Verify expected artifacts, inspect `skipped_tables` and `skipped_files`, and compare listed counts with Parquet counts when metadata may be stale. For creation, execution, and deeper export diagnostics, use the export-building guide.
 
 ## Related documentation
 

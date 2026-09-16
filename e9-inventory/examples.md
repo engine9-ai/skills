@@ -335,7 +335,7 @@ Fallback if `message_activity` is skipped or stale: `messages.by_channel_month`.
 
 ## Bundle export `inventory.json5`
 
-During `e9 exportworker export`, the written `inventory.json5` contains the **plan** only (`statistics` omitted). Collect statistics into the account cache separately:
+During `e9 exportworker export`, `inventory.json5` is written **last** and catalogs what landed (`statistics` omitted). Collect statistics into the account cache separately:
 
 ```bash
 e9 inventoryworker buildInventorySummaryFile -a <account_id> \
