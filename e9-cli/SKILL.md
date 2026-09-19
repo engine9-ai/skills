@@ -1,11 +1,11 @@
 ---
 name: e9-cli
-description: Connect Cursor to engine9 MCP — log in first via mcp_auth, set account scope with /e9a, and handle /e9 command-style interactions including person search and task scheduling.
+description: Connect Cursor to engine9 MCP — log in first via mcp_auth, set account scope with /e9a, and handle /e9 command-style interactions including plugin install, person search, and task scheduling.
 ---
 
 # engine9 CLI
 
-Use this skill to configure or troubleshoot an engine9 MCP connection in Cursor or another MCP client. It also defines `/e9` and `/e9a` command behavior, including account scope, person search, reports, segments, API keys, and task scheduling.
+Use this skill to configure or troubleshoot an engine9 MCP connection in Cursor or another MCP client. It also defines `/e9` and `/e9a` command behavior, including account scope, plugin install, person search, reports, segments, API keys, and task scheduling.
 
 ## Quick reference
 
@@ -14,6 +14,7 @@ Use this skill to configure or troubleshoot an engine9 MCP connection in Cursor 
 | Sign in | Call `mcp_auth` with `{}`, then verify with `ok` and `user` |
 | Select one account | `/e9a <account_id>` |
 | Select children of a parent | `/e9a parent <parent_account_id>` |
+| Install a plugin | `/e9 plugin install <path>` — [e9-plugin](../e9-plugin/SKILL.md) |
 | Search people | `/e9 search <terms>` |
 | Run an on-demand method | `/e9 task <plugin-path-or-alias> <method> [options...]` |
 | Configure Cursor | Add the server to `~/.cursor/mcp.json` and permissions to `~/.cursor/permissions.json` |
@@ -48,7 +49,7 @@ Project `.cursor/mcp.json` may define `engine9.local_noauth` with `Authorization
 
 ## MCP-only discovery
 
-When handling `/e9` or `/e9a` requests, **do not read local workspace code** to discover plugins, worker methods, paths, or options. Local source does not reliably match the connected MCP server or the account's installed plugins. Use MCP tool schemas, MCP `account` (cached as `engine9.plugins`), and MCP `task` / `sql` / `analyze` / `timelinePerson` / `file` / `apiKey` only. See [e9-mcp — MCP-only discovery](../e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code).
+When handling `/e9` or `/e9a` requests, **do not read local workspace code** to discover plugins, worker methods, paths, or options. Local source does not reliably match the connected MCP server or the account's installed plugins. Use MCP tool schemas, MCP `account` (cached as `engine9.plugins`), and MCP `task` / `sql` / `analyze` / `timelinePerson` / `timelinePersonLegacy` / `file` / `apiKey` only. See [e9-mcp — MCP-only discovery](../e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code).
 
 When an account or parent is not found, do NOT dig deeper into compiled account catalogs, etc. Account discovery when using MCP should only be through that MCP, not through any other mechanisms. Do not read `accounts.d/`, `accounts.compiled.json5`, or other on-disk catalogs.
 
@@ -184,6 +185,9 @@ On MCP failure: confirm `account_id` was set, report the MCP error verbatim, not
 Supported forms:
 
 - `/e9` — bootstrap (connectivity, identity, account scope)
+- `/e9 plugin listAvailable` — MCP `plugin` `command: listAvailable`
+- `/e9 plugin install <path>` — MCP `plugin` `command: install` on session account(s); see [e9-plugin](../e9-plugin/SKILL.md)
+- `/e9 plugin settings [path]` — MCP `plugin` `command: settings`
 - `/e9 search foo@bar.com`
 - `/e9 segment list` — MCP `segment` with `command: list`
 - `/e9 segment build <segment_id|definition_path>` — MCP `segment` with `command: build`
@@ -246,6 +250,11 @@ Use this for requests like “list current errored tasks”, cross-account job s
 8. `/e9 apiKey …`:
    - Catalog needs no account. Other commands need `account_id`.
    - Call MCP `apiKey`. Never schedule `createApiKey` via `task`. Show plaintext `key` to the user immediately on create/rotate.
+9. `/e9 plugin …`:
+   - Follow [e9-plugin](../e9-plugin/SKILL.md). Native `plugin` only — do not use `task`.
+   - `listAvailable` / `settings`: session `account_id`.
+   - `install <path>`: resolve path from `listAvailable`; if `engine9.account_ids` is a parent/all list, install on **each** id (parallel batches). Do not call `account` plugins first.
+
 ## `/e9 search` parsing rules
 
 For tokenized arguments after `search`:
@@ -327,6 +336,7 @@ Use `action: "listTasks"` with `flow_run_id` and optional `task_run_ids` from th
 | Topic | Documentation |
 |-------|---------------|
 | MCP tools and invocation rules | [e9-mcp](../e9-mcp/SKILL.md) |
+| Install plugins on accounts | [e9-plugin](../e9-plugin/SKILL.md) |
 | API-key management | [e9-api-key](../e9-api-key/SKILL.md) |
 | Direct HTTP Task API | [e9-tasks-api](../e9-tasks-api/SKILL.md) |
 | Plugin-installed reports | [e9-reports](../e9-reports/SKILL.md) |

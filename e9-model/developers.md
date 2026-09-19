@@ -30,7 +30,8 @@ await model.summarizePeople({ emails: 'a@example.com' });
 | `runMany({ models })` | Same as `run`, once per path | Comma-delimited model paths, run in series; returns `{ results }` |
 | `summarizeSourceCodes({ model })` | — | Read `{prefix}_person_stats` and `{prefix}_transaction_stats` (rollup by source code). Alias: `summarize` |
 | `summarizePeople({ emails / person_ids })` | — | UI inspect: timeline + stored rows from every available `model_*` table. Does **not** run models |
-| `inspectPerson({ emails / person_ids })` | — | Conductor / MCP `timelinePerson`: **current** `timeline` / `model_*` only. Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` (opt-in; future deployments will drop this). SQL lives in `workers/model` |
+| `inspectPerson({ emails / person_ids })` | — | Conductor / MCP `timelinePerson`: **current** `timeline` / `model_*` only. Never `timeline_v3*` |
+| `inspectPersonLegacy({ emails / person_ids })` | — | MCP `timelinePersonLegacy`: `timeline_v3_summary` / `person_model_source_code` (opt-in separate call; future deployments will drop this). SQL lives in `workers/model` |
 | `compareSourceCodes({ source_codes? })` | — | All current `model_*_stats` by source code. Omit `source_codes` to union each model's top 10 by people and by revenue. When both current first touch and legacy first touch are deployed, also unions the top 10 codes by absolute first-touch difference. Pass `legacy: true` to also include `transaction_model_pivot` (custom legacy models when present) |
 | `loadStats({ model })` | Rebuilds those stats tables | After a manual SQL edit |
 | `summarizePeopleLegacy` / `comparePeopleLegacy` / `summarizeSourceCodesLegacy` / `compareSourceCodesLegacy` | — | Legacy identity only — see [Legacy (old identity)](#legacy-old-identity) |
@@ -274,18 +275,20 @@ what `run` last wrote. Full field list:
 `inspectPerson` (`workers/model/inspect.js`, `summarize.js`) is the payload for
 MCP `timelinePerson` and the conductor Timeline & Models artifact. **Current
 identity only**: `timeline` and `model_*_person`. Timeline rows expose
-`effective_date` (= `ts`).
+`effective_date` (= `ts`). Never reads `timeline_v3*`.
 
-Pass `legacy: true` to also run `legacy.js` (`timeline_v3_summary` /
-`person_model_source_code`) and append `section: 'legacy'` tables. Default off;
-future deployments will not support it. Conductor opts in via
-`TIMELINE_PERSON_INCLUDE_LEGACY` in `defs/timelinePerson.ts` — delete that flag
+Call **`inspectPersonLegacy`** / MCP **`timelinePersonLegacy`** for
+`legacy.js` (`timeline_v3_summary` / `person_model_source_code`) and
+`section: 'legacy'` tables. Separate tool so the UI can load it independently
+or unregister it. Conductor opts in via `TIMELINE_PERSON_INCLUDE_LEGACY` in
+`defs/timelinePerson.ts`, which fires the second MCP call — delete that flag
 to drop the UI.
 
 ```javascript
 const { queried, tables, person_ids, emails } = await model.inspectPerson({
   emails: 'a@example.com'
 });
+const legacy = await model.inspectPersonLegacy({ emails: 'a@example.com' });
 ```
 
 `tables[]` entries have `status` `ok` / `skipped` / `error`. Current tables:

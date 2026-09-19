@@ -12,6 +12,8 @@ The **timeline** is each person’s activity log, with one entry for one fact ab
 | Need | Start here |
 |------|------------|
 | Inspect current entries | `timeline` |
+| MCP current person timeline | `timelinePerson` `inspect` |
+| MCP legacy `timeline_v3*` | `timelinePersonLegacy` (separate tool) |
 | Resolve the producing stream | `timeline.input_id` → `input.id` |
 | Read entry names and plugin context | A current plugin `*_summary` view |
 | Find first, last, or count by type | `person_entry_summary` |
@@ -26,6 +28,8 @@ Rule: Say **transaction**, never donation. Revenue questions use transaction tab
 Rule: A click is not automatically an open; openers and clickers are independent.
 
 Rule: For a missing entry, walk troubleshooting steps A–F in order, stop at the first gap, and inspect product data before application code.
+
+Rule: Current timeline and legacy `timeline_v3*` are separate MCP calls. Never ask `timelinePerson` `inspect` for legacy tables.
 
 ## Concepts
 
@@ -69,6 +73,42 @@ Every `timeline` row has:
 The console **Person → Timeline** tab is `timeline` filtered to that `person_id`.
 
 Prefer a `*_summary` view when you want plugin name, input name, source code string, and `entry_type` (the name, not the integer). Fall back to joining `timeline` → `input` → `plugin` yourself.
+
+### MCP: current timeline vs legacy timeline
+
+These are two tools. The UI should call them independently so legacy can be dropped (or loaded only when the Legacy tab is opened) without slowing current inspect.
+
+| Need | MCP tool | Worker |
+|------|----------|--------|
+| Current `timeline` / `model_*` / identity counts | `timelinePerson` `command: inspect` | `ModelWorker.inspectPerson` |
+| Legacy `timeline_v3*` / `person_model_source_code` | `timelinePersonLegacy` | `ModelWorker.inspectPersonLegacy` |
+
+Rule: `timelinePerson` `inspect` never reads `timeline_v3*`. Do not pass `legacy: true` on inspect expecting those tables — that flag is only for `compareSourceCodes` (pivot stats), not timeline.
+
+Rule: `person.id` is not `person_id_int`. Legacy person detail hashes **email** onto `person_metadata`. Current `person_ids` on `timelinePersonLegacy` are only an email lookup on `person_email`.
+
+**Current inspect** (default person Timeline / Models view):
+
+```json
+{ "account_id": "<account_id>" }
+{ "account_id": "<account_id>", "emails": "user@example.com" }
+{ "account_id": "<account_id>", "person_ids": 1517 }
+{ "account_id": "<account_id>", "person_ids": 1517, "source_codes": "EM_%" }
+```
+
+Returns `section: "current"` tables: `timeline_counts`, `timeline`, `models`, plus identity / transaction / `model_*` aggregations. Timeline type is `entry_type` / `entry_type_id`. `effective_date` is `timeline.ts`.
+
+**Legacy inspect** (optional second call; unregister the tool to slice it away):
+
+```json
+{ "account_id": "<account_id>" }
+{ "account_id": "<account_id>", "emails": "user@example.com" }
+{ "account_id": "<account_id>", "person_ids": 1517 }
+```
+
+Returns `section: "legacy"` tables: `timeline_v3` min/max/count, `person_model_source_code_totals`, `transaction_model_source_code`, and person-level `timeline_v3_summary` / `person_model_source_code` when an email is present. Type column is **`entry_type_label`**. Missing tables are `skipped`. Future deployments will drop this tool.
+
+UI merge: keep current and legacy `tables[]` / `sql[]` side by side (`section` already distinguishes them). Do not combine the warehouse queries into one request. Load current first; call `timelinePersonLegacy` only when the Legacy surface is needed.
 
 ## Entry types
 
@@ -179,6 +219,8 @@ WHERE person_id_int = 1517
 ORDER BY effective_date DESC
 LIMIT 100;
 ```
+
+Prefer MCP `timelinePersonLegacy` over this SQL when inspecting one person. Prefer MCP `timelinePerson` `inspect` for current `timeline`.
 
 Resolve email → `person_id` via `person_email`, then query `timeline`.
 

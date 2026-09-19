@@ -251,7 +251,7 @@ Legacy `model_id` 1, 2, and 8 map to `model_first_touch`, `model_crm_origin`, an
 
 ## inspectPerson (conductor tables)
 
-`ModelWorker.inspectPerson` (`server/workers/model/inspect.js`) is **current-identity only** (`timeline`, `model_*_person`). MCP tool **`timelinePerson`**. Timeline rows add **`effective_date`** = `timeline.ts` (resolved at load time — see [SKILL.md §5](SKILL.md#5-the-effective-date-of-an-entry)). Pass `legacy: true` to also load `timeline_v3_summary` / `person_model_source_code` from `legacy.js` (opt-in; not in future deployments). Missing tables are `skipped`. Emails bridge identity; `person.id` is never joined to `person_id_int`. Conductor currently sets `TIMELINE_PERSON_INCLUDE_LEGACY = true` in one place. Returns top-level **`sql`**: `[{ id, sql, error, table? }]` for every statement this request ran.
+`ModelWorker.inspectPerson` (`server/workers/model/inspect.js`) is **current-identity only** (`timeline`, `model_*_person`). MCP tool **`timelinePerson`**. Timeline rows add **`effective_date`** = `timeline.ts` (resolved at load time — see [SKILL.md §5](SKILL.md#5-the-effective-date-of-an-entry)). Legacy `timeline_v3_summary` / `person_model_source_code` is a **separate** call: `ModelWorker.inspectPersonLegacy` / MCP **`timelinePersonLegacy`** (opt-in; not in future deployments). Missing tables are `skipped`. Emails bridge identity; `person.id` is never joined to `person_id_int`. Conductor currently sets `TIMELINE_PERSON_INCLUDE_LEGACY = true` in one place to fire the second tool. Returns top-level **`sql`**: `[{ id, sql, error, table? }]` for every statement this request ran.
 
 ## compareSourceCodes (all current models)
 

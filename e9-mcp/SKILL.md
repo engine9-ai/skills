@@ -1,17 +1,18 @@
 ---
 name: e9-mcp
-description: Use the engine9 MCP server — log in first via mcp_auth, MCP-only discovery (never local code), prefer native tools over task, use @engine9/plugins/e9workers:EchoWorker + echo for on-demand smoke tests (no plugin lookup), discover other plugin methods via account, and invoke task as the catch-all for worker execution.
+description: Use the engine9 MCP server — log in first via mcp_auth, MCP-only discovery (never local code), prefer native tools over task. Plugin install/settings are first-class MCP `plugin` (see e9-plugin), not task. Use @engine9/plugins/e9workers:EchoWorker + echo for on-demand smoke tests (no plugin lookup), discover other plugin methods via account, and invoke task as the catch-all for worker execution.
 ---
 
 # engine9 MCP
 
-The engine9 MCP server exposes authenticated, account-scoped tools for discovery, queries, reporting, API-key management, and asynchronous work. Use this skill when selecting and calling engine9 MCP tools from Cursor or another MCP client.
+The engine9 MCP server exposes authenticated, account-scoped tools for discovery, queries, reporting, API-key management, and asynchronous work. Use this skill when selecting and calling engine9 MCP tools from Cursor or another MCP client. **Plugins are first-class:** install, catalog, and settings use native MCP `plugin` — never `task`. Fleet install steps: [e9-plugin](../e9-plugin/SKILL.md).
 
 ## Quick reference
 
 | Need | Use |
 |------|-----|
 | Authenticate | `mcp_auth` with `{}`, then verify with `ok` and `user` |
+| Install a plugin / list installable paths | `plugin` `install` / `listAvailable` — [e9-plugin](../e9-plugin/SKILL.md) |
 | Discover accounts or installed plugins | `account` |
 | Use a purpose-built operation | The matching native MCP tool |
 | Run an on-demand worker method | `task` with `path` + `method` |
@@ -81,13 +82,15 @@ Tools that run warehouse SQL include a top-level **`sql`** field so you can debu
 
 Omit `sql` only when the tool did not execute SQL. Empty `[]` means the tool could have queried but did not.
 
-**String form** (`eql`, `sql` `command: query`): `sql` is the single statement string — equivalent to `[{ "id": "query", "sql": "<statement>", "error": null }]`.
+**String form** (`eql`, `sql` `command: query`): `sql` is the single statement string — equivalent to `[{ "id": "query", "sql": "<statement>", "error": null }]`. SELECT/WITH queries are hard-capped at **10000** rows (`LIMIT` rewritten before execution). Responses include `max_rows` and `truncated`.
 
 When diagnosing timeline or model results, read `sql` first. Do not re-invent those SELECTs via the `sql` tool unless you need a variant.
 
 ### Hard stop — do not continue
 
-When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `inventory`, `timelinePerson`, `chat`, `file`, `apiKey`, `report`, `plugin`, etc.).
+When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `inventory`, `timelinePerson`, `timelinePersonLegacy`, `chat`, `file`, `apiKey`, `report`, `plugin`, etc.).
+
+**Exception — fleet plugin install:** a per-account MCP `plugin` `install` failure (`Cannot connect to the … database`, `Not authorized for account`, unmet dependencies) is a **skip** for that `account_id` only. Continue remaining accounts and report successes and failures. Session-level auth failure and `getPluginMetadata` still stop the whole job. See [e9-plugin](../e9-plugin/SKILL.md).
 
 1. Tool result has **`isError: true`**
 2. Response text matches a fatal pattern (even when only plain text is visible):
@@ -105,7 +108,7 @@ When **any** of these is true, **stop the current workflow immediately** and rep
 2. Do **not** retry automatically or call downstream tools as a workaround.
 3. Do **not** guess plugin paths or methods when `account` failed — plugin discovery did not succeed.
 4. Do **not** open `accounts.d/`, `accounts.compiled.json5`, `account-config.json`, `account.<id>.json5`, `.e9_parameters`, or any other local catalog to “find” ids MCP did not return.
-5. For **`Cannot connect to the <account_id> database`**: the account database is unreachable; every account-scoped operation will fail the same way until connectivity is restored.
+5. For **`Cannot connect to the <account_id> database`**: the account database is unreachable; every account-scoped operation **on that id** will fail the same way until connectivity is restored. Fleet `plugin` `install` skips that id and continues ([e9-plugin](../e9-plugin/SKILL.md)).
 6. For **`getPluginMetadata`**: plugin metadata loading is broken on this server. **Abort.** That must be fixed before continuing — do not schedule via local `TaskWorker`, SQL `plugin` / `bot_metadata` lookups, guessed `plugin_id`/`submodule` paths, or the REST Task API as a workaround. `account` plugins and `task` schedule both depend on it.
 
 ### Examples
@@ -162,11 +165,14 @@ When an account or parent is not found, do NOT dig deeper into compiled account 
 | Available MCP tools and parameters | MCP tool schemas (client tool descriptors for the connected server) |
 | Account ids, names, parents | MCP `user` / MCP `account` search only |
 | Installed plugins, submodules, methods | MCP `account` → `plugins[].metadata` |
+| Installable package paths on this server | MCP `plugin` `command: "listAvailable"` |
+| Install a package on an account | MCP `plugin` `command: "install"` — [e9-plugin](../e9-plugin/SKILL.md) |
 | Plugin settings (types, descriptions, current values), grouped by plugin | MCP `plugin` `command: "settings"` (`PluginWorker.listSettings`) |
 | Schema / tables / indexes / raw SQL | MCP `sql` (`command`: query, describe, indexes, tables, info, histo, compile_eql) |
 | Schedule or check async work | MCP `task`: on-demand = `path`+`method` (`@engine9/plugins/e9workers:EchoWorker` needs no `account` lookup); predefined flow = `flow_id` slug |
 | Analyze / summarize / profile table contents | MCP `analyze` (uses `tables` then `analyze`) |
-| Account / person timeline + identity / model health | MCP `timelinePerson` (`command: inspect`) |
+| Account / person current timeline + identity / model health | MCP `timelinePerson` (`command: inspect`) |
+| Account / person **legacy** `timeline_v3*` inspect | MCP `timelinePersonLegacy` (separate tool; not `inspect` + `legacy`) |
 | Compare current (and opt-in legacy, including custom legacy models) model scores by source code | MCP `timelinePerson` (`command: compareSourceCodes`) |
 | Date histogram on indexed datetime column | MCP `sql` with `command: "histo"` |
 | List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
@@ -186,10 +192,11 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Find accounts by prefix, parent, type, tags, or installed plugin | `account` with `command: "search"` (one call — do not fan out; flat rows) |
 | List plugins / methods on one account | `account` with `account_id` (or `command: "plugins"`) |
 | List plugin settings (types, descriptions, current values) grouped by plugin | `plugin` with `command: "settings"` |
-| Install a plugin or list installable paths | `plugin` with `command: "install"` / `"listAvailable"` |
+| Install a plugin on one account or a parent’s children | `plugin` `install` — [e9-plugin](../e9-plugin/SKILL.md). Do not use `task` |
 | Search people by email, phone, name, or id | `search` |
 | List available person-search form options for an account | `searchOptions` |
-| Account / person timeline + identity / model health | `timelinePerson` (`command: inspect`) |
+| Account / person current timeline + identity / model health | `timelinePerson` (`command: inspect`) |
+| Account / person **legacy** `timeline_v3*` inspect | `timelinePersonLegacy` |
 | Compare current `model_*_stats` (and opt-in pivot, including custom legacy models) by source code | `timelinePerson` with `command: "compareSourceCodes"` |
 | List segments, load segment detail, or schedule segment builds | `segment` |
 | List or run reports (plugin `path` or portable JSON `definition`; filters, date range) | `report` (`list` first for plugins; `run` with `path` or `definition`) |
@@ -259,13 +266,25 @@ Plugins command is also the **discovery step** before calling `task` when no nat
 
 ### `plugin`
 
+**Fast path:** [e9-plugin](../e9-plugin/SKILL.md) — install is native MCP `plugin`, not `task`.
+
 Install plugins and catalog **declared settings** for an account via `PluginWorker`. Settings are warehouse configuration on a plugin row (`setting` table). They are **not** marketplace authorization (`auth_fields` on `account` plugin metadata).
 
 - Required: `account_id`, `command`
-- **listAvailable** — installable package paths on this server
-- **install** — install `path` (full package path or shorthand from listAvailable)
+- **listAvailable** — installable package paths on this server (server-wide catalog; any accessible `account_id` works)
+- **install** — install `path` (full package path or shorthand from listAvailable). One call per account. Unique packages reuse the existing row
 - **settings** — catalog grouped by plugin path: `path`, `name`, `plugin.instances`, JSON Schema `form`, `settings[]` (`type`, `description`, `values`, `default`, current `value`). Optional `path` / `plugin_id`. Hidden settings omitted unless `include_hidden: true`. Compile failures go in `errors` (call still succeeds)
 - **setSetting** — update one warehouse value. Required: `plugin_id`, `name`. Validates `values` / type when the package declares that name
+
+Example — install:
+
+```json
+{
+  "command": "install",
+  "account_id": "<account_id>",
+  "path": "@engine9/plugins/models/deployment/v2026_09_16"
+}
+```
 
 Example — settings UI catalog:
 
@@ -285,7 +304,7 @@ Example — update a declared setting:
 }
 ```
 
-HTTP: `GET /data/settings`, `POST /data/settings`. Authoring: [create-engine9-plugin](../create-engine9-plugin/SKILL.md#settings).
+HTTP: `GET /data/settings`, `POST /data/settings`. Fleet install: [e9-plugin](../e9-plugin/SKILL.md). Authoring: [create-engine9-plugin](../create-engine9-plugin/SKILL.md#settings).
 
 ### `search`
 
@@ -388,10 +407,12 @@ HTTP: `GET /data/reports`, `GET /data/reports/get?path=`, `GET|POST /data/report
 
 ### `timelinePerson`
 
-Account- or person-level **current-identity** timeline + model inspect (`ModelWorker.inspectPerson`) and source-code model compare (`compareSourceCodes`). SQL lives on the server; prefer this over ad-hoc SQL. The conductor Timeline artifact is a shell over `command: inspect`; `/models` is a shell over `command: compareSourceCodes`. There is no separate `auditPeople` tool — inspect includes those aggregations.
+Account- or person-level **current-identity** timeline + model inspect (`ModelWorker.inspectPerson`) and source-code model compare (`compareSourceCodes`). SQL lives on the server; prefer this over ad-hoc SQL. The conductor Timeline artifact is a shell over `command: inspect`; `/models` is a shell over `command: compareSourceCodes`. There is no separate `auditPeople` tool — inspect includes those **current** aggregations.
+
+Rule: `inspect` never loads `timeline_v3*`. Call **`timelinePersonLegacy`** for legacy tables. Current vs legacy contract: [e9-timeline — MCP: current vs legacy](../e9-timeline/SKILL.md#mcp-current-timeline-vs-legacy-timeline).
 
 - Required: `account_id`
-- **command: inspect** (default) — omit `emails` / `person_ids` / `source_codes` for an account-wide load (entry-type min/max/count, identity table counts, transaction min/max, model_* counts). `person_ids` is a number, string, or array of either (warehouse `person.id` is an integer — do not stringify). Optional `source_codes` (comma-delimited; `%` is LIKE) filters those queries. Person or source filters also load capped timeline detail and, with a person, `model_*_person`. Pass `legacy: true` to also load `timeline_v3` min/max/count, `person_model_source_code` totals, `transaction_model_source_code`, and person-level `timeline_v3_summary` when email is present (opt-in; future deployments will drop this). Missing tables are skipped. Do not join `person.id` to `person_id_int`.
+- **command: inspect** (default) — omit `emails` / `person_ids` / `source_codes` for an account-wide load (entry-type min/max/count, identity table counts, transaction min/max, model_* counts). `person_ids` is a number, string, or array of either (warehouse `person.id` is an integer — do not stringify). Optional `source_codes` (comma-delimited; `%` is LIKE) filters those queries. Person or source filters also load capped timeline detail and, with a person, `model_*_person`. Missing tables are skipped. Do not join `person.id` to `person_id_int`.
 - **command: compareSourceCodes** — all current `model_*_stats` by source code (`person_count`, `revenue`, `transactions`). Omit `source_codes` to union each model's top 10 by people and by revenue. When both the current first-touch model and legacy first touch are deployed (and `legacy: true`), also unions the top 10 source codes by absolute person_count difference. Pass `legacy: true` to also include `transaction_model_pivot` stems (first_touch, crm_origin, last_acquisition, plus **custom legacy models** when those `{stem}_*` columns exist). Optional `models` subset. Returns `sql` for top-N selection and per-model stats.
 - **command: compareSourceCodesLegacy** — same-stem pivot vs current delta. `source_codes` required (comma-delimited; `%` is LIKE). Custom legacy models are included when present on the pivot table.
 - **command: summarizeSourceCodesLegacy** — pivot rows only. `source_codes` required. Same custom-legacy discovery as compare.
@@ -416,12 +437,6 @@ Example — person inspect by numeric `person.id`:
 { "account_id": "test", "person_ids": 1517 }
 ```
 
-Example — person inspect with legacy tables:
-
-```json
-{ "account_id": "test", "emails": "user@example.com", "legacy": true }
-```
-
 Example — auto top source codes across current models:
 
 ```json
@@ -432,6 +447,28 @@ Example — specified source codes, with legacy pivot:
 
 ```json
 { "account_id": "test", "command": "compareSourceCodes", "source_codes": "EM_%,MAIL", "legacy": true }
+```
+
+### `timelinePersonLegacy`
+
+Legacy-identity timeline inspect (`ModelWorker.inspectPersonLegacy`). **Separate tool** from `timelinePerson` so the UI can load it independently (or not at all) and so it can be unregistered later.
+
+- Required: `account_id`
+- Optional: `emails`, `person_ids` (current `person.id` — email lookup only), `source_codes`, `row_limit`, `people_limit`
+- Account-wide: `timeline_v3` min/max/count, `person_model_source_code` totals, `transaction_model_source_code`
+- With email: person-level `timeline_v3_summary` / `person_model_source_code`. Type column is **`entry_type_label`**
+- Do not join `person.id` to `person_id_int`. Future deployments will drop this tool.
+
+Example — person legacy timeline:
+
+```json
+{ "account_id": "test", "emails": "user@example.com" }
+```
+
+Example — account-wide legacy aggregations:
+
+```json
+{ "account_id": "test" }
 ```
 
 ### `segment`
@@ -503,7 +540,7 @@ Canonical store: ACCOUNT_REGISTRY D1. KV: `DOMAINS_KV` + `DOMAIN_API_KEYS`.
 
 ### `eql`
 
-Runs a SELECT built from an EQL object and returns generated SQL plus query rows.
+Runs a SELECT built from an EQL object and returns generated SQL plus query rows. Hard-capped at **10000** rows: a missing or larger `eql.limit` is rewritten before execution. Responses include `max_rows` and `truncated`.
 
 - Required: `account_id`, `eql` (query object with `table`, `columns`, `conditions`, etc.)
 
@@ -517,7 +554,7 @@ Realtime SQL and schema introspection via `SQLWorker` (replaces the former `work
 
 | command | Purpose |
 |---------|---------|
-| `query` (default when `sql` is set) | Execute a single SQL statement |
+| `query` (default when `sql` is set) | Execute a single SQL statement. SELECT/WITH are hard-capped at **10000** rows (`LIMIT` rewritten before execution); `truncated` when the cap is hit |
 | `describe` | Column schema for `table` |
 | `indexes` | Indexes for `table` |
 | `tables` (default when `sql` omitted) | List/filter table names (`filter`, `includeTemp`, …) |
@@ -651,6 +688,8 @@ For account-specific plugins (RENxt, …), discover `path` + `method` from MCP `
 
 ## Fallback workflow: no native match → `account` → `task`
 
+**Rule:** Installing a package is a native match. Use MCP `plugin` `install` ([e9-plugin](../e9-plugin/SKILL.md)). Do not enter this fallback.
+
 When the user's request does not map cleanly to a native tool:
 
 1. **Ensure account scope** — `account_id` must be known from **this chat session** (`engine9.account_id` after `/e9a`), an explicit user statement, or MCP `account` search when the user asked you to find matching accounts. If missing, **ask the user** or suggest `/e9a <account_id>` and stop — do not read leftover CLI files or compiled account catalogs for scope. If you only know org/prefix/plugin constraints and the user wants discovery, call `account` with `command: "search"` first. If search returns no accounts, **stop** — do not look up ids on disk.
@@ -707,7 +746,7 @@ When the user asks for **all accounts**, **parent** children, or other multi-acc
 - Do **not** call `account` plugins (or any account-DB worker) once per child to “check access”.
 - Do **not** use the first id in a parent/all list as a required DB-connected `account_id` before the remote list.
 - Drive the request with remote multi-account filters (`parent_account_id`, `account_ids`, etc.) and status filters. Use Prefect `state_type` values only (`FAILED`, `RUNNING`, `COMPLETED`, `PAUSED`, …). Legacy Mongo tokens (`complete`, `error`, `in_progress`) are **rejected with 422**. Account database connectivity is not a prerequisite for remote-legacy flow-run list reads.
-- The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `search`, `timelinePerson`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
+- The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `search`, `timelinePerson`, `timelinePersonLegacy`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
 - Listing is one request. **Counting or metrics** for those runs is also one request (`task` `action: "count"` / `"metrics"` — same `parent_account_id` / `account_ids`). **Archiving or bulk-retrying** those runs is also one request: reuse the same `parent_account_id` / `account_ids` and send every `flow_run_id` together ([bulk archive](#bulk-archive--retry-of-flow-runs)). Do **not** fan out one MCP call per child.
 
 ### `task` action `list` — remote flow runs
@@ -831,6 +870,7 @@ After [Step 0 — Log in](#step-0--log-in-always-first):
 | Topic | Documentation |
 |-------|---------------|
 | How MCP lists accounts (flat `parent_ids`) | [server/api/mcp/accounts.md](../../server/api/mcp/accounts.md) |
+| Install plugins on accounts | [e9-plugin](../e9-plugin/SKILL.md) |
 | Cursor setup and `/e9` commands | [e9-cli](../e9-cli/SKILL.md) |
 | API-key creation and scope rules | [e9-api-key](../e9-api-key/SKILL.md) |
 | Direct HTTP task and flow execution | [e9-tasks-api](../e9-tasks-api/SKILL.md) |

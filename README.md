@@ -6,6 +6,7 @@ This directory contains public skills for working with engine9 deployments, data
 
 | Task | Skill |
 | --- | --- |
+| Install a plugin on accounts | [Plugin install](e9-plugin/SKILL.md) |
 | Build an interface or plugin | [Create plugin or interface](create-engine9-plugin/SKILL.md) |
 | Connect Cursor and choose account scope | [CLI](e9-cli/SKILL.md) |
 | Select and call MCP tools | [MCP](e9-mcp/SKILL.md) |
@@ -36,9 +37,10 @@ When using an engine9 MCP server, discover plugins, methods, and tool parameters
 
 | Skill | Path | Use when |
 | --- | --- | --- |
+| Plugin install | [e9-plugin/SKILL.md](e9-plugin/SKILL.md) | Deploy a package path onto one account or all children of a parent via MCP `plugin` |
 | Create plugin or interface | [create-engine9-plugin/SKILL.md](create-engine9-plugin/SKILL.md) | Implement `@engine9/interfaces/*` packages and `@engine9/plugins/*` native plugins |
 | CLI and account scope | [e9-cli/SKILL.md](e9-cli/SKILL.md) | Connect Cursor to engine9 MCP, choose account scope, search, or schedule tasks |
-| MCP tools | [e9-mcp/SKILL.md](e9-mcp/SKILL.md) | Select native MCP tools, discover accounts, or use task fallback |
+| MCP tools | [e9-mcp/SKILL.md](e9-mcp/SKILL.md) | Select native MCP tools, discover accounts, install plugins, or use task fallback |
 | API keys | [e9-api-key/SKILL.md](e9-api-key/SKILL.md) | Manage generic non-session `e9key_` authentication and scopes for forms, inbound APIs, and Task API |
 | EQL | [e9-eql/SKILL.md](e9-eql/SKILL.md) | Write engine9 Query Language expressions and query objects or call MCP `eql` |
 | Task API | [e9-tasks-api/SKILL.md](e9-tasks-api/SKILL.md) | Schedule predefined flows by `flow_id` or on-demand tasks by `path` and `method` over REST |
@@ -60,6 +62,7 @@ When using an engine9 MCP server, discover plugins, methods, and tool parameters
 
 ## Related documentation
 
+- [Install plugins on accounts](e9-plugin/SKILL.md)
 - [MCP-only discovery](e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code)
 - [API key management UI](e9-api-key/ui.md)
 - [Export building](e9-export/building.md)

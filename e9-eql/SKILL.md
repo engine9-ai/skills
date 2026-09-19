@@ -48,7 +48,7 @@ Prefer **`eql`** over raw SQL when the user is describing a structured query (ta
 }
 ```
 
-5. **Read the response** — `{ ok: true, sql, data, columns }`. The generated `sql` is useful for debugging; `data` / `columns` are the rows.
+5. **Read the response** — `{ ok: true, sql, data, columns, max_rows, row_count, truncated }`. The generated `sql` is useful for debugging; `data` / `columns` are the rows. MCP hard-caps at **10000** rows.
 
 Rule: On MCP errors (`isError`, unauthorized, or database unreachable), stop.
 Do not retry with `sql` or `task` as a workaround.
@@ -84,7 +84,7 @@ Returns a cleaned SQL fragment and `refsByTable`. Do **not** use the `eql` tool 
 | `conditions` | no | AND’d WHERE clauses |
 | `groupBy` | no | Group expressions / columns |
 | `orderBy` | no | Columns or `{ column, orderByDirection }` (`asc`/`desc`) |
-| `limit` / `offset` | no | Pagination |
+| `limit` / `offset` | no | Pagination. MCP `eql` defaults `limit` to **10000** and will not exceed that |
 | `joins` | no | `{ table, join_eql, alias?, type? }` — `type`: `inner` (default), `left`, `right`, `outer` |
 | `subquery` | no | Nested EQL object; outer `table` is the alias for the subquery |
 

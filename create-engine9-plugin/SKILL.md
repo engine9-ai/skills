@@ -5,17 +5,19 @@ description: >-
   native plugins (`@engine9/plugins/*`), including metadata, schemas, transforms,
   search, segments, metrics, reports, settings, UI configuration, and worker classes. Use
   when building plugin capabilities, wiring deployment schemas, or documenting
-  an engine9 interface or native plugin.
+  an engine9 interface or native plugin. Do not use this skill to install a
+  package onto accounts — use e9-plugin (MCP plugin install).
 ---
 
 # Create an engine9 plugin or interface
 
-engine9 separates shared data contracts, called interfaces, from deployable integrations, called native plugins. Both are Node ESM modules resolved by package path from `node_modules`, a monorepo sibling checkout, or an optional install `source`; they never require a `local$` path prefix. Use this skill when adding or extending an interface, native plugin, transform, search handler, segment, report, settings, or deployment schema.
+engine9 separates shared data contracts, called interfaces, from deployable integrations, called native plugins. Both are Node ESM modules resolved by package path from `node_modules`, a monorepo sibling checkout, or an optional install `source`; they never require a `local$` path prefix. Use this skill when adding or extending an interface, native plugin, transform, search handler, segment, report, settings, or deployment schema. To **install** an existing package onto accounts, use [e9-plugin](../e9-plugin/SKILL.md).
 
 ## Quick reference
 
 | Need | Contract or location |
 | --- | --- |
+| Install a package on accounts | [e9-plugin](../e9-plugin/SKILL.md) — MCP `plugin` `install`, not this skill |
 | Shared schema or reusable behavior | `@engine9/interfaces/<name>` |
 | Deployable integration | `@engine9/plugins/<prefix>` |
 | Transform capability | `<package>:transforms:<name>` |
@@ -411,6 +413,7 @@ Thin, schema-first interfaces are also valid. `message/index.js` exports only me
 
 ## Related documentation
 
+- [Install plugins on accounts](../e9-plugin/SKILL.md)
 - [Plugin resolver and registration reference](reference.md)
 - [engine9 MCP](../e9-mcp/SKILL.md)
 - [Report authoring](../e9-reports/SKILL.md)
