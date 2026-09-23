@@ -174,6 +174,6 @@ function mapRefund(row) {
 - [Canonical Transaction schema](https://frakture.notion.site/Frakture-Transactions-Data-442349ac436a4f7db8e7d732359e7d8f)
 - `interfaces/transaction/core/schema.js`
 - `interfaces/transaction/core/transforms/inbound/upsert_tables.js`
-- `interfaces/transaction/profile/schema.js`
+- `interfaces/transaction/contact_details/schema.js`
 - `input-tools/timelineTypes.js`
 - `TIMELINE_ENTRY_TYPES`

@@ -6,8 +6,9 @@ running `ModelWorker`, authoring a model plugin, and the internals behind both.
 Reminder that survives into code review: a **model** connects a person (and
 their transactions) to a timeline entry. **Attribution** connects a transaction
 to a **message** and is not a model ([e9-source-code](../e9-source-code/SKILL.md)).
-Never write `source_code_summary.origin_*` — those are the legacy origin
-implementation on the old identity.
+Never write `source_code_summary.origin_*` — those columns belong to the
+old-identity models in [legacy.md](legacy.md). Read that file only when the
+user explicitly asked for legacy.
 
 ## ModelWorker
 
@@ -31,10 +32,10 @@ await model.summarizePeople({ emails: 'a@example.com' });
 | `summarizeSourceCodes({ model })` | — | Read `{prefix}_person_stats` and `{prefix}_transaction_stats` (rollup by source code). Alias: `summarize` |
 | `summarizePeople({ emails / person_ids })` | — | UI inspect: timeline + stored rows from every available `model_*` table. Does **not** run models |
 | `inspectPerson({ emails / person_ids })` | — | Conductor / MCP `timelinePerson`: **current** `timeline` / `model_*` only. Never `timeline_v3*` |
-| `inspectPersonLegacy({ emails / person_ids })` | — | MCP `timelinePersonLegacy`: `timeline_v3_summary` / `person_model_source_code` (opt-in separate call; future deployments will drop this). SQL lives in `workers/model` |
-| `compareSourceCodes({ source_codes? })` | — | All current `model_*_stats` by source code. Omit `source_codes` to union each model's top 10 by people and by revenue. When both current first touch and legacy first touch are deployed, also unions the top 10 codes by absolute first-touch difference. Pass `legacy: true` to also include `transaction_model_pivot` (custom legacy models when present) |
+| `inspectPersonLegacy({ emails / person_ids })` | — | Legacy only. [legacy.md](legacy.md), and only when the user explicitly asked |
+| `compareSourceCodes({ source_codes? })` | — | All current `model_*_stats` by source code. Omit `source_codes` to union each model's top 10 by people and by revenue |
 | `loadStats({ model })` | Rebuilds those stats tables | After a manual SQL edit |
-| `summarizePeopleLegacy` / `comparePeopleLegacy` / `summarizeSourceCodesLegacy` / `compareSourceCodesLegacy` | — | Legacy identity only — see [Legacy (old identity)](#legacy-old-identity) |
+| `summarizePeopleLegacy` / `comparePeopleLegacy` / `summarizeSourceCodesLegacy` / `compareSourceCodesLegacy` | — | Legacy only. [legacy.md](legacy.md), and only when the user explicitly asked |
 
 `summarizeSourceCodes` / `loadStats` also accept `prefix: 'model_first_touch'`.
 
@@ -202,7 +203,10 @@ lifetime `_stats` tables, and the two `_stats_by_date` tables. Do not rely on
 `plugin.table_prefix` — that gets a per-install counter.
 
 Plugin identity: `@engine9/plugins/models/my_model`, or `engine9-accounts/...`
-for an account-specific model.
+for an account-specific model. Export `search` from
+`createModelSearches({ prefix, label })` so the UI catalog includes
+`personSourceCode` and `transactionSourceCode`. Form contract:
+[SKILL.md — Person search](SKILL.md#person-search).
 
 **Person transform.** Input `batch[]` is `{ person_id, timelineEntries }`.
 Entries already carry `entry_type` and dictionary labels when the source
@@ -277,19 +281,19 @@ MCP `timelinePerson` and the conductor Timeline & Models artifact. **Current
 identity only**: `timeline` and `model_*_person`. Timeline rows expose
 `effective_date` (= `ts`). Never reads `timeline_v3*`.
 
-Call **`inspectPersonLegacy`** / MCP **`timelinePersonLegacy`** for
-`legacy.js` (`timeline_v3_summary` / `person_model_source_code`) and
-`section: 'legacy'` tables. Separate tool so the UI can load it independently
-or unregister it. Conductor opts in via `TIMELINE_PERSON_INCLUDE_LEGACY` in
-`defs/timelinePerson.ts`, which fires the second MCP call — delete that flag
-to drop the UI.
+`inspectPersonLegacy` / MCP `timelinePersonLegacy` is a separate call. Use it
+only when the user explicitly asked for legacy; the contract is
+[legacy.md](legacy.md).
 
 ```javascript
 const { queried, tables, person_ids, emails } = await model.inspectPerson({
   emails: 'a@example.com'
 });
-const legacy = await model.inspectPersonLegacy({ emails: 'a@example.com' });
 ```
+
+Account-wide (no identity filter) defaults timeline activity to the last 7 days
+(`start: '-7d'`) unless `start` / exclusive `end` are passed. Conductor’s
+Timeline and Models FilterBar presets Previous 7 days via `dateRange`.
 
 `tables[]` entries have `status` `ok` / `skipped` / `error`. Current tables:
 `timeline`, `models`. Emails are the only identity bridge; `person.id` is never
@@ -310,67 +314,28 @@ artifact. It reads **every** current `model_*_person_stats` /
 
 When `source_codes` is omitted, each model contributes its **top 10 source codes
 by `person_count` and top 10 by `revenue`**; the comparison uses the union.
-When both `model_first_touch_*` and `transaction_model_pivot.first_touch_*` are
-deployed (and `legacy: true`), the union also includes the **top 10 source codes
-by absolute first-touch difference** (`person_count`, or `revenue` if only
-transaction stats exist). Tokens containing `%` use SQL `LIKE`. Pass
-`legacy: true` to also read `transaction_model_pivot`. That table always has the
-three shipped stems;
-**custom legacy models** appear as extra `{stem}_*` columns on some accounts
-and are included only when present.
+Tokens containing `%` use SQL `LIKE`.
 
 ```javascript
 const auto = await model.compareSourceCodes();
-const specified = await model.compareSourceCodes({ source_codes: 'EM_%,MAIL', legacy: true });
+const specified = await model.compareSourceCodes({ source_codes: 'EM_%,MAIL' });
 ```
 
-## Legacy (old identity)
+Pivot columns, `legacy: true`, and `compareSourceCodesLegacy` are in
+[legacy.md](legacy.md). Read that file only when the user explicitly asked for
+legacy models.
 
-Legacy reads live only in `workers/model/legacy.js` — keep them out of the
-current `{prefix}_*` path. These tables were computed against the old identity
-model ([e9-person-id](../e9-person-id/SKILL.md#old-identity-model-person_metadata-person_id_int-timeline_v3-transaction_metadata)):
-`person_model_source_code_summary`, `timeline_v3_summary`,
-`transaction_model_source_code`, `transaction_model_pivot`, `person_metadata`,
-`transaction_metadata`, and the `source_code_summary.origin_*` columns.
+## Legacy models
 
-Rules that cause real bugs when ignored:
-
-- **`person_id_int` is not `person.id`.** `person_metadata` generates
-  `person_id_int` from the legacy `person_id` string (a hash, sometimes an
-  email). Never join it to current `person.id`.
-- Legacy timeline inspect reads **`timeline_v3_summary`**, where the type column
-  is **`entry_type_label`** — current `timeline` stores `entry_type_id` and
-  current plugin summaries add `entry_type`. Do not SELECT `entry_type` there.
-- `emails` is the only bridge: `person_email` → current `person.id`; SHA-256 of
-  the trimmed lowercase email (`email_hash_v1`) → `person_metadata.person_id`;
-  if the hash misses, try the email string on that column.
-
-```javascript
-const legacy = await model.summarizePeopleLegacy({
-  person_ids: '1d0cbfeb8a0d6e5606317f9493460d1fbcd4b531f583eba01ba5c7eed9e2e292'
-});
-const compared = await model.comparePeopleLegacy({ emails: 'user@example.com' });
-```
-
-`comparePeopleLegacy` pairs current vs legacy by email (hash first), or takes
-explicit `person_ids` + `legacy_person_ids`. Person `match` is source_code
-equality (empty ≡ missing). Missing legacy tables are skipped.
-
-`summarizeSourceCodesLegacy({ source_codes })` returns `transaction_model_pivot`
-rows only. `compareSourceCodesLegacy({ source_codes })` is the older same-stem
-pivot-vs-current **delta** (`{ legacy, current, delta, match }` per metric) for
-the shipped `first_touch`, `crm_origin`, and `last_acquisition` stems plus any
-**custom legacy models** present as extra `{stem}_*` columns; `source_codes` is
-required there. Comma-delimited, `%` is `LIKE`. Future deployments will drop the
-pivot table.
-
-Legacy `model_id` labels match the console CASE: 1 First Touch, 2 CRM Origin,
-8 Last Channel Acquisition. Account-specific model ids that the CASE does not
-name fall through to the raw id.
+Old-identity scores, the legacy person-search handler, and pivot comparisons
+are in [legacy.md](legacy.md). Read that file only when the user explicitly
+asked for legacy models. Keep those reads out of the current `{prefix}_*` path.
+`person_id_int` is not `person.id`.
 
 ## Additional resources
 
-- Concepts, LTV / ROI reads, attribution boundary: [SKILL.md](SKILL.md)
+- Concepts, LTV / ROI reads, attribution boundary, current person search: [SKILL.md](SKILL.md)
+- Legacy models (only when the user explicitly asked): [legacy.md](legacy.md)
 - Table DDL and payload shapes: [schema.md](schema.md)
 - Timeline entries and loading: [e9-timeline](../e9-timeline/SKILL.md)
 - Source codes and attribution: [e9-source-code](../e9-source-code/SKILL.md)

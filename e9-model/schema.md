@@ -241,22 +241,22 @@ Timeline context joins: `timeline.source_code_id` → `source_code_summary` (fal
 
 ## Legacy inspect
 
-`summarizePeopleLegacy` / `comparePeopleLegacy` live in `server/workers/model/legacy.js`. They read the old identity tables (`person_model_source_code_summary`, `timeline_v3_summary`, `transaction_model_source_code`, `person_metadata`, `transaction_metadata`) and do not write `{prefix}_*`.
+Old-identity inspect (`summarizePeopleLegacy`, `comparePeopleLegacy`,
+`timeline_v3_summary`, `person_model_source_code`) is in
+[legacy.md](legacy.md). Read that file only when the user explicitly asked for
+legacy models.
 
-Person inspect of the legacy activity log uses **`timeline_v3_summary`**, not base `timeline_v3` and not current `timeline`. The type column on that view is **`entry_type_label`**, not `entry_type`. Current `timeline` stores `entry_type_id`; current plugin `*_summary` views add string `entry_type`. Do not SELECT `entry_type` from `timeline_v3_summary`.
-
-**Do not join `person_id_int` to `person.id`.** `person_metadata` generates `person_id_int` from the legacy `person_id` string. Current models use bigint `person.id`. Pair via `emails` (`person_email` + SHA-256 on `person_metadata.person_id`, email string as fallback) or explicit `person_ids` + `legacy_person_ids`.
-
-Legacy `model_id` 1, 2, and 8 map to `model_first_touch`, `model_crm_origin`, and `model_last_acquisition`. Account-specific model ids the console CASE does not name fall through to the raw id.
+Rule: `person_id_int` is not `person.id`. Do not join them. The type column on
+`timeline_v3_summary` is `entry_type_label`.
 
 ## inspectPerson (conductor tables)
 
-`ModelWorker.inspectPerson` (`server/workers/model/inspect.js`) is **current-identity only** (`timeline`, `model_*_person`). MCP tool **`timelinePerson`**. Timeline rows add **`effective_date`** = `timeline.ts` (resolved at load time — see [SKILL.md §5](SKILL.md#5-the-effective-date-of-an-entry)). Legacy `timeline_v3_summary` / `person_model_source_code` is a **separate** call: `ModelWorker.inspectPersonLegacy` / MCP **`timelinePersonLegacy`** (opt-in; not in future deployments). Missing tables are `skipped`. Emails bridge identity; `person.id` is never joined to `person_id_int`. Conductor currently sets `TIMELINE_PERSON_INCLUDE_LEGACY = true` in one place to fire the second tool. Returns top-level **`sql`**: `[{ id, sql, error, table? }]` for every statement this request ran.
+`ModelWorker.inspectPerson` (`server/workers/model/inspect.js`) is **current-identity only** (`timeline`, `model_*_person`). MCP tool **`timelinePerson`**. Timeline rows add **`effective_date`** = `timeline.ts` (resolved at load time — see [SKILL.md](SKILL.md#effective-date-of-an-entry)). `inspectPersonLegacy` / MCP **`timelinePersonLegacy`** is a separate call documented in [legacy.md](legacy.md); use it only when the user explicitly asked for legacy. Missing tables are `skipped`. Emails bridge identity; `person.id` is never joined to `person_id_int`. Returns top-level **`sql`**: `[{ id, sql, error, table? }]` for every statement this request ran.
 
 ## compareSourceCodes (all current models)
 
-`ModelWorker.compareSourceCodes` (`server/workers/model/compare.js`) lists every `model_*_stats` table and returns one row per source code with that model's person_count / revenue / transactions. MCP **`timelinePerson` `command: compareSourceCodes`**. Omit `source_codes` to union each model's top 10 by people and by revenue. When both the current first-touch model and legacy first touch are deployed, also unions the top 10 codes by absolute person_count difference (`top` key `first_touch_vs_legacy`). Pass `legacy: true` to also include `transaction_model_pivot` stems (opt-in; conductor currently sets `MODEL_COMPARE_INCLUDE_LEGACY = true`). Custom legacy models are extra `{stem}_*` columns on that table and are included only when present. Returns top-level **`sql`** for the top-N selection queries and each model's stats SELECT.
+`ModelWorker.compareSourceCodes` (`server/workers/model/compare.js`) lists every `model_*_stats` table and returns one row per source code with that model's person_count / revenue / transactions. MCP **`timelinePerson` `command: compareSourceCodes`**. Omit `source_codes` to union each model's top 10 by people and by revenue. Returns top-level **`sql`** for the top-N selection queries and each model's stats SELECT. Pivot stems and `legacy: true` are in [legacy.md](legacy.md), and only when the user explicitly asked for legacy.
 
 ## transaction_model_pivot vs model_*_stats
 
-`compareSourceCodesLegacy` / `summarizeSourceCodesLegacy` (`server/workers/model/compare.js`) are **opt-in** same-stem reads of the legacy pivot vs current `{prefix}_*_stats`. They are not the `/models` artifact. Shipped pivot stems: `first_touch`, `crm_origin`, `last_acquisition`. Some accounts also have **custom legacy models** as additional `{stem}_*` columns; those are discovered from the table and omitted when absent. Shared metrics: `person_count`, `transactions`, `revenue`, `refund_count`, `refund_amount`, `transaction_unique_person`. Pivot also has `incipient_*` (legacy only). `source_codes` is required; tokens with `%` use `LIKE`. Future deployments will drop the pivot table.
+`compareSourceCodesLegacy` / `summarizeSourceCodesLegacy` and `transaction_model_pivot` are the old-identity comparison. The contract, including custom `{stem}_*` columns, is in [legacy.md](legacy.md). Read that file only when the user explicitly asked for legacy models.

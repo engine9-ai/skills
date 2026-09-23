@@ -170,11 +170,11 @@ When an account or parent is not found, do NOT dig deeper into compiled account 
 | Plugin settings (types, descriptions, current values), grouped by plugin | MCP `plugin` `command: "settings"` (`PluginWorker.listSettings`) |
 | Schema / tables / indexes / raw SQL | MCP `sql` (`command`: query, describe, indexes, tables, info, histo, compile_eql) |
 | Schedule or check async work | MCP `task`: on-demand = `path`+`method` (`@engine9/plugins/e9workers:EchoWorker` needs no `account` lookup); predefined flow = `flow_id` slug |
-| Analyze / summarize / profile table contents | MCP `analyze` (uses `tables` then `analyze`) |
+| Analyze / summarize table contents (min, max, distinct, samples) | MCP `analyze` (uses `tables` then `analyze`; optional `target_buckets`) |
 | Account / person current timeline + identity / model health | MCP `timelinePerson` (`command: inspect`) |
 | Account / person **legacy** `timeline_v3*` inspect | MCP `timelinePersonLegacy` (separate tool; not `inspect` + `legacy`) |
-| Compare current (and opt-in legacy, including custom legacy models) model scores by source code | MCP `timelinePerson` (`command: compareSourceCodes`) |
-| Date histogram on indexed datetime column | MCP `sql` with `command: "histo"` |
+| Compare current `model_*_stats` by source code | MCP `timelinePerson` (`command: compareSourceCodes`). Legacy pivot: [e9-model/legacy.md](../e9-model/legacy.md), only when the user explicitly asked for legacy |
+| Date histogram on a datetime column (index optional) | MCP `sql` with `command: "histo"` |
 | List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
 
 If a path, method, or option is not present in MCP responses, report that to the user — do not guess from local code.
@@ -194,16 +194,18 @@ If a path, method, or option is not present in MCP responses, report that to the
 | List plugin settings (types, descriptions, current values) grouped by plugin | `plugin` with `command: "settings"` |
 | Install a plugin on one account or a parent’s children | `plugin` `install` — [e9-plugin](../e9-plugin/SKILL.md). Do not use `task` |
 | Search people by email, phone, name, or id | `search` |
+| Search people in or out of a current model by source code | `search` with a `searchOptions` clause — [e9-model — Person search](../e9-model/SKILL.md#person-search) |
+| Search people in a legacy model and out of the current model | [e9-model/legacy.md](../e9-model/legacy.md) — only when the user explicitly asked for legacy |
 | List available person-search form options for an account | `searchOptions` |
 | Account / person current timeline + identity / model health | `timelinePerson` (`command: inspect`) |
 | Account / person **legacy** `timeline_v3*` inspect | `timelinePersonLegacy` |
-| Compare current `model_*_stats` (and opt-in pivot, including custom legacy models) by source code | `timelinePerson` with `command: "compareSourceCodes"` |
+| Compare current `model_*_stats` by source code | `timelinePerson` with `command: "compareSourceCodes"`. Legacy pivot: [e9-model/legacy.md](../e9-model/legacy.md), only when the user explicitly asked for legacy |
 | List segments, load segment detail, or schedule segment builds | `segment` |
 | List or run reports (plugin `path` or portable JSON `definition`; filters, date range) | `report` (`list` first for plugins; `run` with `path` or `definition`) |
 | Read or schedule account warehouse inventory | `inventory` (`get` first; `build` only if not ready) |
 | Create accounts / manage domains or domain secrets | e9-account Worker (`cloud-services/e9-account`) — not MCP |
 | Run a SQL/EQL query | `eql` / `sql` (`command: "query"` or omit when `sql` is set) |
-| Analyze / summarize / profile a table | `analyze` |
+| Analyze / summarize a table | `analyze` |
 | Describe tables, indexes, list tables, histo | `sql` with `command: "describe"` / `"indexes"` / `"tables"` / `"histo"` |
 | Compute plugin or input UUIDs | `plugin_id`, `input_id` |
 | Chat / conversation history | `chat` |
@@ -341,14 +343,28 @@ Example — plugin clause from `searchOptions`:
 
 For `/e9 search …` token parsing (emails vs person_ids vs names), see [e9-cli — `/e9 search` parsing rules](../e9-cli/SKILL.md#e9-search-parsing-rules).
 
+### Model source-code membership
+
+People in or out of a **current** model for a source code use the installed model's `searchOptions` handlers, not ad-hoc SQL. Full paths, forms, and the include/exclude tree: [e9-model — Person search](../e9-model/SKILL.md#person-search).
+
+| Intent | Clause |
+| --- | --- |
+| In the model's person credit for a code | `{ path: "@engine9/plugins/models/<model>:search:personSourceCode", options: { sourceCode } }` |
+| Out of that credit | Same clause with `exclude: true` |
+| In person credit vs has a credited transaction | `personSourceCode` vs `transactionSourceCode` — different handlers |
+
+`<model>` is `first_touch`, `crm_origin`, or `last_acquisition`. `sourceCode` containing `%` is `LIKE`. `exclude` is set on the clause; it is not a form property.
+
+Rule: People in a **legacy** model for a source code, and out of the matching current model, are [e9-model/legacy.md](../e9-model/legacy.md). Read that file only when the user explicitly asked for legacy models. Do not add `@engine9/plugins/models/legacy:search:personSourceCode` otherwise, even if `searchOptions` lists it.
+
 ### `searchOptions`
 
-Per-account catalog of person-search options for building a UI form. Call this before constructing advanced plugin searches; submit resulting `{ path, options }` clauses to `search` (or `POST /data/search`).
+Per-account catalog of person-search options for building a UI form. Call this before constructing advanced plugin searches; submit resulting `{ path, options }` clauses to `search` (or `POST /data/search`). Set `exclude: true` on a clause for people outside that handler; `exclude` is not a form field.
 
 - Required: `account_id`
 - Returns: `{ ok: true, account_id, standard, searches, errors }`
   - `standard` — fixed filters (`emails`, `phones`, `given_names`, `last_names`, `person_ids`, `limit`) as JSON Schema
-  - `searches` — handlers from **installed** plugins: `path`, `title`, canonical `form`, `plugin.instances`
+  - `searches` — handlers from **installed** plugins: `path`, `title`, canonical `form`, `plugin.instances`. Current model source-code forms (`personSourceCode`, `transactionSourceCode`) are in [e9-model — Person search](../e9-model/SKILL.md#person-search). The legacy model form is in [e9-model/legacy.md](../e9-model/legacy.md) and is used only when the user explicitly asked for legacy.
   - `errors` — per-plugin compile failures (does not fail the whole call)
 
 Example:
@@ -412,10 +428,10 @@ Account- or person-level **current-identity** timeline + model inspect (`ModelWo
 Rule: `inspect` never loads `timeline_v3*`. Call **`timelinePersonLegacy`** for legacy tables. Current vs legacy contract: [e9-timeline — MCP: current vs legacy](../e9-timeline/SKILL.md#mcp-current-timeline-vs-legacy-timeline).
 
 - Required: `account_id`
-- **command: inspect** (default) — omit `emails` / `person_ids` / `source_codes` for an account-wide load (entry-type min/max/count, identity table counts, transaction min/max, model_* counts). `person_ids` is a number, string, or array of either (warehouse `person.id` is an integer — do not stringify). Optional `source_codes` (comma-delimited; `%` is LIKE) filters those queries. Person or source filters also load capped timeline detail and, with a person, `model_*_person`. Missing tables are skipped. Do not join `person.id` to `person_id_int`.
-- **command: compareSourceCodes** — all current `model_*_stats` by source code (`person_count`, `revenue`, `transactions`). Omit `source_codes` to union each model's top 10 by people and by revenue. When both the current first-touch model and legacy first touch are deployed (and `legacy: true`), also unions the top 10 source codes by absolute person_count difference. Pass `legacy: true` to also include `transaction_model_pivot` stems (first_touch, crm_origin, last_acquisition, plus **custom legacy models** when those `{stem}_*` columns exist). Optional `models` subset. Returns `sql` for top-N selection and per-model stats.
-- **command: compareSourceCodesLegacy** — same-stem pivot vs current delta. `source_codes` required (comma-delimited; `%` is LIKE). Custom legacy models are included when present on the pivot table.
-- **command: summarizeSourceCodesLegacy** — pivot rows only. `source_codes` required. Same custom-legacy discovery as compare.
+- **command: inspect** (default) — omit `emails` / `person_ids` / `source_codes` for an account-wide load (entry-type min/max/count, identity table counts, transaction min/max, `model_*_person` / `model_*_transaction` counts — not `*_stats`). Person-scoped (`person_ids` / `emails`) returns timeline detail + `model_*_person` only and **skips** those account audit COUNTs. `person_ids` is a number, string, or array of either (warehouse `person.id` is an integer — do not stringify). Optional `source_codes` (comma-delimited; `%` is LIKE) filters those queries. Missing tables are skipped. Do not join `person.id` to `person_id_int`.
+- **command: compareSourceCodes** — all current `model_*_stats` by source code (`person_count`, `revenue`, `transactions`). Omit `source_codes` to union each model's top 10 by people and by revenue. Optional `models` subset. Returns `sql` for top-N selection and per-model stats. Pivot stems and `legacy: true` are in [e9-model/legacy.md](../e9-model/legacy.md); use them only when the user explicitly asked for legacy.
+- **command: compareSourceCodesLegacy** — legacy pivot vs current. [e9-model/legacy.md](../e9-model/legacy.md). Only when the user explicitly asked for legacy.
+- **command: summarizeSourceCodesLegacy** — pivot rows only. [e9-model/legacy.md](../e9-model/legacy.md). Only when the user explicitly asked for legacy.
 
 All commands include top-level **`sql`**: `[{ id, sql, error, table? }]` — the statements executed for this request. Use that log when debugging inspect/compare results.
 
@@ -443,10 +459,10 @@ Example — auto top source codes across current models:
 { "account_id": "test", "command": "compareSourceCodes" }
 ```
 
-Example — specified source codes, with legacy pivot:
+Example — specified source codes:
 
 ```json
-{ "account_id": "test", "command": "compareSourceCodes", "source_codes": "EM_%,MAIL", "legacy": true }
+{ "account_id": "test", "command": "compareSourceCodes", "source_codes": "EM_%,MAIL" }
 ```
 
 ### `timelinePersonLegacy`
@@ -455,8 +471,8 @@ Legacy-identity timeline inspect (`ModelWorker.inspectPersonLegacy`). **Separate
 
 - Required: `account_id`
 - Optional: `emails`, `person_ids` (current `person.id` — email lookup only), `source_codes`, `row_limit`, `people_limit`
-- Account-wide: `timeline_v3` min/max/count, `person_model_source_code` totals, `transaction_model_source_code`
-- With email: person-level `timeline_v3_summary` / `person_model_source_code`. Type column is **`entry_type_label`**
+- Account-wide: `timeline_v3` min/max/count, `transaction_model_source_code`. `person_model_source_code` totals are skipped (no account-wide COUNT)
+- With email / person_ids / source_codes: `person_model_source_code` totals by model; with email also person-level `timeline_v3_summary` / `person_model_source_code`. Type column is **`entry_type_label`**
 - Do not join `person.id` to `person_id_int`. Future deployments will drop this tool.
 
 Example — person legacy timeline:
@@ -559,7 +575,7 @@ Realtime SQL and schema introspection via `SQLWorker` (replaces the former `work
 | `indexes` | Indexes for `table` |
 | `tables` (default when `sql` omitted) | List/filter table names (`filter`, `includeTemp`, …) |
 | `info` | Driver/dialect info |
-| `histo` | Date histogram on an indexed datetime column |
+| `histo` | Date histogram on a datetime column (index not required; default prefers indexed) |
 | `compile_eql` | EQL expression → SQL fragment (`eql` + `table`) |
 
 Examples:
@@ -575,23 +591,37 @@ There is **no** `worker_invoke` tool. Plugin methods still use `task` (async).
 
 ### `analyze`
 
-Analyzes (summarizes/profiles) table contents via `SQLWorker.analyze`. Returns `columns` (not deprecated `fields`) with types, min/max, distinct counts, and samples. When indexed datetime columns exist, histo buckets/min/max are merged onto those column objects (`bucket_column: true` on the column used for bucketing). Sample analysis and histo run in parallel.
+Analyzes table contents via `SQLWorker.analyze`. Prefer this over hand-written `MIN` / `MAX` / `COUNT(DISTINCT)` when the user wants a summary of a SQL table. Column-stat contract, sample limits, and the date-histogram overwrite rules: [e9-eql — Analyzing a table](../e9-eql/SKILL.md#analyzing-a-table).
 
 - Required: `account_id`, `table` (passed to `SQLWorker.tables({ filter })`)
-- Optional: `max_tables` (default 3, max 10)
+- Optional: `max_tables` (default 3, max 10), `target_buckets` (default 10; date histogram only)
 - Workflow:
   1. `tables({ filter })` — regex first; if no matches, language-token fallback on `filter`
   2. `analyze` on each matched table (sample + optional histo in parallel)
+
+Response: `{ ok, filter, matched_tables, analyzed_tables, truncated, analyses }`. Each analysis is `{ table, records, table_records, columns }`. `table_records` is `count(*)`. Column stats live on `columns`; histogram buckets are merged onto those same objects.
+
+| Column field | Meaning |
+|--------------|---------|
+| `name`, `type` | Column name and inferred type (`string`, `int`, `bigint`, `double`, `decimal`, `date`, `datetime`, `uuid`) |
+| `min`, `max` | Sample range. When a histogram runs, every datetime column is replaced with full-table SQL min/max |
+| `empty` | Null or missing values in the sample |
+| `distinct` | Distinct values seen in the sample |
+| `sample` | Up to 32 most frequent sample values (stringified) |
+| `min_length`, `max_length` | Present on string columns |
+| `buckets` | On datetime columns when a histogram runs: `{ range, start, end, records, min, max }` |
+| `bucket_column` | `true` on the histogram column (`ts`, then `created_at`, then `modified_at`, else the first indexed datetime leading column) |
+| `bucket_unit` | `day`, `week`, `month`, `quarter`, or `year` |
+
+Rule: `table_records` is `count(*)`. Sample `min` / `max` / `distinct` / `empty` / `sample` / `records` cover up to 10000 rows (5000 from the start plus 5000 highest primary-key rows when a primary key exists). They are not full-table aggregates. Histogram `MIN` / `MAX` and `buckets[].records` on datetime columns are full-table. `analyze` only auto-runs the histogram when an indexed datetime column exists; for unindexed dates use `sql` `command: "histo"` with an explicit `column`.
 
 Standalone date histograms: `sql` with `command: "histo"`. Schema-only: `sql` `describe` / `indexes` / `tables`.
 
 Example — user says "Summarize the ROI transaction table" → call `analyze`:
 
 ```json
-{ "account_id": "test", "table": "ROI transaction" }
+{ "account_id": "test", "table": "ROI transaction", "target_buckets": 10 }
 ```
-
-Prefer `analyze` over hand-written SQL when the user wants a table profile/summary.
 
 ### `plugin_id`
 
@@ -874,6 +904,6 @@ After [Step 0 — Log in](#step-0--log-in-always-first):
 | Cursor setup and `/e9` commands | [e9-cli](../e9-cli/SKILL.md) |
 | API-key creation and scope rules | [e9-api-key](../e9-api-key/SKILL.md) |
 | Direct HTTP task and flow execution | [e9-tasks-api](../e9-tasks-api/SKILL.md) |
-| EQL query syntax | [e9-eql](../e9-eql/SKILL.md) |
+| EQL query syntax and SQL table analysis (`analyze`) | [e9-eql](../e9-eql/SKILL.md) |
 | Plugin-installed reports | [e9-reports](../e9-reports/SKILL.md) |
 | Plugin settings (define + catalog) | [create-engine9-plugin](../create-engine9-plugin/SKILL.md#settings) |

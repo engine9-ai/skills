@@ -265,6 +265,8 @@ For tokenized arguments after `search`:
 
 When multiple values exist for a filter, pass them as arrays.
 
+People in or out of a current model by source code are not token filters. Call MCP `search` with a `search` tree from `searchOptions`. Paths and forms: [e9-model — Person search](../e9-model/SKILL.md#person-search). People in a legacy model for a source code and out of the matching current model: [e9-model/legacy.md](../e9-model/legacy.md), and only when the user explicitly asked for legacy.
+
 Example mapping for `/e9 search foo@bar.com 12345`:
 
 ```json

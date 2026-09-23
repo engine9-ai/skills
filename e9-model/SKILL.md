@@ -11,7 +11,10 @@ description: >-
   effective_date, default_timestamp, extract_timestamp, source_code_date,
   acquisition_date, SOURCE_CODE_OVERRIDE) that every model sorts by. Use when
   working with ModelWorker, model_*_person, model_*_transaction, lifetime value,
-  LTV, acquisition ROI, first touch, CRM origin, or reading/running a model.
+  LTV, acquisition ROI, first touch, CRM origin, reading/running a model, or
+  a person search for people in or out of a current model by source code
+  (searchOptions personSourceCode / transactionSourceCode). Legacy model
+  search is legacy.md and is used only when the user explicitly asks for legacy.
 ---
 
 # engine9 models
@@ -19,7 +22,9 @@ description: >-
 An engine9 model reads a person's timeline and assigns person-level source-code
 credit for questions such as lifetime value and acquisition ROI. Use this skill
 to understand shipped models, inspect model output, diagnose a person's result,
-or run a model. It assumes no prior engine9 knowledge.
+run a model, or search people in or out of a current model by source code. It
+assumes no prior engine9 knowledge. Legacy model search is
+[legacy.md](legacy.md), and only when the user explicitly asked for legacy.
 
 ## Quick reference
 
@@ -30,6 +35,8 @@ or run a model. It assumes no prior engine9 knowledge.
 | Inspect output tables or query results | [File format](#file-format) and [Examples](#examples) |
 | Investigate one person's credit | [Troubleshooting](#troubleshooting) |
 | Run a model | [Workflow](#workflow) |
+| Search people in or out of a current model by source code | [Person search](#person-search) |
+| Legacy model membership (only if the user asked) | [legacy.md](legacy.md) |
 
 ## Concepts
 
@@ -123,9 +130,9 @@ Consequences to respect:
   revenue, and that is not a bug. A petition that never asks for money can have
   huge model revenue and near-zero attributed revenue.
 - `source_code_summary.revenue` / `attributed_*` are attribution. The
-  `source_code_summary.origin_*` columns are a **legacy** model implementation
-  (old identity) and are not current model output — see
-  [developers.md](developers.md#legacy-old-identity).
+  `source_code_summary.origin_*` columns are the old-identity model
+  implementation. Current output is `{prefix}_*`. Read
+  [legacy.md](legacy.md) only when the user explicitly asked for legacy.
 
 ## Reference
 
@@ -146,11 +153,9 @@ supported way to hand-correct one person without changing the model.
 
 Accounts can ship additional models of their own with the same contract and the
 same `model_<name>` prefix rule; they appear alongside these in every read and
-comparison. Some accounts also keep **custom legacy models** as extra
-`{stem}_*` columns on `transaction_model_pivot` (beyond first_touch,
-crm_origin, and last_acquisition). Those stems are discovered from the table
-and omitted when absent; `timelinePerson` `compareSourceCodes` with
-`legacy: true` includes them.
+comparison. Old-identity scores (`person_model_source_code`, pivot columns,
+custom legacy stems) are in [legacy.md](legacy.md). Read that file only when
+the user explicitly asked for legacy models.
 
 ### Effective date of an entry
 
@@ -293,15 +298,12 @@ LIMIT 20;
 ```
 
 **Every model, one source code per row:** `compareSourceCodes` returns
-`{prefix}_person_count` / `_revenue` / `_transactions` columns for each model
-that has been run, so disagreement between models is visible in one grid. With
-no arguments it picks each model's top codes by people and by revenue. When both
-the current first-touch model and legacy first touch are deployed, that auto set
-also includes the top 10 source codes by absolute person_count difference
-(revenue if only transaction stats exist). Available over MCP as
-`timelinePerson` with `command: compareSourceCodes`. With `legacy: true`, extra
-`{stem}_*` columns on `transaction_model_pivot` are included as custom legacy
-models when present.
+`{prefix}_person_count` / `_revenue` / `_transactions` columns for each current
+model that has been run, so disagreement between models is visible in one grid.
+With no arguments it picks each model's top codes by people and by revenue.
+Available over MCP as `timelinePerson` with `command: compareSourceCodes`.
+Pivot and custom legacy stems are in [legacy.md](legacy.md), and only when the
+user explicitly asked for legacy.
 
 ## Troubleshooting
 
@@ -337,8 +339,9 @@ await model.run({ model: '@engine9/plugins/models/first_touch' });
 ```
 
 `run` streams the timeline, applies the rule, and writes that model's six
-tables. Method list, test options, authoring a new model, and legacy tables:
-[developers.md](developers.md).
+tables. Method list, test options, and authoring a new model:
+[developers.md](developers.md). Legacy tables: [legacy.md](legacy.md), only
+when the user explicitly asked for legacy.
 
 ## Vocabulary
 
@@ -353,9 +356,93 @@ tables. Method list, test options, authoring a new model, and legacy tables:
 | **prefix** | A model's table stem, e.g. `model_first_touch`. |
 | **reason** | Why the model chose what it chose, stored per row. |
 
+## Person search
+
+Each current model plugin exports two search handlers. Installing the model
+installs both. A UI loads the catalog from MCP `searchOptions` (or
+`GET /data/search/options`) and submits `{ and: [{ path, options, exclude? }] }`
+to MCP `search` (or `POST /data/search`). Handlers are listed only for plugins
+installed on that account.
+
+Rule: Build the form from the `searchOptions` entry (`path`, `title`, `form`).
+`form` is JSON Schema `{ type: "object", properties, required }`. `options`
+keys are the property names. `exclude` is not a form field; the UI sets
+`exclude: true` on the clause to mean "out of this model."
+
+| Handler | Table | Question |
+| --- | --- | --- |
+| `personSourceCode` | `{prefix}_person` | This person's model credit is this source code |
+| `transactionSourceCode` | `{prefix}_transaction` | This person has a transaction the model credited to this source code |
+
+| Path | `options` |
+| --- | --- |
+| `@engine9/plugins/models/first_touch:search:personSourceCode` | `sourceCode` |
+| `@engine9/plugins/models/first_touch:search:transactionSourceCode` | `sourceCode` |
+| `@engine9/plugins/models/crm_origin:search:personSourceCode` | `sourceCode` |
+| `@engine9/plugins/models/crm_origin:search:transactionSourceCode` | `sourceCode` |
+| `@engine9/plugins/models/last_acquisition:search:personSourceCode` | `sourceCode` |
+| `@engine9/plugins/models/last_acquisition:search:transactionSourceCode` | `sourceCode` |
+
+`sourceCode` is a string and is required. A value containing `%` is `LIKE`;
+otherwise it is an exact match.
+
+Catalog entry for the First Touch person handler (the other current handlers
+use the same `form`, with that model's title):
+
+```json
+{
+  "path": "@engine9/plugins/models/first_touch:search:personSourceCode",
+  "title": "First Touch person source code",
+  "form": {
+    "title": "First Touch person source code",
+    "type": "object",
+    "properties": {
+      "sourceCode": {
+        "title": "Source code",
+        "description": "Exact source code, or a LIKE pattern when it contains %",
+        "type": "string"
+      }
+    },
+    "required": ["sourceCode"]
+  }
+}
+```
+
+People in First Touch for a code, and out of CRM Origin for that same code:
+
+```json
+{
+  "and": [
+    {
+      "path": "@engine9/plugins/models/first_touch:search:personSourceCode",
+      "options": { "sourceCode": "WEB_PET_2019" }
+    },
+    {
+      "exclude": true,
+      "path": "@engine9/plugins/models/crm_origin:search:personSourceCode",
+      "options": { "sourceCode": "WEB_PET_2019" }
+    }
+  ]
+}
+```
+
+Rule: Pick the handler that matches the question. Person credit uses
+`personSourceCode`. Transaction credit uses `transactionSourceCode`. Excluding
+one does not exclude the other.
+
+Account-specific models that export `createModelSearches` show up the same way:
+`<package>:search:personSourceCode` and `<package>:search:transactionSourceCode`,
+with the same `sourceCode` form.
+
+Rule: Legacy membership — people in `person_model_source_code` for a source
+code, including people in a legacy model and out of the matching current model
+— is [legacy.md](legacy.md). Read it only when the user explicitly asked for
+legacy models. Do not add `@engine9/plugins/models/legacy` to a search otherwise.
+
 ## Related documentation
 
-- Running, authoring, testing, internals, legacy: [developers.md](developers.md)
+- Running, authoring, testing, internals: [developers.md](developers.md)
+- Legacy models (only when the user explicitly asked): [legacy.md](legacy.md)
 - Table columns and payload shapes: [schema.md](schema.md)
 - The timeline the model reads: [e9-timeline](../e9-timeline/SKILL.md)
 - Source codes and **attribution** (transaction ↔ message): [e9-source-code](../e9-source-code/SKILL.md)

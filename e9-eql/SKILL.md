@@ -4,7 +4,8 @@ description: >-
   Write and run engine9 Query Language (EQL) — expression fragments and SELECT
   query objects — primarily via the MCP `eql` tool (and `sql` compile_eql).
   Use when the user mentions EQL, buildSqlFromEQLObject, query objects with
-  table/columns/conditions, or asks how to query account data through MCP.
+  table/columns/conditions, asks how to query account data through MCP, or
+  wants a SQL table analysis (min, max, distinct, samples) via MCP `analyze`.
 ---
 
 # engine9 EQL
@@ -22,17 +23,18 @@ The primary way to submit an EQL query object from Cursor is the engine9 MCP
 | Run a SELECT from an EQL **query object** | **`eql`** |
 | Convert one EQL **expression** to a SQL fragment | `sql` with `command: "compile_eql"` |
 | Run hand-written SQL | `sql` with `command: "query"` (or `sql` set) |
-| Profile / summarize a table | `analyze` |
+| Analyze a table (min, max, distinct, samples, date buckets) | **`analyze`** |
+| Date histogram only | `sql` with `command: "histo"` |
 | Schema only | `sql` `describe` / `indexes` / `tables` |
 
-Prefer **`eql`** over raw SQL when the user is describing a structured query (table + columns + filters). Prefer **`analyze`** when they want a profile, not a custom SELECT.
+Prefer **`eql`** over raw SQL when the user is describing a structured query (table + columns + filters). Prefer **`analyze`** when they want mins, maxes, distinct counts, and samples.
 
 ## Workflow
 
 1. **Log in** — `mcp_auth` → user completes prompt → `ok` / `user` ([e9-mcp Step 0](../e9-mcp/SKILL.md#step-0--log-in-always-first)).
 2. **Know `account_id`** — from `/e9a`, this chat’s session scope, or `account`
    search.
-3. **Optional discovery** — `sql` `tables` / `describe` / `analyze` to learn table and column names before writing EQL.
+3. **Optional discovery** — `sql` `tables` / `describe`, or MCP `analyze`, to learn table shape before writing EQL. See [Analyzing a table](#analyzing-a-table).
 4. **Call `eql`**:
 
 ```json
@@ -310,9 +312,64 @@ Outer `table` is the alias for the nested SELECT:
 }
 ```
 
+## Analyzing a table
+
+MCP **`analyze`** analyzes one or more SQL tables: inferred types, min, max, empty counts, distinct counts, frequent samples, and (when an indexed datetime column exists) a full-table date histogram. Use it when the question is about the shape of a table. Schema-only questions stay on `sql` `describe` / `indexes` / `tables`. A histogram without the per-column analysis is `sql` `command: "histo"` (any datetime column; index not required).
+
+Rule: Call `analyze` for a table analysis. Do not hand-write `MIN`, `MAX`, or `COUNT(DISTINCT)` to rediscover the same stats.
+
+### Call
+
+```json
+{
+  "account_id": "<account_id>",
+  "table": "transaction",
+  "max_tables": 1,
+  "target_buckets": 10
+}
+```
+
+| Argument | Required | Notes |
+|----------|----------|-------|
+| `account_id` | yes | Account whose warehouse to analyze |
+| `table` | yes | Exact name or filter. `tables({ filter })` tries a regex first, then language tokens (`"ROI transaction"`) |
+| `max_tables` | no | How many matches to analyze. Default **3**, max **10** |
+| `target_buckets` | no | Approximate date-histogram bucket count when an indexed datetime column exists. Default **10** |
+
+Response: `{ ok, filter, matched_tables, analyzed_tables, truncated, analyses }`. Each `analyses[]` entry is `{ table, records, table_records, columns }`. `table_records` is `count(*)`. Column stats live on `columns`. Histogram buckets are merged onto those same column objects.
+
+### Column stats
+
+| Field | Meaning |
+|-------|---------|
+| `name` | Column name |
+| `type` | Inferred from sampled values: `string`, `int`, `bigint`, `double`, `decimal`, `date`, `datetime`, `uuid` |
+| `min` / `max` | Smallest and largest values in the sample. When a histogram runs, every datetime column is replaced with full-table SQL min/max (see below) |
+| `empty` | Sampled rows where the value was null or missing |
+| `distinct` | Distinct values seen in the sample |
+| `sample` | Up to **32** most frequent values in the sample, stringified |
+| `min_length` / `max_length` | Present on string columns |
+| `buckets` | On datetime columns when a histogram runs: `{ range, start, end, records, min, max }` |
+| `bucket_column` | `true` on the column the histogram is cut on |
+| `bucket_unit` | `day`, `week`, `month`, `quarter`, or `year` when buckets exist |
+
+The histogram column is chosen in this order: `ts`, `created_at`, `modified_at`, otherwise the first indexed datetime column that leads an index. Every datetime column receives the same buckets, with that column’s own `min` / `max` inside each bucket. `bucket_column` is true only on the column used to cut the ranges. `analyze` only auto-runs the histogram when an indexed datetime leading column exists; for unindexed dates use `sql` `command: "histo"` with an explicit `column`.
+
+### Sample vs full table
+
+Rule: `table_records` is `count(*)` for the whole table.
+
+Rule: `min`, `max`, `distinct`, `empty`, `sample`, and `records` come from a row sample of up to **10000** rows: **5000** from the start of the table plus **5000** highest primary-key rows when the table has a primary key, or **10000** rows when it does not. They are not full-table aggregates. A row that appears in both reads can be counted twice.
+
+Rule: When the table has an indexed datetime column, `analyze` also runs a SQL date histogram. That histogram’s `MIN` / `MAX` replace `min` and `max` on every datetime column. `buckets[].records` are full-table counts for those ranges. `records` on the analysis itself stays the sample size. `table_records` stays `count(*)`.
+
+`target_buckets` only changes the histogram. It does not change the row sample.
+
 ## Rules
 
 Rule: Stop and report MCP tool errors; do not invent SQL workarounds.
+
+Rule: Analyze a table with MCP `analyze`. Sample min/max are not full-table aggregates; indexed datetime min/max from the histogram are.
 
 - [ ] Authenticated via MCP; `account_id` known
 - [ ] Prefer MCP `eql` for query objects; `sql` `compile_eql` for fragments
@@ -320,6 +377,7 @@ Rule: Stop and report MCP tool errors; do not invent SQL workarounds.
 - [ ] Every `{ eql: "..." }` column has a `name`
 - [ ] Joins use objects with `table` + `join_eql` (not bare strings)
 - [ ] Discover table/column names via `sql` / `analyze`, not local schema guesses when MCP is connected
+- [ ] Table analyses (min, max, distinct, samples, date buckets) use MCP `analyze`, including `target_buckets` when the histogram grain matters
 - [ ] On tool error, stop and report
 
 ## Related documentation

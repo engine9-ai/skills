@@ -83,7 +83,7 @@ These are two tools. The UI should call them independently so legacy can be drop
 | Current `timeline` / `model_*` / identity counts | `timelinePerson` `command: inspect` | `ModelWorker.inspectPerson` |
 | Legacy `timeline_v3*` / `person_model_source_code` | `timelinePersonLegacy` | `ModelWorker.inspectPersonLegacy` |
 
-Rule: `timelinePerson` `inspect` never reads `timeline_v3*`. Do not pass `legacy: true` on inspect expecting those tables — that flag is only for `compareSourceCodes` (pivot stats), not timeline.
+Rule: `timelinePerson` `inspect` never reads `timeline_v3*`. Do not pass `legacy: true` on inspect expecting those tables. Pivot stats and legacy model search are [e9-model/legacy.md](../e9-model/legacy.md), and only when the user explicitly asked for legacy.
 
 Rule: `person.id` is not `person_id_int`. Legacy person detail hashes **email** onto `person_metadata`. Current `person_ids` on `timelinePersonLegacy` are only an email lookup on `person_email`.
 
@@ -91,12 +91,15 @@ Rule: `person.id` is not `person_id_int`. Legacy person detail hashes **email** 
 
 ```json
 { "account_id": "<account_id>" }
+{ "account_id": "<account_id>", "start": "-7d" }
 { "account_id": "<account_id>", "emails": "user@example.com" }
 { "account_id": "<account_id>", "person_ids": 1517 }
 { "account_id": "<account_id>", "person_ids": 1517, "source_codes": "EM_%" }
 ```
 
-Returns `section: "current"` tables: `timeline_counts`, `timeline`, `models`, plus identity / transaction / `model_*` aggregations. Timeline type is `entry_type` / `entry_type_id`. `effective_date` is `timeline.ts`.
+Rule: Account-wide inspect (no email / person_ids / source_codes) defaults `start` to `-7d` on `timeline.ts` when `start` and `end` are omitted, so large accounts do not full-scan. Pass explicit `start` / exclusive `end` (YYYY-MM-DD or relativeDate) to override. The Conductor Timeline and Models artifact presets FilterBar `dateRange` to Previous 7 days.
+
+Returns `section: "current"` tables: `timeline_counts`, `timeline`, `models`. Account-wide / source_codes-only also appends identity / transaction / `model_*_person|transaction` aggregations. Person-scoped inspect skips those account audit COUNTs. Timeline type is `entry_type` / `entry_type_id`. `effective_date` is `timeline.ts`.
 
 **Legacy inspect** (optional second call; unregister the tool to slice it away):
 
@@ -106,7 +109,7 @@ Returns `section: "current"` tables: `timeline_counts`, `timeline`, `models`, pl
 { "account_id": "<account_id>", "person_ids": 1517 }
 ```
 
-Returns `section: "legacy"` tables: `timeline_v3` min/max/count, `person_model_source_code_totals`, `transaction_model_source_code`, and person-level `timeline_v3_summary` / `person_model_source_code` when an email is present. Type column is **`entry_type_label`**. Missing tables are `skipped`. Future deployments will drop this tool.
+Returns `section: "legacy"` tables: `timeline_v3` min/max/count, `transaction_model_source_code`, and person-level `timeline_v3_summary` / `person_model_source_code` when an email is present. `person_model_source_code_totals` only when emails, person_ids, or source_codes is set (skipped account-wide — full-table COUNT is too expensive). Type column is **`entry_type_label`**. Missing tables are `skipped`. Future deployments will drop this tool.
 
 UI merge: keep current and legacy `tables[]` / `sql[]` side by side (`section` already distinguishes them). Do not combine the warehouse queries into one request. Load current first; call `timelinePersonLegacy` only when the Legacy surface is needed.
 

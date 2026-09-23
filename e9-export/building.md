@@ -117,17 +117,105 @@ e9 inventoryworker buildInventorySummaryFile -a <account_id> --definition_path=e
 e9 exportworker export -a <account_id> --definition_path=engine9-accounts/<org>/<account>/export
 e9 exportworker export -a <account_id> \
   --definition_path=engine9-accounts/<org>/<account>/export \
-  --export_dir=gs://bucket/exports/<account_id>/<export_id> \
+  --export_dir=gs://bucket/exports/{{account_id}}/{{export_id}}/{{date}} \
   --credentials=s3://engine9-secrets/<account_id>/gcs-sa.json
 ```
 
-Optional: `--limit=N`, `--sample=true` / `--sample=false`, `--export_id=<uuid>`, `--start=-30d`, `--end=`, `--export_dir=<path-or-uri>`, `--credentials=<path-or-uri>`.
+Optional: `--limit=N`, `--sample=true` / `--sample=false`, `--export_id=<uuid>`, `--export_dir=<path-or-uri>`, `--credentials=<path-or-uri>`. Date windows are below — `--start` / `--end` do not mean the same thing on every export type.
 
 `--sample=true` is a QA dump: 100 rows per warehouse table and person-search CSV, 10 rows per sampled `.idv1.parquet`, one parquet per `(input_type, filename)` plus that store’s `metadata.json`. The destination last segment gets `_sample` so a sample cannot overwrite a full export (`exports/{export_id}_sample/{date}`, or `{export_dir}_sample`). `--sample=false` (default) is a full run. `--limit=N` without `--sample=true` still only caps SQL tables and person-search (full idv1 copies).
 
 `--export_dir` is the only destination when set. Use a local directory or an object-store URI (`s3://`, `r2://`, `gs://` / `gcs://`, `gdrive://`). The account store is not also written. Omit it to use `{store_path}/{account_id}/exports/{export_id}/{date}/`. The bucket may be customer-owned.
 
+`export_id` / date are **not** appended automatically under a custom `export_dir`. To mirror the default layout on a customer bucket, put placeholders in the path:
+
+```
+--export_dir=gs://bucket/prefix/{{account_id}}/{{export_id}}/{{date}}
+```
+
+Supported tokens: `{{account_id}}`, `{{export_id}}`, `{{date}}`, `{{datetime_prefix}}`. Without those placeholders, `export_dir` is used exactly as given.
+
 `--credentials` is a path or URI to a **destination** key file (GCS service-account JSON, AWS keys, R2 keys, or Drive JSON with `subject_to_impersonate`). FileWorker reads that file with bot/default credentials (the bootstrap store), then uses the parsed key only for the destination scheme. When omitted, account `settings.file_credentials` is used; otherwise process defaults (ADC / AWS chain / `CLOUDFLARE_R2_*`). The key file is never written into `inventory.json5` or other package artifacts.
+
+## Start and end dates
+
+`--start` and `--end` are `relativeDate` values: a relative expression such as `-3d`, `-30d`, or `-12h`, or an ISO timestamp. `end` is exclusive (`column < end`). Omit `end` for an open upper bound. The same flags do different work depending on the export type. A flag set on one type does not filter the others.
+
+| Export type | Where the window is set | What it filters |
+|-------------|-------------------------|-----------------|
+| Warehouse tables (`type: 'table'`, or `--tables`) | CLI `--start` / `--end` only | Rows on the first matching date column, when the table has one |
+| Person-search (`search` + row transforms) | Default in the definition; CLI `--start` / `--end` override it | Whatever the definition's EQL and transform options reference |
+| Input-store copies (`type: 'inputs'`) | EQL on that universe entry | Which stores are selected. Copied `.idv1.parquet` files are not row-filtered |
+
+Rule: On a bundle, `--start` / `--end` filter warehouse table rows that have a recognized date column. idv1 copies stay whole.
+
+### Warehouse tables
+
+Table export adds `date_column >= start` and `date_column < end` when a column exists. The first match in this list wins:
+
+`frakture_last_modified`, `ts`, `last_modified`, `frakture_date_created`, `date_created`, `modified_at`, `remote_last_modified`, `remote_date_created`.
+
+Tables with none of those columns are exported in full. `publish_date` is not in the list, so `global_message` / `global_message_summary` are not sliced by `--start` / `--end`. There is no per-table date column in the universe entry.
+
+```
+e9 exportworker export -a <account_id> --tables=transaction --start=-3d
+```
+
+### Person-search exports
+
+CLI `--start` / `--end` become `overrides.start` / `overrides.end`. The definition must mention `overrides` or the flags are ignored. Put the default in the template; a caller replaces it with `--start=` / `--end=`.
+
+Use double quotes inside the helper. In raw EQL, wrap with `date` so `-3d` becomes an ISO timestamp before SQL runs:
+
+```
+conditions: [
+  { eql: 'timeline.ts >= \'{{date (or overrides.start "-3d")}}\'' },
+  { eql: '{{#if overrides.end}}timeline.ts < \'{{date overrides.end}}\'{{else}}1=1{{/if}}' }
+]
+```
+
+Leave `end` out of the `date` helper when it is blank. `date` on an empty string does not produce a timestamp.
+
+Search and transform options take the relative string (the search runtime parses it):
+
+```
+options: {
+  start: '{{or overrides.start "-3d"}}',
+  end: '{{or overrides.end ""}}'
+}
+```
+
+```
+e9 exportworker export -a <account_id> \
+  --definition_path=engine9-accounts/<org>/<account>/index.plugin.js:exports:transactions \
+  --start=-3d --end=-1d
+```
+
+On a bundle run, those flags are forwarded to every named person-search export except one named `people`. A `people` snapshot does not see the bundle `--start` / `--end`; its templates keep the default written in that definition.
+
+### Input-store copies
+
+`--start` / `--end` are not applied to `.idv1.parquet` copies. Each selected store is copied whole (every idv1 file plus `metadata.json`).
+
+To keep a rolling set of stores, put the window in that `type: 'inputs'` entry's EQL. EQL evaluates `date_sub` at runtime; it does not read CLI `--start`. Message stores use `publish_date` (one store is one message). Other stores can use `input.max_timeline_ts` to skip stores with no activity in the window — that still copies every row in a store that qualifies.
+
+```
+{
+  type: 'inputs',
+  eql: {
+    table: 'global_message',
+    columns: ['id'],
+    conditions: [
+      { eql: "channel='email'" },
+      { eql: 'publish_date >= date_sub(now(), interval 3 day)' }
+    ]
+  }
+}
+```
+
+`global_message` and `message` both resolve to message input ids. `entry_types` on the same entry still applies after the EQL picks ids.
+
+To export timeline **rows** in a window (not whole stores), use a person-search whose EQL filters `timeline.ts`, not an input-store copy.
 
 ## Person-search export
 
@@ -145,8 +233,12 @@ exports: {
 Invoke the named path:
 
 ```
-e9 exportworker export -a <account_id> --definition_path=engine9-accounts/<org>/<account>/index.plugin.js:exports:transactions --start=-30d
+e9 exportworker export -a <account_id> \
+  --definition_path=engine9-accounts/<org>/<account>/index.plugin.js:exports:transactions \
+  --start=-30d
 ```
+
+The definition supplies the default window and must reference `overrides.start` / `overrides.end`. See [Start and end dates](#start-and-end-dates).
 
 A bundle `export` also runs named `:exports:` entries that have `search`.
 
@@ -171,7 +263,7 @@ Override with `--export_dir`. That value is the only write root: a local path or
 
 What those files mean for a receiver: [SKILL.md](SKILL.md).
 
-Bundle `export` and `inventory.json5` include `source_directory`: the export root path (local or object-store URI). Strip it from any absolute output `filename` to recover the relative path under that root (same value as `export_dir` on the export result). Input file and directory entries also carry `source_directory` for the input-store root the file was copied from.
+Bundle `export` and `inventory.json5` include `export_dir`: the export root path (local or object-store URI). Strip it from any absolute output `filename` to recover the relative path under that root. Input file and directory entries still carry `source_directory` for the **input-store** root the file was copied from (not the export root).
 
 Rule: Bundle export writes tables, idv1 copies, and named person-search files first, then `inventory.json5`. Treat that file as the completion catalog: if it is missing, the run did not finish.
 
@@ -235,10 +327,10 @@ Pre-flight plans live in `cache/inventory-plans/`. After a completed bundle expo
 
 ### F) Files at the destination
 
-Bundle `export` returns `source_directory` (the resolved `export_dir`). Every file listed by `inventory.json5` should exist at its `relative_path` under that root. Missing `inventory.json5` means the run did not finish. Missing copies listed in the catalog: listing found no idv1s (C), or a file copy was skipped (logged). A transform failure aborts before `inventory.json5` is written.
+Bundle `export` returns `export_dir` (the resolved export root). Every file listed by `inventory.json5` should exist at its `relative_path` under that root. Missing `inventory.json5` means the run did not finish. Missing copies listed in the catalog: listing found no idv1s (C), or a file copy was skipped (logged). A transform failure aborts before `inventory.json5` is written.
 
 ### G) Person-search empty
 
-`search` too tight (`start`/`end`, plugin filter). “Remotes for plugin X” with no rows → [e9-person-remote](../e9-person-remote/SKILL.md). `limit` on a bundle export applies per named export **and** per bundle table.
+`search` too tight (`start`/`end`, plugin filter). Confirm the definition actually references `overrides.start` / `overrides.end`, and that `end` is exclusive. Input-store copies ignore those flags — see [Start and end dates](#start-and-end-dates). “Remotes for plugin X” with no rows → [e9-person-remote](../e9-person-remote/SKILL.md). `limit` on a bundle export applies per named export **and** per bundle table.
 
 Record the first failing step.

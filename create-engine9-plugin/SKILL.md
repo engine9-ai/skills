@@ -147,7 +147,9 @@ The named `search` export is a map of handlers:
 
 Canonical forms use `{ title, type: 'object', properties, required? }`. The server still normalizes legacy flat property maps and single-key wrappers. EQL may contain `table`, `columns`, `conditions`, and `joins`; conditions may be structured (`EQUALS`, `LIKE`) or raw `{ eql: '...' }` fragments.
 
-Account-scoped discovery through MCP `searchOptions`, `PersonWorker.searchOptions`, or `GET /data/search/options` returns standard filters and all installed-plugin handlers with normalized forms. A UI submits `{ and: [{ path, options }] }` to search.
+Account-scoped discovery through MCP `searchOptions`, `PersonWorker.searchOptions`, or `GET /data/search/options` returns standard filters and all installed-plugin handlers with normalized forms. A UI submits `{ and: [{ path, options }] }` to search. Set `exclude: true` on a clause for people outside that handler's set; `exclude` is not a form field.
+
+Current model membership (`personSourceCode` / `transactionSourceCode`, include and exclude) is [e9-model — Person search](../e9-model/SKILL.md#person-search). People in a legacy model for a source code and out of the matching current model are [e9-model/legacy.md](../e9-model/legacy.md). Read that file only when the user explicitly asked for legacy models.
 
 ### Segment definition
 

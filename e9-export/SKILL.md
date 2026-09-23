@@ -16,6 +16,7 @@ An **export** is a self-contained snapshot of one account’s warehouse data; a 
 | Join warehouse entities | `person_id`, `input_id`, `plugin_id`, and `source_code_id` |
 | Inspect a named audience extract | `search/*.export.csv` and its metadata sidecar |
 | Create or debug an export | Export building documentation |
+| Limit by start/end date | [Start and end dates](building.md#start-and-end-dates) — tables, person-search, and input stores differ |
 
 Rule: `inventory.json5` is authoritative. Do not infer artifact locations from the default directory structure; use its paths and `relative_path` values.
 
@@ -23,7 +24,7 @@ Rule: `inventory.json5` is authoritative. Do not infer artifact locations from t
 
 Default root: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 
-`--export_dir` overrides that root and is the only destination: a local path or `s3://` / `r2://` / `gs://` / `gdrive://` URI. The account store is not also written. `--credentials` (or account `settings.file_credentials`) is a bootstrap path/URI to the destination key file; it is not part of the package.
+`--export_dir` overrides that root and is the only destination: a local path or `s3://` / `r2://` / `gs://` / `gdrive://` URI. Use `{{account_id}}` / `{{export_id}}` / `{{date}}` in the path when you want a per-run folder under a customer bucket; otherwise the value is used as-is. The account store is not also written. `--credentials` (or account `settings.file_credentials`) is a bootstrap path/URI to the destination key file; it is not part of the package.
 
 Start with **`inventory.json5`**. Bundle export writes it **last**. It is the catalog of what was written; its presence means the run finished. A definition may relocate artifacts with `relative_path`; trust the inventory, not assumed paths.
 
@@ -41,7 +42,7 @@ Start with **`inventory.json5`**. Bundle export writes it **last**. It is the ca
 - Monthly warehouse **statistics** — those live on a standalone [inventory](../e9-inventory/SKILL.md) run, not in the export’s `inventory.json5`
 - The `setting` table (credentials / config)
 
-`inventory.json5` and the export result both carry `source_directory`: the export root. Strip that prefix from any absolute `filename` to recover the path under the root.
+`inventory.json5` and the export result both carry `export_dir` (the export root). Strip that prefix from any absolute `filename` to recover the path under the root.
 
 ## `inventory.json5`
 
@@ -49,7 +50,7 @@ Bundle exports write this at the export root (`format_version` **2**) after arti
 
 | Key | Purpose |
 |-----|---------|
-| `definition_path`, `plugin_path`, `source_directory` | Which bundle ran, and the export root |
+| `definition_path`, `plugin_path`, `export_dir` | Which bundle ran, and the export root |
 | `universe` | Resolved bundle entries |
 | `tables[]` | `{ table, relative_path, records }` |
 | `files[]`, `directories[]` | Planned idv1 copies and `metadata.json` |
