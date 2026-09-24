@@ -14,6 +14,7 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 | Authenticate | `mcp_auth` with `{}`, then verify with `ok` and `user` |
 | Install a plugin / list installable paths | `plugin` `install` / `listAvailable` — [e9-plugin](../e9-plugin/SKILL.md) |
 | Discover accounts or installed plugins | `account` |
+| Set an account's default warehouse | `account` `command: setDefaultWarehouse` with `remote_plugin_id` |
 | Use a purpose-built operation | The matching native MCP tool |
 | Run an on-demand worker method | `task` with `path` + `method` |
 | Run a predefined flow | `task` with `flow_id` |
@@ -191,6 +192,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Who am I / which accounts do I have? | `user` (flat `accounts` map with `parent_ids`) |
 | Find accounts by prefix, parent, type, tags, or installed plugin | `account` with `command: "search"` (one call — do not fan out; flat rows) |
 | List plugins / methods on one account | `account` with `account_id` (or `command: "plugins"`) |
+| Set an account's default warehouse | `account` `command: "setDefaultWarehouse"` with `remote_plugin_id` (`plugin.remote_plugin_id`). The JSON API body is `bot_id`; the account stores `default_warehouse_bot_id`. Do not send `bot_id` or `default_warehouse_bot_id` |
 | List plugin settings (types, descriptions, current values) grouped by plugin | `plugin` with `command: "settings"` |
 | Install a plugin on one account or a parent’s children | `plugin` `install` — [e9-plugin](../e9-plugin/SKILL.md). Do not use `task` |
 | Search people by email, phone, name, or id | `search` |
@@ -233,7 +235,16 @@ Returns the current authenticated user: uid, email, admin flag, and a **flat** a
 
 ### `account`
 
-Two commands:
+Three commands:
+
+**`command: setDefaultWarehouse`** — set the account's default warehouse. Send `remote_plugin_id` (`plugin.remote_plugin_id` for the warehouse plugin). The tool posts `{ "bot_id": "<remote_plugin_id>" }` to `POST /jsonapi/account/:id/default_warehouse` on the data layer (same host and auth as the Task API). The account stores that value as `default_warehouse_bot_id`. Sending `bot_id` or `default_warehouse_bot_id` is rejected.
+
+- Required: `account_id`, `remote_plugin_id`
+- Returns: `{ ok: true, command: "setDefaultWarehouse", data: { id, bot_id, default_warehouse_bot_id } }` — `data.bot_id` is the JSON API echo of `remote_plugin_id`
+
+```json
+{ "command": "setDefaultWarehouse", "account_id": "<account_id>", "remote_plugin_id": "frakturedb_hxq" }
+```
 
 **`command: plugins`** (default when `account_id` is set) — list plugins installed on one account with marketplace metadata merged onto each plugin.
 
