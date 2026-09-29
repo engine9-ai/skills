@@ -274,7 +274,7 @@ Rule: Bundle export writes tables, idv1 copies, and named person-search files fi
 | `{input_type}/{input_id}/metadata.json` | Input-store descriptor (`input_id`, `input_type`, `entry_types`, listed files) |
 | Definition-owned `relative_path` | Custom universe artifact destination below `export_dir` |
 | `inventory.json5` | Bundle export: catalog of what was written (paths, counts, skipped), written **last**. Monthly statistics: [e9-inventory](../e9-inventory/SKILL.md). |
-| `search/{export_name}.export.csv` + metadata | Default named person-search output during a bundle export |
+| `{export_id}.{export_name}.export.csv` + metadata | Default named person-search output, in `export_dir` |
 
 `directories[].files` is the **file list** (name, filename, records, source_directory), not a count.
 

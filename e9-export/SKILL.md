@@ -14,7 +14,7 @@ An **export** is a self-contained snapshot of one account’s warehouse data; a 
 | Discover package contents | Export-root `inventory.json5` |
 | Understand an input store | Its `metadata.json`, then its `.idv1.parquet` files |
 | Join warehouse entities | `person_id`, `input_id`, `plugin_id`, and `source_code_id` |
-| Inspect a named audience extract | `search/*.export.csv` and its metadata sidecar |
+| Inspect a named audience extract | `{export_id}.{export_name}.export.csv` in `export_dir`, and its metadata sidecar |
 | Create or debug an export | Export building documentation |
 | Limit by start/end date | [Start and end dates](building.md#start-and-end-dates) — tables, person-search, and input stores differ |
 
@@ -33,7 +33,7 @@ Start with **`inventory.json5`**. Bundle export writes it **last**. It is the ca
 | `tables/{table}.parquet` | One warehouse table dump |
 | `{input_type}/{input_id}/*.idv1.parquet` | Activity rows for one input (`message`, `person`, `timeline`, …) |
 | `{input_type}/{input_id}/metadata.json` | Descriptor for that input store |
-| `search/{export_name}.export.csv` + `.metadata.json5` | Named person-search extract |
+| `{export_id}.{export_name}.export.csv` + `.metadata.json5` | Named person-search extract, written in `export_dir` |
 | `inventory.json5` | Catalog of what was written (paths, counts, skipped), written after artifacts |
 
 **Not included**
@@ -225,8 +225,10 @@ A message input’s `input.id` is the handle for that send. Opens and clicks for
 
 A named search export is one CSV plus a sidecar:
 
-- `search/{export_name}.export.csv` (or `.export.csv.gz`)
-- `search/{export_name}.export.csv.metadata.json5`
+- `{export_dir}/{export_id}.{export_name}.export.csv` (or `.export.csv.gz`)
+- `{export_dir}/{export_id}.{export_name}.export.csv.metadata.json5`
+
+`export_dir` defaults to `{store_path}/{account_id}/exports/{export_id}/{date}` when omitted. The CSV is written in that directory.
 
 Columns are whatever the search and its row transforms selected — not a fixed warehouse schema.
 

@@ -22,6 +22,8 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 
 **Rule:** Discover accounts, plugins, methods, and options from the connected MCP server only; never infer them from local workspace code.
 
+**Roles:** Operators are read-only in SQL (SELECT/WITH) and schedule published flows (`flow_id` / `flow_path`); on-demand `path`+`method`, API keys, and plugin install/settings need the admin role (`user.accounts[id].level`).
+
 ## Step 0 — Log in (always first)
 
 **Rule:** Every `/e9` or MCP request starts by logging in. Do not grep, curl, read config files, start servers, or run CLI commands to "figure out" auth.
@@ -249,7 +251,7 @@ Three commands:
 **`command: plugins`** (default when `account_id` is set) — list plugins installed on one account with marketplace metadata merged onto each plugin.
 
 - Required: `account_id`
-- Returns: `{ ok: true, command: "plugins", plugins: [...] }` — each plugin includes `path`, DB fields, and `metadata` (alias, submodules, methods, auth_fields, …)
+- Returns: `{ ok: true, command: "plugins", plugins: [...], default_warehouse_bot_id }` — each plugin includes `path`, DB fields, and `metadata` (alias, submodules, methods, auth_fields, …). `default_warehouse_bot_id` is the catalog default warehouse (`plugin.remote_plugin_id`, or null). It is read-only on this command; change it with `setDefaultWarehouse`
 - Backward compatible: `{ "account_id": "<id>" }` still means plugins.
 
 **`command: search`** — find accessible accounts in **one call** using config filters and optional installed-plugin probes. Prefer this over `user` + many per-account plugin loads when the question is “which accounts match …?”.

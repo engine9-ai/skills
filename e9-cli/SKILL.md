@@ -21,6 +21,8 @@ Use this skill to configure or troubleshoot an engine9 MCP connection in Cursor 
 
 **Rule:** On any MCP tool error, follow [e9-mcp — MCP tool errors — stop immediately](../e9-mcp/SKILL.md#mcp-tool-errors--stop-immediately); do not call downstream account-scoped tools after a failed `account`, `task`, `search`, or similar call.
 
+Operators are read-only in SQL and schedule published flows; on-demand tasks, keys, and plugin changes need the admin role.
+
 ## Step 0 — Log in (always first)
 
 **Rule:** Every `/e9` request starts by logging in. Do not grep, curl, read config files, start servers, or run CLI commands to "figure out" auth.

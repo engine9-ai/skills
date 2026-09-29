@@ -1,32 +1,118 @@
 ---
-name: create-engine9-plugin
+
+## name: create-engine9-plugin
+
 description: >-
-  Implement and extend engine9 interface packages (`@engine9/interfaces/*`) and
-  native plugins (`@engine9/plugins/*`), including metadata, schemas, transforms,
-  search, segments, metrics, reports, settings, UI configuration, and worker classes. Use
-  when building plugin capabilities, wiring deployment schemas, or documenting
-  an engine9 interface or native plugin. Do not use this skill to install a
-  package onto accounts — use e9-plugin (MCP plugin install).
----
+Author engine9 interfaces (`@engine9/interfaces/*`), native plugins
+(`@engine9/plugins/*`), and third-party npm plugin packages (e.g. acme-plugins),
+including package layout, versioning, metadata, schemas, transforms, search,
+segments, metrics, reports, settings, UI, and worker classes. Use when building
+or documenting a plugin package for one or more core deployments. Do not use
+this skill to install onto accounts — use e9-plugin (MCP plugin install).
 
 # Create an engine9 plugin or interface
 
-engine9 separates shared data contracts, called interfaces, from deployable integrations, called native plugins. Both are Node ESM modules resolved by package path from `node_modules`, a monorepo sibling checkout, or an optional install `source`; they never require a `local$` path prefix. Use this skill when adding or extending an interface, native plugin, transform, search handler, segment, report, settings, or deployment schema. To **install** an existing package onto accounts, use [e9-plugin](../e9-plugin/SKILL.md).
+engine9 separates shared data contracts, called interfaces, from deployable integrations, called native plugins. Both are Node ESM modules resolved by **npm package path** from `node_modules` (or a monorepo sibling linked into `node_modules`). They never require a `local$` path prefix, and core does not load plugins from absolute paths or `install({ source })`. Use this skill when adding or extending an interface, native plugin, third-party package, transform, search handler, segment, report, settings, or deployment schema. To **install** an existing package onto accounts, use [e9-plugin](../e9-plugin/SKILL.md).
 
 ## Quick reference
 
-| Need | Contract or location |
-| --- | --- |
-| Install a package on accounts | [e9-plugin](../e9-plugin/SKILL.md) — MCP `plugin` `install`, not this skill |
-| Shared schema or reusable behavior | `@engine9/interfaces/<name>` |
-| Deployable integration | `@engine9/plugins/<prefix>` |
-| Transform capability | `<package>:transforms:<name>` |
-| Search capability | `<package>:search:<handler>` |
-| Segment definition | `<package>:segments:<key>` |
-| Report definition | `@engine9/plugins/reports/<area>:reports:<key>` |
-| Settings | `<package>` `settings` export or sibling `settings.js`; MCP `plugin` `command: settings` |
-| Package documentation | Package-root `README.md` |
-| Resolver and registration details | [reference.md](reference.md) |
+| Need                                  | Contract or location                                                                     |
+| ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Install a package on accounts         | [e9-plugin](../e9-plugin/SKILL.md) — MCP `plugin` `install`, not this skill              |
+| Shared schema or reusable behavior    | `@engine9/interfaces/<name>`                                                             |
+| Engine9-owned deployable integration  | `@engine9/plugins/<name>`                                                                |
+| Third-party package (company example) | npm package `acme-plugins` → plugin paths `acme-plugins/<name>`                          |
+| Third-party table names               | Self-scope in the schema: `acme_blog_post` — do **not** set `metadata.prefix`            |
+| Package / release version             | npm `package.json` `"version"` only — never `metadata.version`                           |
+| Host must load the package            | Site `package.json` → `engine9.pluginPackages` + `npm install`                           |
+| Transform capability                  | `<package>:transforms:<name>`                                                            |
+| Search capability                     | `<package>:search:<handler>`                                                             |
+| Segment definition                    | `<package>:segments:<key>`                                                               |
+| Report definition                     | `@engine9/plugins/reports/<area>:reports:<key>`                                          |
+| Settings                              | `<package>` `settings` export or sibling `settings.js`; MCP `plugin` `command: settings` |
+| Package documentation                 | Package-root `README.md`                                                                 |
+| Resolver and registration details     | [reference.md](reference.md)                                                             |
+
+## Creating and versioning a package (Acme)
+
+A **package** is one npm artifact. A **plugin** is one discoverable module inside that package (a directory with `index.js`, or a `*.plugin.js` file). Version the package; install plugins by path on each account.
+
+### Recommended layout for Acme
+
+Prefer one npm package that holds many plugins (same pattern as `@engine9/interfaces`):
+
+```
+acme-plugins/                 ← npm name: "acme-plugins" (or "@acme/engine9-plugins")
+  package.json                ← ONLY place for the release version
+  README.md
+  loyalty/
+    index.js                  ← identity: acme-plugins/loyalty
+    schema.js
+    settings.js
+  gifts.plugin.js             ← identity: acme-plugins/gifts.plugin.js
+```
+
+| Recommendation                                                            | Why                                                          |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Name the npm package `acme-plugins` or `@acme/engine9-plugins`            | Clear company ownership; path prefix matches the package     |
+| Put plugins in subdirectories (or `*.plugin.js`), not one repo per plugin | One `npm install` / pin per host; shared deps; one changelog |
+| Own repo or monorepo directory is fine                                    | Core only needs an installable npm package in `node_modules` |
+| Bump `package.json` `"version"` on every release                          | That string is what hosts and dependency checks see          |
+| Do **not** set `metadata.version`                                         | Ignored; confusing dual versioning                           |
+
+Scoped packages work the same: `@acme/engine9-plugins` → identities `@acme/engine9-plugins/loyalty`.
+
+### Versioning rules
+
+| Layer               | What it is                                                                     | Who sets it                                     |
+| ------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------- |
+| npm package version | `acme-plugins@1.4.0` in `package.json`                                         | Acme when publishing                            |
+| Plugin path         | `acme-plugins/loyalty`                                                         | Acme in the package tree                        |
+| Account install     | Warehouse `plugin` row for that path                                           | Operator / MCP `plugin` install on each account |
+| Host pin            | Site depends on `acme-plugins@^1.4.0` and lists it in `engine9.pluginPackages` | Each core deployment                            |
+
+There is **no** per-plugin version and **no** `deployed_version` column. Executing code is always whatever the host installed. Dependency ranges on `metadata.dependencies` are checked at install time against the **host’s** npm package version for `packageNameOf(depPath)` (plus “dependency path is installed on this account”).
+
+```javascript
+// acme-plugins/loyalty/index.js — no metadata.version, no metadata.prefix
+const metadata = {
+  name: "Acme Loyalty",
+  unique: true,
+  dependencies: {
+    // path must be installed; range is satisfied by host @engine9/interfaces version
+    "@engine9/interfaces/person": ">=1.7.0",
+  },
+};
+```
+
+**Rule:** Third-party plugins must self-scope table names in the schema (e.g. `acme_loyalty_member`). Do not set `metadata.prefix`. See [Table naming](#table-naming-self-scope).
+
+### Ship to many core deployments
+
+Each engine9 core site (Cloudflare Worker or Node host) pins and loads packages independently:
+
+1. **Publish** `acme-plugins@1.4.0` (npm, git URL, or private registry).
+2. **On each site**, add the dependency and declare the package:
+
+```json
+{
+  "dependencies": {
+    "@engine9/core": "...",
+    "@engine9/interfaces": "^1.7.4",
+    "acme-plugins": "^1.4.0"
+  },
+  "engine9": {
+    "pluginPackages": ["@engine9/interfaces", "acme-plugins"]
+  }
+}
+```
+
+1. **Redeploy the host** (`npm install` + restart, or `wrangler deploy` so `build-plugins` bakes the package into the Worker). Until the package is on the host, `listAvailable` will not show Acme paths.
+2. **Per account** on that host, install paths as needed: `acme-plugins/loyalty` (MCP [e9-plugin](../e9-plugin/SKILL.md)). Same path identity on every host; each host may pin a different package version.
+
+**Upgrade:** bump the site’s pin (e.g. `1.5.0`), reinstall/redeploy the host, then reinstall account paths only when schema/settings/inbound snapshots need refreshing. Install-time dependency checks always use the new host package version immediately.
+
+**Local development:** `"acme-plugins": "file:../acme-plugins"` (or npm link) is fine. Still list `acme-plugins` in `engine9.pluginPackages`.
 
 ## Concepts
 
@@ -38,9 +124,24 @@ engine9 separates shared data contracts, called interfaces, from deployable inte
 2. Otherwise, packages under `@engine9/interfaces/*` default to unique, with one row per account.
 3. Otherwise, use `options.unique`, which defaults to `false`; third-party plugins may therefore be installed multiple times.
 
-When a package is unique, a second install reuses the existing row or errors if duplicate rows already exist. When it is not unique, every install without an `id` creates a row; `person_custom` receives a new `person_custom_<n>_` table prefix.
+When a package is unique, a second install reuses the existing row or errors if duplicate rows already exist. When it is not unique, every install without an `id` creates a row. Multi-instance plugins that need isolated tables (`person_custom`) opt into `metadata.prefix` so install allocates a hex suffix; third-party plugins should stay unique and self-scope table names instead.
 
 **Rule:** Export only standard feature modules and the default aggregate object from an interface. Server-only helpers, such as custom `resolveSegmentPluginId` functions, belong in server code keyed by `plugin.path`, not in the public interface API.
+
+### Table naming (self-scope)
+
+**Rule:** For third-party plugins, put a brief, stable stem that is unique to the company and plugin into every table name you own. Prefer `acme_blog_post`, `acme_blog_comment` — not bare `post` / `comment`, and not `metadata.prefix`.
+
+Core does **not** enforce this naming. Install with a schema and no `metadata.prefix` stores an empty `plugin.table_prefix` and deploys the table names exactly as written in the schema. SQL, transforms, metrics, and reports can then hard-code those names; they do not need to look up the plugin row first.
+
+| Approach                                       | When                                                           | Result                                                                     |
+| ---------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Self-scope (recommended for third parties)** | Omit `metadata.prefix`; name tables `acme_blog_<table>`        | Empty `table_prefix`; predictable SQL                                      |
+| `metadata.prefix` **hex allocator**            | Multi-instance / engine9-owned cases that need isolated copies | `plugin.table_prefix` = `{prefix}_{hex}_`; every query must use that value |
+
+Do not recommend `metadata.prefix` for ordinary third-party packages. The hex suffix makes static SQL and hand-written queries painful: callers must read `plugin.table_prefix` before they can name a table. Reserve `metadata.prefix` for cases that truly need multiple installs of the same schema on one account (engine9’s `person_custom` pattern).
+
+Pick a stem you can keep forever (`acme_blog`, `acme_loyalty`). In the future, plugin table-name prefixes may need to be registered; a stable company+plugin stem is the right preparation. Core does not register or validate stems today.
 
 ### Stacks
 
@@ -54,12 +155,12 @@ Server `accounts.d` values `defaultStack` and `stacks[]` are options passed to `
 
 Core assembles the people pipeline from plugins installed in an account; it does not maintain a list of plugin paths. A plugin participates by mapping pipeline slots to keys from its `transforms` export:
 
-| Slot | Purpose |
-| --- | --- |
-| `normalize` | Clean or normalize fields |
-| `id` | Populate `identifiers[]` before person assignment |
-| `assign` | Core-owned person assignment phase |
-| `upsert` | Queue table rows after person assignment |
+| Slot        | Purpose                                           |
+| ----------- | ------------------------------------------------- |
+| `normalize` | Clean or normalize fields                         |
+| `id`        | Populate `identifiers[]` before person assignment |
+| `assign`    | Core-owned person assignment phase                |
+| `upsert`    | Queue table rows after person assignment          |
 
 Install validates that each transform key exists and that transform `type` values such as `'id'` or `'upsert'` match their slots. It then snapshots the specification on the `plugin` row. Verify the result with `personWorker.getInboundTransforms({ pluginId, describe: true })`.
 
@@ -73,40 +174,43 @@ Reports are composed dashboards owned by native report plugins at `@engine9/plug
 
 ### Interface package layout
 
-| Path | Purpose |
-| --- | --- |
-| `README.md` | Required audience-facing package documentation |
-| `index.js` | Named feature exports and default aggregate |
-| `schema.js` | Default export `{ tables: [...] }` |
-| `transforms/inbound/` | Normalize, identity, and upsert steps |
-| `transforms/outbound/` | Enrichment and output steps |
-| `search.js` | Optional UI-to-EQL handlers |
-| `segments.js` | Optional saved-audience definitions |
-| `metrics.js` | Optional aggregate cards |
-| `ui.console.json5` | Optional console UI configuration |
-| `settings.js` | Optional warehouse `setting` rows inserted on install |
+| Path                   | Purpose                                               |
+| ---------------------- | ----------------------------------------------------- |
+| `README.md`            | Required audience-facing package documentation        |
+| `index.js`             | Named feature exports and default aggregate           |
+| `schema.js`            | Default export `{ tables: [...] }`                    |
+| `transforms/inbound/`  | Normalize, identity, and upsert steps                 |
+| `transforms/outbound/` | Enrichment and output steps                           |
+| `search.js`            | Optional UI-to-EQL handlers                           |
+| `segments.js`          | Optional saved-audience definitions                   |
+| `metrics.js`           | Optional aggregate cards                              |
+| `ui.console.json5`     | Optional console UI configuration                     |
+| `settings.js`          | Optional warehouse `setting` rows inserted on install |
 
 **Rule:** Do not ship `reports/` on interfaces. Put dashboards in `@engine9/plugins/reports/<area>`.
 
-At minimum, interface metadata identifies the package and version:
+At minimum, interface metadata identifies the package path (and optional deployment dependencies):
 
 ```javascript
 const metadata = {
   name: "@engine9/interfaces/example",
-  version: "1.0.0",
-  dependencies: { "@engine9/interfaces/person": ">=1.0.0" }, // optional
+  dependencies: { "@engine9/interfaces/person": ">=1.0.0" }, // optional; range = host npm package version
   schemas: ["schema.js"], // optional for a nonstandard schema filename
 };
 ```
+
+Do not set `metadata.version`. See [Creating and versioning a package (Acme)](#creating-and-versioning-a-package-acme).
 
 ### Schema
 
 Export `tables`. Each table has `name`, `columns`, and optional `indexes`; views add `type: 'view'` and `sql`. Column values may be shorthand types such as `'string'`, `'id'`, `'foreign_uuid'`, or `'created_at'`, or objects with `type`, `nullable`, `default_value`, `values`, `description`, and `length`.
 
+**Rule:** Third-party table `name` values must include a company+plugin stem (`acme_blog_post`). Do not set `metadata.prefix` so install leaves `table_prefix` empty and deploys these names unchanged. See [Table naming](#table-naming-self-scope).
+
 ```javascript
 export const tables = [
   {
-    name: "example_row",
+    name: "acme_blog_post",
     columns: {
       id: "id",
       person_id: "foreign_id",
@@ -126,9 +230,9 @@ export const tables = [
     ],
   },
   {
-    name: "example_summary",
+    name: "acme_blog_post_summary",
     type: "view",
-    sql: `select person_id, count(*) as cnt from example_row group by 1`,
+    sql: `select person_id, count(*) as cnt from acme_blog_post group by 1`,
   },
 ];
 export default { tables };
@@ -138,11 +242,11 @@ export default { tables };
 
 The named `search` export is a map of handlers:
 
-| Member | Purpose |
-| --- | --- |
-| `title`, `description` | Optional catalog labels |
-| `form` | Canonical JSON Schema object |
-| `optionsToEQL(options)` | Returns `{ text, eql }` |
+| Member                         | Purpose                           |
+| ------------------------------ | --------------------------------- |
+| `title`, `description`         | Optional catalog labels           |
+| `form`                         | Canonical JSON Schema object      |
+| `optionsToEQL(options)`        | Returns `{ text, eql }`           |
 | `optionsToEQLContext(options)` | Optional pre-query lookup context |
 
 Canonical forms use `{ title, type: 'object', properties, required? }`. The server still normalizes legacy flat property maps and single-key wrappers. EQL may contain `table`, `columns`, `conditions`, and `joins`; conditions may be structured (`EQUALS`, `LIKE`) or raw `{ eql: '...' }` fragments.
@@ -163,26 +267,26 @@ Each report contains `name`, `description`, `tags`, optional `data_sources`, `fi
 
 Settings are per-install warehouse configuration. They are **not** marketplace authorization (`auth_fields` / vendor credentials on `account` plugin metadata).
 
-Export `settings` from `index.js` and/or ship a sibling `settings.js`. Each entry is `{ name, type?, default?, values?, description?, label?, required?, secret?, hidden?, section? }` (or a name→def object). On `PluginWorker.install`, each name is inserted into `setting` for that plugin row when it is missing. Reinstall does not overwrite an existing value. Unique native plugins with no `metadata.prefix` and no schema get an empty table prefix (settings-only packages).
+Export `settings` from `index.js` and/or ship a sibling `settings.js`. Each entry is `{ name, type?, default?, values?, description?, label?, required?, secret?, hidden?, section? }` (or a name→def object). On `PluginWorker.install`, each name is inserted into `setting` for that plugin row when it is missing. Reinstall does not overwrite an existing value. Plugins with no `metadata.prefix` get an empty `table_prefix` (settings-only packages, and third-party schemas that self-scope table names).
 
-| Field | Purpose |
-| --- | --- |
-| `name` | Warehouse `setting.name` |
-| `type` | `string` (default), `int`, `number`, `boolean`, `json`, `email`, `url`, `password` |
-| `values` | Enum of allowed values (UI + `setSetting` validation) |
-| `default` | Inserted on first install (`default_value` is also accepted) |
-| `description` / `label` | UI copy |
-| `secret` | Redact current value in catalogs |
-| `hidden` | Omit from UI catalogs unless `include_hidden` (internal allocators) |
+| Field                   | Purpose                                                                            |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| `name`                  | Warehouse `setting.name`                                                           |
+| `type`                  | `string` (default), `int`, `number`, `boolean`, `json`, `email`, `url`, `password` |
+| `values`                | Enum of allowed values (UI + `setSetting` validation)                              |
+| `default`               | Inserted on first install (`default_value` is also accepted)                       |
+| `description` / `label` | UI copy                                                                            |
+| `secret`                | Redact current value in catalogs                                                   |
+| `hidden`                | Omit from UI catalogs unless `include_hidden` (internal allocators)                |
 
 Account-scoped discovery uses the same compile-and-aggregate path as inbound weaving, `searchOptions`, and report list:
 
-| Surface | Call |
-| --- | --- |
-| Worker | `PluginWorker.listSettings({ path?, plugin_id?, include_hidden? })` |
-| MCP | `plugin` `command: "settings"` |
-| HTTP | `GET /data/settings` |
-| Update | `PluginWorker.updateSetting` / MCP `plugin` `command: "setSetting"` / `POST /data/settings` |
+| Surface | Call                                                                                        |
+| ------- | ------------------------------------------------------------------------------------------- |
+| Worker  | `PluginWorker.listSettings({ path?, plugin_id?, include_hidden? })`                         |
+| MCP     | `plugin` `command: "settings"`                                                              |
+| HTTP    | `GET /data/settings`                                                                        |
+| Update  | `PluginWorker.updateSetting` / MCP `plugin` `command: "setSetting"` / `POST /data/settings` |
 
 `listSettings` groups by plugin path, includes JSON Schema `form` plus current warehouse values per instance, and puts per-plugin `compilePlugin` failures in `errors`. Do not read settings from marketplace metadata.
 
@@ -191,24 +295,23 @@ Account-scoped discovery uses the same compile-and-aggregate path as inbound wea
 Native plugins follow the same package-root `README.md` convention and may provide integration behavior, account setup, schema, and classes:
 
 ```javascript
+// Inside acme-plugins/loyalty/index.js (identity acme-plugins/loyalty)
 const metadata = {
-  name: "Human Name",
-  prefix: "e9myplugin",
+  name: "Acme Loyalty", // display name
   unique: true,
-  version: "1.0.0",
-  dependencies: { "@engine9/interfaces/message": ">1.0.0" },
+  dependencies: { "@engine9/interfaces/person": ">=1.7.0" },
 };
 
 export default {
   metadata,
-  schema,  // optional table DDL
+  schema, // optional; table names self-scoped (acme_loyalty_member) — no metadata.prefix
   settings, // optional warehouse setting rows inserted on install
   install, // optional async setup
   // Optional feature classes
 };
 ```
 
-`install(context)` is asynchronous and receives `{ account, plugin, sqlWorker }` for one-time provisioning.
+`install(context)` is asynchronous and receives `{ account, plugin, sqlWorker }` for one-time provisioning. With self-scoped tables, SQL may use the fixed names from the schema; `plugin.tablePrefix` is empty.
 
 Worker-style classes follow `function Worker(args) { ... }`, static `Worker.metadata`, prototype methods, and method-level metadata such as `Worker.prototype.myMethod.metadata = { options: { ... } }`. Export each class as a named property on the plugin object. Concrete domain integrations may live in separate classes/files and attach to the default export.
 
@@ -216,15 +319,16 @@ Metadata-only plugins may declare dependencies without schema or handlers. Optio
 
 ## Workflow
 
-1. Choose an interface for reusable contracts or a native plugin for deployable integration behavior.
-2. Create package metadata and declare deployment dependencies.
-3. Define tables, columns, indexes, and views.
-4. Add inbound or outbound transforms and their bindings.
-5. Add search, segments, metrics, reports, settings, UI configuration, or worker classes where appropriate.
-6. Export named features and a default aggregate from `index.js`.
-7. Document behavior and every predefined segment in the package `README.md`.
-8. Register a new interface when deployment uses `deployAllSchemas` or `getActivePluginPaths`.
-9. Install and verify compiled features and inbound transforms.
+1. Choose an interface (`@engine9/interfaces/...`), an Engine9 native plugin (`@engine9/plugins/...`), or a third-party package (e.g. `acme-plugins/<name>`).
+2. Create or extend the **npm package** (`package.json` name + `"version"`). Add plugin directories or `*.plugin.js` files inside it. Do not invent `metadata.version`.
+3. Declare `metadata` (display name, `unique` as needed) and `metadata.dependencies` (paths + semver against host packages). Do **not** set `metadata.prefix` for third-party plugins.
+4. Define tables, columns, indexes, and views. Self-scope every owned table name (`acme_blog_post`).
+5. Add inbound or outbound transforms and their bindings.
+6. Add search, segments, metrics, reports, settings, UI configuration, or worker classes where appropriate.
+7. Export named features and a default aggregate from `index.js`.
+8. Document behavior and every predefined segment in the package `README.md`.
+9. Publish or link the package; on each core site add it to `dependencies` and `engine9.pluginPackages`, then redeploy the host.
+10. Install plugin paths on accounts ([e9-plugin](../e9-plugin/SKILL.md)) and verify compiled features / inbound transforms.
 
 ### Document the package
 
@@ -236,12 +340,19 @@ Metadata-only plugins may declare dependencies without schema or handlers. Optio
 One-paragraph purpose. Name the package path and `metadata.dependencies`.
 
 ## Data Model
+
 ## Inbound Behavior
+
 ## Outbound Behavior
+
 ## Search
+
 ## Segments
+
 ## Metrics
+
 ## Reports and UI
+
 ## Settings
 ```
 
@@ -249,7 +360,17 @@ For every predefined segment, document its display name, export key, definition 
 
 ## Rules
 
-**Rule:** Package metadata names must match the package scope: `@engine9/interfaces/...` for interfaces and the intended display name for native plugins.
+**Rule:** Version only the npm package (`package.json` `"version"`). Never set `metadata.version`. Never rely on a warehouse version column.
+
+**Rule:** Third-party plugins self-scope every owned table name with a stable company+plugin stem (`acme_blog_post`). Do not set `metadata.prefix`. Core does not enforce stems; they may need registration later.
+
+**Rule:** Plugin identity is the path under the npm package (`acme-plugins/loyalty`). `metadata.name` is the human display name.
+
+**Rule:** For third-party packages, list the npm package in the site’s `engine9.pluginPackages` and install it into that site’s `node_modules` before account install can succeed.
+
+**Rule:** `metadata.dependencies` keys are plugin **paths** that must already be installed on the account; semver ranges apply to the host npm version of each path’s package.
+
+**Rule:** Interface `metadata.name` values use `@engine9/interfaces/...`. Native and third-party plugins use a human display name in `metadata.name`.
 
 **Rule:** Declare every interface or schema dependency required at deployment time.
 
@@ -274,7 +395,6 @@ For every predefined segment, document its display name, export key, definition 
 ```javascript
 const metadata = {
   name: "@engine9/interfaces/example",
-  version: "1.0.0",
   inbound: {
     id: ["extractLoyaltyNumber"],
     upsert: ["upsertMembership"],
@@ -293,7 +413,8 @@ export const settings = [
     type: "string",
     values: ["legacy", "current"],
     default: "legacy",
-    description: "Use legacy origin/pivot models or current model_*_stats tables.",
+    description:
+      "Use legacy origin/pivot models or current model_*_stats tables.",
   },
 ];
 ```
@@ -390,7 +511,6 @@ import upsert from "./transforms/inbound/upsert_tables.js";
 
 const metadata = {
   name: "@engine9/interfaces/example",
-  version: "1.0.0",
 };
 export const transforms = { upsert };
 export { metadata, schema };
@@ -401,17 +521,17 @@ Thin, schema-first interfaces are also valid. `message/index.js` exports only me
 
 ## Troubleshooting
 
-| Symptom | Check |
-| --- | --- |
-| Second install creates or reuses the wrong row | Review `metadata.unique`, interface defaults, and `options.unique` |
-| Installed transform is absent | Confirm `metadata.inbound` names an exported transform and its `type` matches the slot |
-| Upsert fails on duplicate keys | Merge rows by the schema's unique key with `mergeIntoQueue` |
-| Search does not appear in discovery | Confirm the plugin is installed and the handler uses a canonical form |
+| Symptom                                         | Check                                                                                                                          |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Second install creates or reuses the wrong row  | Review `metadata.unique`, interface defaults, and `options.unique`                                                             |
+| Installed transform is absent                   | Confirm `metadata.inbound` names an exported transform and its `type` matches the slot                                         |
+| Upsert fails on duplicate keys                  | Merge rows by the schema's unique key with `mergeIntoQueue`                                                                    |
+| Search does not appear in discovery             | Confirm the plugin is installed and the handler uses a canonical form                                                          |
 | Settings do not appear in MCP `plugin` settings | Confirm the plugin is installed, `settings` is on the default export or sibling `settings.js`, and the setting is not `hidden` |
-| Segment membership is unexpectedly broad | Inspect `universe`, search path, and optional `pluginId` scope |
-| Interface report is not available | Move it to a native `@engine9/plugins/reports/<area>` package |
-| Package cannot resolve | Use the package path and inspect resolver/registration rules; do not add `local$` |
-| Stack installation conflicts | Inspect installed stack `exclude` metadata and inherited `exclude_pii` |
+| Segment membership is unexpectedly broad        | Inspect `universe`, search path, and optional `pluginId` scope                                                                 |
+| Interface report is not available               | Move it to a native `@engine9/plugins/reports/<area>` package                                                                  |
+| Package cannot resolve                          | Use the package path and inspect resolver/registration rules; do not add `local$`                                              |
+| Stack installation conflicts                    | Inspect installed stack `exclude` metadata and inherited `exclude_pii`                                                         |
 
 ## Related documentation
 

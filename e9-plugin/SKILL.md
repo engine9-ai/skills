@@ -12,7 +12,7 @@ description: >-
 
 # engine9 plugin install
 
-Plugins are first-class on a connected engine9 MCP server. Installing a package onto accounts is a native `plugin` tool call, not a worker task and not local `PluginWorker` / `e9 pluginworker`. Use this skill for deploy, listAvailable, settings catalog, and setSetting. Use [create-engine9-plugin](../create-engine9-plugin/SKILL.md) only when **authoring** a package.
+Plugins are first-class on a connected engine9 MCP server. Installing a package onto accounts is a native `plugin` tool call, not a worker task and not local `PluginWorker` / `e9 pluginworker`. Use this skill for deploy, listAvailable, settings catalog, and setSetting. Use [create-engine9-plugin](../create-engine9-plugin/SKILL.md) when **authoring** or **versioning** a package (including third-party packages such as `acme-plugins`).
 
 ## Quick reference
 
@@ -24,22 +24,25 @@ Plugins are first-class on a connected engine9 MCP server. Installing a package 
 | Find children of a parent | `account` `{ "command": "search", "parents": ["<parent_account_id>"], "limit": 500 }` |
 | Verify a path is installed | `account` `{ "command": "search", "parents": ["<parent_account_id>"], "plugins": ["<path substring>"], "limit": 500, "max_scan": 500 }` |
 | Settings catalog / update | `plugin` `settings` / `setSetting` |
+| Author / version a package | [create-engine9-plugin](../create-engine9-plugin/SKILL.md) (not this skill) |
 
 **Rule:** Prefer MCP `plugin`. Never schedule `PluginWorker.install` via MCP `task`. Never invent paths from local `plugins/` or `interfaces/`.
 
-**Rule:** `listAvailable` is the installable catalog for the **connected server**. If the path is absent, stop and report it — do not read workspace packages as a workaround.
+**Rule:** `listAvailable` is the installable catalog for the **connected server**. If the path is absent, stop and report it — do not read workspace packages as a workaround. For third-party paths (e.g. `acme-plugins/loyalty`), the host must already `npm install` that package and list it in `engine9.pluginPackages`, then redeploy; otherwise it will never appear in the catalog.
 
 ## Concepts
 
 `plugin` `install` writes a `plugin` row (and schema / settings) into **that account's warehouse**. There is no bulk-install RPC: one MCP call per `account_id`. Account **search** stays one call.
 
+The **version of code that runs** is the host’s npm package pin (e.g. `acme-plugins@1.4.0`), not a per-account plugin version. Install does not choose a version; it applies whatever the host has loaded. Dependency failures name the host package version. See [create-engine9-plugin — Creating and versioning (Acme)](../create-engine9-plugin/SKILL.md#creating-and-versioning-a-package-acme).
+
 | Path form | Example |
 |-----------|---------|
-| Full package (preferred) | `@engine9/plugins/models/deployment/v2026_09_16` |
-| Shorthand from catalog | `models/deployment/v2026_09_16`, `e9email` |
+| Full path (preferred) | `@engine9/plugins/models/deployment/v2026_09_16`, `acme-plugins/loyalty` |
+| Shorthand from catalog | `models/deployment/v2026_09_16`, `e9email`, `loyalty` (only if unambiguous in `listAvailable`) |
 | User omits `@` | `engine9/plugins/...` → match `listAvailable` (`@engine9/plugins/...`) |
 
-Unique packages (`metadata.unique`, typical `@engine9/plugins/*` and most interfaces) reuse the existing row. Reinstall is idempotent for that path.
+Unique packages (`metadata.unique`, typical `@engine9/plugins/*` and most interfaces) reuse the existing row. Reinstall is idempotent for that path. Third-party packages often default to non-unique unless they set `metadata.unique: true`.
 
 Declared `settings` are inserted on first install only. Changing a value later is `setSetting`, not reinstall. Marketplace `auth_fields` are not settings.
 
