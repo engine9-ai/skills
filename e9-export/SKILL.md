@@ -89,7 +89,7 @@ One person may have many emails, phones, remotes, and hashes.
 
 Rule: Do not treat `email` as a person key; resolve it to `person_id`.
 
-Hash-only accounts typically ship `person_hash_email` / `person_hash_phone` and omit plaintext contact tables from the default export when `settings.exclude_pii` is set (an explicit `tables` list is an operator override).
+Hash-only accounts typically ship `person_hash_email` / `person_hash_phone` and omit plaintext contact tables from the default export when utilities/limited-pii `exclude_pii` is set (an explicit `tables` list is an operator override).
 
 Rule: Say **transaction**, never donation. Revenue questions use `transaction` and summary tables, not timeline `TRANSACTION_*` rows.
 

@@ -147,9 +147,21 @@ Pick a stem you can keep forever (`acme_blog`, `acme_loyalty`). In the future, p
 
 A stack at `@engine9/interfaces/stacks/<name>` is a metadata-only interface with `name`, `description`, `include`, and `exclude`. Core `PluginWorker`, not `SchemaWorker`, installs stacks: it deploys the plugin table, records the stack as a plugin row, walks `include`, and rejects paths forbidden by an installed plugin's `metadata.exclude`. `SchemaWorker` installs only one plugin's schema and row.
 
-`installStandard({ path })` defaults to the account's default stack, typically `@engine9/interfaces/stacks/standard`. Pass another stack, such as `@engine9/interfaces/stacks/limited-pii`, instead of hard-coding stack behavior into `SchemaWorker`. Installing limited-pii and then standard without Server must throw.
+`installDefaultPlugins({ path })` resolves an omitted path from (1)
+`exclude_pii` on `@engine9/interfaces/utilities/limited-pii` (when that plugin is
+installed) → `@engine9/interfaces/stacks/limited-pii`, (2) warehouse
+`default_stack` on `@engine9/interfaces/plugin`, or (3) the published core
+person interfaces — not automatically `@engine9/interfaces/stacks/standard`.
+Pass another stack, such as `@engine9/interfaces/stacks/limited-pii`, instead
+of hard-coding stack behavior into `SchemaWorker`. With `exclude_pii` set,
+installing standard must throw.
 
-Server `accounts.d` values `defaultStack` and `stacks[]` are options passed to `PluginWorker`; they do not belong in core. Inherited, child-first `settings.exclude_pii` forces limited-pii when the default would otherwise be standard and refuses standard, `person_email`, `person_phone`, and `person_address`, even when those plugins are already installed.
+Set `default_stack` on `@engine9/interfaces/plugin` and `exclude_pii` on
+`@engine9/interfaces/utilities/limited-pii` via MCP `plugin` `setSetting` (or
+`PluginWorker.updateSetting`). Empty `default_stack` means core person
+interfaces only. `exclude_pii: true` forces the limited-pii stack and refuses
+standard, `person_email`, `person_phone`, and `person_address`, even when those
+plugins are already installed.
 
 ### Inbound people pipeline
 
@@ -531,7 +543,7 @@ Thin, schema-first interfaces are also valid. `message/index.js` exports only me
 | Segment membership is unexpectedly broad        | Inspect `universe`, search path, and optional `pluginId` scope                                                                 |
 | Interface report is not available               | Move it to a native `@engine9/plugins/reports/<area>` package                                                                  |
 | Package cannot resolve                          | Use the package path and inspect resolver/registration rules; do not add `local$`                                              |
-| Stack installation conflicts                    | Inspect installed stack `exclude` metadata and inherited `exclude_pii`                                                         |
+| Stack installation conflicts                    | Inspect installed stack `exclude` metadata and utilities/limited-pii `exclude_pii`                                                         |
 
 ## Related documentation
 
@@ -542,6 +554,7 @@ Thin, schema-first interfaces are also valid. `message/index.js` exports only me
 - `@engine9/core/lib/peoplePipeline/README.md`
 - `stacks/standard/index.js`
 - `stacks/limited-pii/index.js`
+- `utilities/limited-pii/index.js`
 - `message/schema.js`, `person_email/schema.js`, and `job/schema.js`
 - `person_email/transforms/inbound/upsert_tables.js`
 - `person/transforms/inbound/upsert_tables.js`
