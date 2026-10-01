@@ -14,6 +14,7 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 | Authenticate | `mcp_auth` with `{}`, then verify with `ok` and `user` |
 | Install a plugin / list installable paths | `plugin` `install` / `listAvailable` — [e9-plugin](../e9-plugin/SKILL.md) |
 | Discover accounts or installed plugins | `account` |
+| Child-account history for billing (signup, disabled, active months) | `account` search with `history: true` |
 | Set an account's default warehouse | `account` `command: setDefaultWarehouse` with `remote_plugin_id` |
 | Use a purpose-built operation | The matching native MCP tool |
 | Run an on-demand worker method | `task` with `path` + `method` |
@@ -193,6 +194,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Am I connected / signed in? | `ok`, then `user` |
 | Who am I / which accounts do I have? | `user` (flat `accounts` map with `parent_ids`) |
 | Find accounts by prefix, parent, type, tags, or installed plugin | `account` with `command: "search"` (one call — do not fan out; flat rows) |
+| Child accounts with signup and disabled dates, including disabled accounts | `account` search with `parents`, `history: true`, and `limit: 500`. See [Account history](#account-history) |
 | List plugins / methods on one account | `account` with `account_id` (or `command: "plugins"`) |
 | Set an account's default warehouse | `account` `command: "setDefaultWarehouse"` with `remote_plugin_id` (`plugin.remote_plugin_id`). The JSON API body is `bot_id`; the account stores `default_warehouse_bot_id`. Do not send `bot_id` or `default_warehouse_bot_id` |
 | List plugin settings (types, descriptions, current values) grouped by plugin | `plugin` with `command: "settings"` |
@@ -257,7 +259,7 @@ Three commands:
 **`command: search`** — find accessible accounts in **one call** using config filters and optional installed-plugin probes. Prefer this over `user` + many per-account plugin loads when the question is “which accounts match …?”.
 
 - Requires at least one filter: `prefix` / `prefixes`, `parents`, `ids`, `name`, `type`, `tags`, or `plugins`
-- Optional: `recursive` (with `parents`), `include_disabled`, `include_plugins`, `include_plugin_metadata`, `limit` (default 50), `max_scan` (default 100 for plugin probes), `concurrency`
+- Optional: `recursive` (with `parents`), `include_disabled`, `history`, `include_plugins`, `include_plugin_metadata`, `limit` (default 50), `max_scan` (default 100 for plugin probes), `concurrency`
 - Returns: `{ ok: true, command: "search", count, accounts: [...], warnings, filters, truncated* }`
 - Each `accounts[]` row is **flat** with the same core fields as `user.accounts` (`name`, `type`, `parent_ids`, `disabled`, `tags`) plus `account_id`. `parents` / `recursive` only filter which rows appear; they do not nest children.
 - `include_plugins` attaches lite plugin rows (`id` / `name` / `path` / `table_prefix`) per account. `include_plugin_metadata` adds one marketplace metadata map keyed by plugin path — do not fan out `command: plugins` per account to build a method catalog.
@@ -277,7 +279,51 @@ Example — direct children of a parent (flat list):
 { "command": "search", "parents": ["<parent_account_id>"] }
 ```
 
+Example — those children with enable/disable history, including disabled accounts:
+
+```json
+{ "command": "search", "parents": ["<parent_account_id>"], "history": true, "limit": 500 }
+```
+
+`history` is honored on `command: "search"` only. Plugins and `setDefaultWarehouse` ignore it.
+
 Plugins command is also the **discovery step** before calling `task` when no native tool matches (see fallback workflow below).
+
+### Account history
+
+Rule: Leave `history` off unless the caller needs enable/disable dates. `history: true` includes disabled accounts and calls the Frakture account export for every matched account.
+
+Use this when a screen needs signup, disabled date, and which months an account was active. Ordinary search does not call the Frakture export.
+
+`history: true` forces `include_disabled: true`. Each row then includes:
+
+| Field | Meaning |
+| --- | --- |
+| `disabled` | Current Frakture flag when `history_status` is `ok`. Otherwise the catalog flag |
+| `date_created` | ISO-8601 signup date. From `account.date_created`, or the earliest Frakture history row marked created when that field is missing. `null` when neither exists |
+| `last_disabled` | ISO-8601. `null` when the account has never been disabled |
+| `last_enabled` | ISO-8601. `null` when the account has never been enabled |
+| `enable_disable_history` | Oldest first. `{ date, disabled, created?, last_disabled?, last_enabled?, user_id? }`. When `date_created` is set, the first event is `{ date: date_created, disabled: false, created: true }`. The rest are enable/disable updates only; renames and settings changes are omitted |
+| `history_status` | `ok`, `missing` (no export row), or `error` (the export call failed) |
+
+`filters.history` is `true`. `warnings` lists export failures. A failure does not fail the search. `limit` still caps the catalog page at 500; check `truncated` and `total_matched`.
+
+Direct `parents` with no other filters uses `GET /jsonapi/account?parent_id=&disabled=all` (no `X-Account-Id`). That list is direct children only and includes disabled accounts. A disabled account on that export that is not in the catalog is still returned. Other searches use `GET /jsonapi/account/:id` per returned account.
+
+Rule: Signup is `date_created` when it is set. The matching `created: true` event starts the history, so the first row below applies. Use the other rows only when `date_created` is `null`.
+
+| Situation | Signup | Disabled date | Active in a month |
+| --- | --- | --- | --- |
+| Earliest history event has `disabled: false` (including the `created: true` event) | That event’s `date` | `last_disabled` when `disabled` is true, otherwise blank | From that enable until the next disable. A later enable starts again. An open interval runs through now |
+| Earliest event has `disabled: true` | Before that `date` (already enabled; creation was not returned) | That disable, and `last_disabled` if still disabled | From the start of the chart through the month before the disable, then any later enable/disable pairs |
+| No history events, `last_enabled` set, account enabled | `last_enabled` | blank | From `last_enabled` through now |
+| No history events, `last_disabled` set, account disabled | Before `last_disabled` | `last_disabled` | Through the month that contains `last_disabled` when the disable is after the first instant of the month. A disable at `YYYY-MM-01T00:00:00.000Z` does not count that month |
+| No dates, account enabled | Unknown | blank | Current month only |
+| `history_status` is `missing` or `error` | Unavailable | Catalog `disabled` only | Leave the account out of monthly counts |
+
+A month counts when any active interval overlaps it. Interval end is exclusive: disabled at the first instant of a month means that month is not billable.
+
+Conductor artifact `billing` (`/billing`) renders this for direct children of the current parent. All-accounts scope asks for a parent first. The screen charts active accounts by month and lists signup, disabled date, and billable months in the chart window.
 
 ### `plugin`
 
