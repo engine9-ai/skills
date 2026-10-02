@@ -20,6 +20,7 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 | Run an on-demand worker method | `task` with `path` + `method` |
 | Run a predefined flow | `task` with `flow_id` |
 | Diagnose generated queries | The response's top-level `sql` field |
+| Debug an input (table, recent store files, record count and sample) | `input` — [Input](#input). Caller supplies `input_type` |
 
 **Rule:** Discover accounts, plugins, methods, and options from the connected MCP server only; never infer them from local workspace code.
 
@@ -209,6 +210,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | List segments, load segment detail, or schedule segment builds | `segment` |
 | List or run reports (plugin `path` or portable JSON `definition`; filters, date range) | `report` (`list` first for plugins; `run` with `path` or `definition`) |
 | Read or schedule account warehouse inventory | `inventory` (`get` first; `build` only if not ready) |
+| Debug an input: list the `input` table, recent store files, file record count and sample | `input` (`list`, `files`, `summary`). Caller supplies `input_type`; the tool does not catalog types |
 | Create accounts / manage domains or domain secrets | e9-account Worker (`cloud-services/e9-account`) — not MCP |
 | Run a SQL/EQL query | `eql` / `sql` (`command: "query"` or omit when `sql` is set) |
 | Analyze / summarize a table | `analyze` |
@@ -216,6 +218,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Compute plugin or input UUIDs | `plugin_id`, `input_id` |
 | Chat / conversation history | `chat` |
 | Read a small slice of an account file (S3 / local) | `file` |
+| List inputs, recent store files, or a file sample | `input` (`list` / `files` / `summary`). `input_type` is an exact filter the caller supplies |
 | Create / list / update / rotate / revoke API keys and scopes | `apiKey` — see [e9-api-key](../e9-api-key/SKILL.md). Never via `task` |
 | Run an on-demand plugin method | `task` with `path` + `method`. Built-in: `@engine9/plugins/e9workers:EchoWorker` + `echo` (no `account` lookup). Other plugins: discover via `account` first |
 | Run a published flow (predefined) | `task` with `flow_id` (slug from REST `GET /flows`) — no `path`/`method` |
@@ -482,7 +485,7 @@ HTTP: `GET /data/reports`, `GET /data/reports/get?path=`, `GET|POST /data/report
 
 ### `timelinePerson`
 
-Account- or person-level **current-identity** timeline + model inspect (`ModelWorker.inspectPerson`) and source-code model compare (`compareSourceCodes`). SQL lives on the server; prefer this over ad-hoc SQL. The conductor Timeline artifact is a shell over `command: inspect`; `/models` is a shell over `command: compareSourceCodes`. There is no separate `auditPeople` tool — inspect includes those **current** aggregations.
+Account- or person-level **current-identity** timeline + model inspect (`ModelWorker.inspectPerson`) and source-code model compare (`compareSourceCodes`). SQL lives on the server; prefer this over ad-hoc SQL. The conductor Timeline artifact is a shell over `command: inspect`; `/model` is a shell over `command: compareSourceCodes`. There is no separate `auditPeople` tool — inspect includes those **current** aggregations.
 
 Rule: `inspect` never loads `timeline_v3*`. Call **`timelinePersonLegacy`** for legacy tables. Current vs legacy contract: [e9-timeline — MCP: current vs legacy](../e9-timeline/SKILL.md#mcp-current-timeline-vs-legacy-timeline).
 
@@ -696,6 +699,38 @@ Store and replay account-scoped conversations.
 
 - Required: `account_id`
 - Actions: `send` (default), `history`, `list`, `sample`, `list_samples`
+
+### `input`
+
+Debug any account input. Generic over `input_type`: the tool does not special-case messages, transactions, plugins, or other types. Conductor `/input` is a shell over this tool. Type chips on that screen come from the distinct types this tool returns, with a client-side preferred order. The server does not ship that list.
+
+- Required: `account_id`
+- **command: list** (default) — rows from the warehouse `input` table, joined to `plugin` for `plugin_name` / `plugin_path`, newest `modified_at` first. Optional exact `input_type` (string, comma-separated, or array), `plugin_id`, and `q` (substring on remote id, remote name, input id, plugin name, plugin path). Also returns `input_types` (`{ input_type, inputs }`) so a client can build filters. Includes `sql`. Default limit 200 (max 500).
+- **command: files** — recent files in that input’s store (`ServerBaseWorker.listStore` / `FileWorker.list`). Requires `input_id`. Newest `modified_at` first. Does not read file contents. Default limit 40 (max 200).
+- **command: summary** — record count and a row sample for one `filename` returned by `files`. Requires `input_id` and `filename`. `.json` and `.json5` (optional `.gz`) use `FileWorker.json` and return `format: "json"` plus the parsed `json` value. A JSON array’s length is `records`; a JSON object has no record count. Other files use `FileWorker.sample` (default 8 rows, max 25). Their record count prefers that file’s `records` on `metadata.json` when present (`records_source: "metadata"`). Otherwise `FileWorker.count` reads the whole file (`records_source: "scan"`). Summary does not pass `limit` to `count`: that option is forwarded to the parser, and `limit: 1` stops on the header and returns 0 records.
+
+Example list:
+
+```json
+{ "command": "list", "account_id": "<account_id>", "input_type": "message" }
+```
+
+Example files:
+
+```json
+{ "command": "files", "account_id": "<account_id>", "input_id": "<uuid>" }
+```
+
+Example summary:
+
+```json
+{
+  "command": "summary",
+  "account_id": "<account_id>",
+  "input_id": "<uuid>",
+  "filename": "<filename from files>"
+}
+```
 
 ### `file`
 

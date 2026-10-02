@@ -1,6 +1,6 @@
 ---
 name: e9-global-message
-description: "Read and consume engine9 global message warehouse views, including message identity, plugin context in legacy bot_* columns, platform engagement, native conversions, last-click attributed_* metrics, and primary-source-code dictionary fields. Use when querying message performance, attributed revenue, spend or impressions by day, building message grids and reports, interpreting inventory message statistics, or choosing between lifetime and by-date summary views; do not use it to build messaging plugins or the attribution pipeline."
+description: "Read and consume engine9 global message warehouse views, including message identity, plugin context in legacy bot_* columns, platform engagement, native conversions, last-click attributed_* metrics, and primary-source-code dictionary fields. Use when querying message performance, attributed revenue, spend or impressions, building message grids and reports, interpreting inventory message statistics, or choosing publish_date versus by-date date. Email always uses global_message_summary on publish_date. Ads and other long-running types use global_message_summary_by_date.date (the day the statistic occurred). Do not use it to build messaging plugins or the attribution pipeline."
 ---
 
 # engine9 global message tables
@@ -9,16 +9,20 @@ Global message warehouse views put a message’s identity, platform engagement, 
 
 ## Quick reference
 
-| View | Grain | Date column |
-|------|--------|-------------|
-| `global_message_summary` | One row per `message_id` | Use `publish_date` for “when the message went out” |
-| `global_message_summary_by_date` | One row per `message_id` + `date` | `date` is the stats day (engagement day and/or transaction day — see below) |
+| View | Grain | Date column | Use for |
+|------|--------|-------------|---------|
+| `global_message_summary` | One row per `message_id` | `publish_date` — when the message went out | **Email always.** Also other one-shot sends whose platform totals are lifetime stats on the message (SMS blasts). |
+| `global_message_summary_by_date` | One row per `message_id` + `date` | `date` — the day the platform reported the statistic (not `publish_date`) | **Ads and other long-running types**, where impressions, clicks, and spend are reported on the day they occurred. |
 
 Both sit under the account `global_table_prefix` (often empty). They are views over `global_message`, `global_message_stats` / `_by_date`, plugin metadata, and `source_code_summary` / `_by_date`; they are not base tables you write to.
 
 ## Rules
 
 Rule: Say **transaction**, never donation.
+
+Rule: Email sends, opens, and clicks always come from `global_message_summary` on `publish_date`. Do not use `global_message_summary_by_date` or its `date` column for email.
+
+Rule: `global_message_summary_by_date.date` is the day a statistic occurred. Use it for ads and other long-running message types. It is not a substitute for email `publish_date`.
 
 Rule: Prefer `attributed_*` for cross-platform fundraising truth; platform `revenue` and `transactions` are native conversions only.
 
@@ -69,7 +73,7 @@ Filter or group by `bot_nickname` / `bot_path` the same way you would by plugin.
 | `spend`, `spend_override` | Ad spend from the platform; optional override |
 | `revenue`, `transactions` | **Native** platform conversion counts/amounts. Prefer `attributed_*` for fundraising truth |
 
-On `_by_date`, these numbers are for activity on that `date` as reported by the platform.
+On `_by_date`, these numbers are for activity on that `date` as reported by the platform. That is the right grain for ads and other long-running types. Email platforms store lifetime sends, opens, and clicks on the message; report those from `global_message_summary` by `publish_date`, even if a by-date row also exists.
 
 ### 4. Last-click attribution — also on `global_message_stats` / `_by_date`
 
@@ -106,12 +110,13 @@ Joined on `message.final_primary_source_code = summary.source_code` (and matchin
 
 | Question | Use |
 |----------|-----|
-| How did this email/ad perform overall? | `global_message_summary`, filter on `publish_date` / `channel` / `bot_*` (plugin) |
-| Spend, impressions, clicks over a calendar range? | `global_message_summary_by_date`, filter on `date`, sum engagement / `spend` |
-| Last-click revenue in a calendar range? | `global_message_summary_by_date`, sum `attributed_revenue` on `date` (transaction day) |
+| How did this email perform (sends, opens, clicks, or last-click on that send)? | `global_message_summary` only. `channel='email'`. Filter and group by `publish_date`. |
+| How did this one-shot send perform (SMS blast, same lifetime totals)? | `global_message_summary` on `publish_date`, same as email. |
+| How did this ad or long-running message perform on the days stats were reported? | `global_message_summary_by_date`, filter on `date` (not `publish_date`). Sum engagement and `spend`. |
+| Last-click revenue by the day the transaction happened? | `global_message_summary_by_date`, sum `attributed_revenue` on `date` (transaction day). Email fundraising tied to the send still uses the lifetime summary and `publish_date`. |
 | Cross-channel fundraising truth? | `attributed_*`, not `revenue` / `transactions` |
 | Acquisition / LTV by first touch or CRM origin? | Current model tables (`{prefix}_*`), not `origin_*` on these views |
-| ROI for ads? | `sum(attributed_revenue) / sum(spend)` (reports usually do this) |
+| ROI for ads? | `sum(attributed_revenue) / sum(spend)` on the by-date view (reports usually do this) |
 
 ### Trace related objects
 
@@ -130,7 +135,8 @@ Stale `attributed_*` with good `transaction_summary.recommended_message_id` usua
 ### Query lifetime and daily metrics
 
 ```sql
--- Lifetime performance by publish month
+-- Email (and other one-shot sends): lifetime totals by publish month.
+-- Do not switch this query to global_message_summary_by_date.
 SELECT
   date_trunc('month', publish_date) AS month,
   sum(sent) AS sent,
@@ -138,12 +144,14 @@ SELECT
   sum(clicks) AS clicks,
   sum(attributed_revenue) AS attributed_revenue
 FROM global_message_summary
-WHERE publish_date >= DATE '2026-01-01'
+WHERE channel = 'email'
+  AND publish_date >= DATE '2026-01-01'
 GROUP BY 1
 ORDER BY 1;
 
--- Calendar-day attribution uses the transaction day
-SELECT date, sum(attributed_revenue) AS attributed_revenue
+-- Ads and long-running types: stats on the day they occurred (`date`),
+-- not on publish_date. Also the axis for last-click revenue by transaction day.
+SELECT date, sum(spend) AS spend, sum(attributed_revenue) AS attributed_revenue
 FROM global_message_summary_by_date
 WHERE date >= DATE '2026-01-01'
 GROUP BY date
@@ -158,11 +166,13 @@ These blocks are **aggregate** message stats (`kind: aggregate`) — the usual i
 
 | Inventory key | Source | Bucket |
 |---------------|--------|--------|
-| `statistics.messages` | `global_message_summary` | Plugin (`bot_*`) / submodule / **channel** / month of **`publish_date`**. `records` = message count; sums `sent`, `impressions`, `clicks`, `spend`, `attributed_*` when columns exist. Also `by_channel_month`. Inventory UI: **Messages**. |
+| `statistics.messages` | `global_message_summary` | Plugin (`bot_*`) / submodule / **channel** / month of **`publish_date`**. `records` = message count; sums `sent`, `impressions`, `clicks`, `spend`, `attributed_*` when columns exist. Also `by_channel_month`. Inventory UI: **Messages**. **Home email** (sends, opens, clicks) uses this block only. |
 | `statistics.message_summary_by_date` | `global_message_summary_by_date` | **Active ads** (`spend > 0`) by plugin / submodule / channel / month of **`date`** (`count(distinct message_id)`). Coverage only — no engagement sums. |
-| `statistics.message_activity` | `global_message_summary_by_date` | Calendar-day engagement, **no spend filter**, same grain and metric sums as `messages`. Prefer this for Home sends / opens / clicks by channel. |
+| `statistics.message_activity` | `global_message_summary_by_date` | Calendar-day engagement on **`date`**, no spend filter. Same metric sums as `messages`. For **ads and other long-running types** only. Do not use it for email. |
 
-Use the lifetime summary (`messages`) for publish-month totals; use `message_activity` for calendar-month engagement (opens/clicks after send day, ads, SMS). Do not use `message_summary_by_date` for email activity — it drops rows without spend. Do not use `inputs.by_plugin_entry_type_month` as a substitute for these views.
+Rule: Home email and any other email sends/opens/clicks read `statistics.messages` (`publish_date`). A by-date series that only has recent `date` rows must not replace a year of publish-month email history.
+
+Use `message_activity` when the question is “on which days did this ad or long-running message report stats?” Do not use `message_summary_by_date` for email — it drops rows without spend. Do not use `inputs.by_plugin_entry_type_month` as a substitute for these views.
 
 ## Troubleshooting
 
@@ -171,7 +181,8 @@ Use the lifetime summary (`messages`) for publish-month totals; use `message_act
 | `attributed_*` is stale but `recommended_message_id` is correct | Attribution statistics may not have run for the publish window |
 | Revenue appears duplicated | Confirm native `revenue` was not added to `attributed_revenue` |
 | `origin_*` totals repeat across rows | Check whether messages share `final_primary_source_code` |
-| Email activity is missing from inventory | Use `message_activity`, not spend-filtered `message_summary_by_date` |
+| Email chart covers one recent month while Inventory Messages spans a year of publishes | Email was read from `message_activity` / `date`. Use `statistics.messages` on `publish_date`. |
+| Email activity is missing from inventory | Read `statistics.messages` (`global_message_summary`, `publish_date`), not `message_activity` and not spend-filtered `message_summary_by_date` |
 
 ## Related documentation
 

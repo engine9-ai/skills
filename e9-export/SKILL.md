@@ -82,7 +82,8 @@ Table parquet is a dump of the named warehouse table at export time. Columns mat
 | `source_code_dictionary` | One row per code (`source_code_id`, `source_code`) | `transaction.source_code_id`, timeline `source_code_id` |
 | `source_code_summary` / `_by_date` | Per-code rollups (attributed revenue/transactions; `origin_*` is **legacy**) | `source_code_id` — [e9-source-code](../e9-source-code/SKILL.md) |
 | `global_message` / `message` | Message identity (`channel`, `publish_date`, primary source code) | `input.id` for a message input is often the message id |
-| `global_message_summary` / `_by_date` | Per-message rollups (sends, attributed revenue; daily spend/impressions) | Message / plugin |
+| `global_message_summary` | Lifetime rollups. Email (and other one-shot sends) report sends, opens, and clicks on `publish_date`. | Message / plugin |
+| `global_message_summary_by_date` | One row per message per `date`. `date` is the day the statistic occurred. Use it for ads and other long-running types, not for email. | Message / plugin |
 | `timeline` | Warehouse entry log (when the bundle includes it): `id`, `ts`, `person_id`, `entry_type_id`, `input_id` | Same keys as idv1 rows |
 
 One person may have many emails, phones, remotes, and hashes.

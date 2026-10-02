@@ -51,7 +51,7 @@ When using an engine9 MCP server, discover plugins, methods, and tool parameters
 | Input files | [e9-input/SKILL.md](e9-input/SKILL.md) | Produce one engine9 input per named inbound stream (form, email blast, ad, SQL table, extract) |
 | Transaction mapping | [inputs/transaction-mapping/SKILL.md](inputs/transaction-mapping/SKILL.md) | Map third-party payment data into the Transaction schema |
 | Source codes | [e9-source-code/SKILL.md](e9-source-code/SKILL.md) | Work with dictionaries, parsing, last-click attribution, and overrides |
-| Global message tables | [e9-global-message/SKILL.md](e9-global-message/SKILL.md) | Read `global_message_summary` and `global_message_summary_by_date` engagement and attribution data |
+| Global message tables | [e9-global-message/SKILL.md](e9-global-message/SKILL.md) | Read message engagement and attribution. Email always uses `global_message_summary` on `publish_date`. Ads and long-running types use `global_message_summary_by_date.date`. |
 | Models | [e9-model/SKILL.md](e9-model/SKILL.md) | Analyze timeline lifetime value in `{prefix}_*` model tables, or search people in or out of a current model by source code. Legacy models: [e9-model/legacy.md](e9-model/legacy.md), only when the user explicitly asked |
 | Person identity | [e9-person-id/SKILL.md](e9-person-id/SKILL.md) | Understand selection of `person_id`, compact identifier tables, and legacy identity models |
 | Person remotes | [e9-person-remote/SKILL.md](e9-person-remote/SKILL.md) | Work with plugin-scoped `person_remote` rows, identity loading, and export joins |

@@ -6,8 +6,10 @@ description: >-
   ad, SQL table, CRM extract, advocacy action, or other vendor object. Use when
   mapping vendor data into Timeline Raw rows, splitting so each remote_input_id
   is its own input, choosing remote_input_id vs remote_entry_id vs remote_person_id,
-  or writing files for InputWorker.id / idFiles. Timeline activity with entry_type
-  is the common case.
+  writing files for InputWorker.id / idFiles, or deleting an input or its store
+  files. Timeline activity with entry_type is the common case. Deleting requires
+  a file list, a count, and a later explicit confirmation before anything is
+  removed.
 ---
 
 # Produce engine9 input files
@@ -30,6 +32,7 @@ The common case is **timeline** activity: each row is an **entry** with a string
 | SQL table / query | `input_type: sql` (or `person` / `timeline`), stable table or extract name |
 | Split mixed streams | Stamp `remote_input_id` on every row, then write one file per id |
 | Load path | `InputWorker.id` / `idFiles` → `.idv1.parquet` → optional `loadTimelineTables` |
+| Delete an input or its files | List every file and the count, then stop. Delete only after a later message confirms that exact list |
 
 Rule: A submission, payment, click, or lead id is a **row** id (`remote_entry_id`), not a person id (`remote_person_id`).
 
@@ -218,6 +221,17 @@ Stamp `remote_input_id` on every row of a mixed stream, then split. Do not conca
 4. Write one Timeline Raw file per input plus `metadata.json`.
 5. Run `InputWorker.id` / `idFiles` (people + Timeline ID), then `loadTimelineTables` if warehouse `timeline` load is in scope.
 
+### Delete an input or its store files
+
+A delete covers the input store (`metadata.json`, raw files, `.idv1.parquet`, and every other file in that input's directory) and, when the request includes it, the warehouse `input` row. Timeline or transaction rows that point at the input are a separate delete. They still require this same list, count, and confirmation when the request is to remove the input's files.
+
+1. Resolve each input: `account_id`, plugin, `input_type`, `input_id`, and `data_path`.
+2. List every file the delete would remove. When more than one input is in scope, say which input each file belongs to.
+3. State the file count, and the input count when more than one input is in scope. Zero files is still a result: say there are none.
+4. Stop. Show that list and those counts. Do not delete in that turn.
+5. Delete only after a later message confirms that exact list. The original request to delete is not confirmation. A "yes" or "delete them" sent before the list was shown is not confirmation. A reply that does not refer to the listed set is not confirmation.
+6. If the store changes, or the user changes which inputs are in scope, list and count again and wait for a new confirmation.
+
 ## Rules
 
 Rule: One named remote stream per input. If the vendor has a durable form, message, ad, or table id, that object is the input.
@@ -235,6 +249,8 @@ Rule: Do not mix `input_type` values in one file. Split first.
 Rule: `FORM_SUBMIT` is the form-action type. Use `SIGNUP` / `SIGNUP_INITIAL` / `SIGNUP_SUBSEQUENT` only for list-subscription facts, not for “someone filled this form.”
 
 Rule: Leave `source_code` empty when the vendor has no code; ad ids and campaign ids are detail, not source codes.
+
+Rule: Never delete input store files or an `input` row in the same turn that lists them. Show the file list and the count, then wait for a later message that confirms that exact list.
 
 ## Examples
 
@@ -305,6 +321,8 @@ Do **not** key the input by ad, ad set, or campaign when the object people fille
 | Duplicate activity | Missing `remote_entry_id` / unstable `ts` so timeline UUIDs change |
 | Message and form share an id | They are different streams; do not reuse a message uuid as the form `input_id` unless they are intentionally the same store |
 | Entries missing on Person → Timeline | ID files may exist in the input store without a `timeline` load; see [e9-timeline](../e9-timeline/SKILL.md) |
+| Need the store files and a row sample for one input | Conductor `/input`, or MCP `input` (`list`, `files`, `summary`). The tool takes `input_type` as a filter and does not special-case messages, transactions, or other types. See [e9-mcp](../e9-mcp/SKILL.md) |
+| A delete ran without a shown file list | Stop. Deleting an input requires the file list, the count, and a later confirmation of that exact list |
 
 ## Related documentation
 

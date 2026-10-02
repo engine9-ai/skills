@@ -261,44 +261,44 @@ Each month with data gets a bucket. Use `month_range` for timeline axis bounds.
       "sql": "select `bot_id` as plugin_id, ... `channel` as channel, ... count(distinct `message_id`) as records, sum(coalesce(`sent`, 0)) as sent, sum(coalesce(`impressions`, 0)) as impressions, sum(coalesce(`clicks`, 0)) as clicks ... from global_message_summary_by_date where `date` is not null group by 1, 2, 3, 4, 5",
       "by_plugin_submodule_month": [
         {
-          "plugin_id": "a1b2c3d4-…",
-          "plugin_name": "@frakture-com/plugins/Switchboard",
-          "submodule": "Messages",
-          "channel": "email",
+          "plugin_id": "fb-plugin-id",
+          "plugin_name": "@frakture-com/plugins/Facebook",
+          "submodule": "Ads",
+          "channel": "facebook",
           "month": "2024-01",
           "records": 12,
-          "sent": 18000,
-          "impressions": 6200,
-          "clicks": 900
+          "sent": 0,
+          "impressions": 180000,
+          "clicks": 2400
         },
         {
-          "plugin_id": "sms-plugin-id",
-          "plugin_name": "@frakture-com/plugins/Tatango",
-          "submodule": "Messages",
-          "channel": "sms",
+          "plugin_id": "ads-plugin-id",
+          "plugin_name": "@frakture-com/plugins/GoogleAds",
+          "submodule": "Ads",
+          "channel": "search",
           "month": "2024-01",
           "records": 4,
-          "sent": 3200,
-          "impressions": 0,
-          "clicks": 180
+          "sent": 0,
+          "impressions": 62000,
+          "clicks": 900
         }
       ],
       "by_channel_month": [
         {
-          "channel": "email",
+          "channel": "facebook",
           "month": "2024-01",
           "records": 12,
-          "sent": 18000,
-          "impressions": 6200,
-          "clicks": 900
+          "sent": 0,
+          "impressions": 180000,
+          "clicks": 2400
         },
         {
-          "channel": "sms",
+          "channel": "search",
           "month": "2024-01",
           "records": 4,
-          "sent": 3200,
-          "impressions": 0,
-          "clicks": 180
+          "sent": 0,
+          "impressions": 62000,
+          "clicks": 900
         }
       ]
     }
@@ -328,10 +328,12 @@ Audit **Messages** (aggregate) more often than **Timeline → Messages** (per-pe
 | Average gift | `revenue / records` for the latest month (no year-over-year) |
 | Active people | `timeline` `months[].people` |
 | People created chart | person `created_months` (fallback: person `months[]` when `date_column` is a created-date column) |
-| Emails sent / SMS sent | `message_activity.by_channel_month` filtered by `channel`, field `sent` |
-| Channel activity (sends, opens, clicks) | `message_activity.by_channel_month`: `sent`, `impressions`, `clicks` (first–last month, max 36). Use `messages` when activity is one month, ends earlier, or later months are record-only (no sends/opens/clicks). |
+| Emails sent | `messages.by_channel_month` where `channel` is `email`, field `sent` (`global_message_summary` / `publish_date`). Never `message_activity`. |
+| Email activity (sends, opens, clicks) | Same `messages` series: `sent`, `impressions`, `clicks` (first–last publish month with those metrics, max 36). |
+| SMS sent (one-shot) | `messages.by_channel_month` where `channel` is `sms`, on `publish_date`. |
+| Ads and long-running activity | `message_activity.by_channel_month` on `date` (the day the statistic occurred): `sent`, `impressions`, `clicks`. |
 
-Fallback if `message_activity` is skipped or stale: `messages.by_channel_month`. Do not use timeline `inputs` for Home email/SMS. Ad coverage (not Home activity) stays on `message_summary_by_date`.
+Do not use timeline `inputs` for Home email or SMS. Do not let `message_activity` replace email publish-month history. Ad coverage (not email) stays on `message_summary_by_date`.
 
 ## Bundle export `inventory.json5`
 
@@ -353,7 +355,8 @@ const report = await buildInventorySummaryFile(worker, {
   definition_path: 'engine9-accounts/<org>/<account>/export',
   statistics: true
 });
-// report.statistics.message_activity.by_channel_month  — sent / impressions / clicks
+// report.statistics.messages.by_channel_month  — email sent / impressions / clicks by publish_date
+// report.statistics.message_activity.by_channel_month  — ads and long-running types, by date
 // report.statistics.tables.find(t => t.table === 'transaction').months  — revenue + records
 // report.tables — export plan
 ```

@@ -307,7 +307,7 @@ This is the MCP executed-SQL standard — see
 ## compareSourceCodes
 
 `compareSourceCodes` (`workers/model/compare.js`) is the payload for MCP
-`timelinePerson` `command: compareSourceCodes` and the conductor `/models`
+`timelinePerson` `command: compareSourceCodes` and the conductor `/model`
 artifact. It reads **every** current `model_*_person_stats` /
 `model_*_transaction_stats` table. Each `rows[]` item is one source code with
 `{prefix}_{person_count|revenue|transactions}` columns.

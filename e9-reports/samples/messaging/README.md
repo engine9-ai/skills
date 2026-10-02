@@ -135,7 +135,7 @@ Plugin counterpart: `@engine9/plugins/reports/messaging:reports:sms_fundraising`
 | Audience | Notes |
 | --- | --- |
 | Consumers | Impressions, clicks, CTR, and spend across ads and organic social. Optional channel filter. |
-| Developers | `global_message_summary_by_date`, `date_column` `date` (stats day). Static `channel in (…)` matches the plugin default set. Optional run filter `channel` (`=`). |
+| Developers | `global_message_summary_by_date`, `date_column` `date` (the day the statistic occurred, not `publish_date`). Static `channel in (…)` matches the plugin default set. Optional run filter `channel` (`=`). |
 
 Plugin counterpart: `@engine9/plugins/reports/messaging:reports:ads_social_persuasion`.
 
@@ -154,7 +154,9 @@ Rule: Prefer `attributed_revenue` / `attributed_transactions` for fundraising tr
 
 Rule: Email opens are `impressions` on `global_message_summary`.
 
-Rule: Email and SMS samples filter `publish_date`. Ads/social samples filter `date` on `global_message_summary_by_date`.
+Rule: Email always uses `global_message_summary` filtered on `publish_date`. Do not move email samples onto `global_message_summary_by_date`.
+
+Rule: SMS blast samples use the same lifetime view and `publish_date`. Ads and other long-running types use `global_message_summary_by_date`. Their `date` column is the day the statistic occurred, not `publish_date`.
 
 Rule: `report` `command: list` stays installed plugins only. Hosted samples do not appear in that catalog.
 

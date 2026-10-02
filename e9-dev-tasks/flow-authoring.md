@@ -56,9 +56,39 @@ Executable tasks must include worker routing (see `engine9/server/test/task/echo
 | `tasks[]` | Ordered steps |
 | `task_key` | Unique key per task (required in practice). Address for `{{tasks.<task_key>.output.*}}`. Auto-generated from id/name/worker if omitted. |
 | `name` (per task) | Unique display name per task. **Must differ from every other task in the flow.** Do not set this to the worker method when two steps share a method. |
-| `worker_path` | Path under server `workers/` (e.g. `workers/EchoWorker`, `workers/PersonWorker`) |
-| `worker_method` | Worker method name (e.g. `echo`, `loadPeople`) |
+| `worker_path` / `path` | Package or worker path (e.g. `workers/EchoWorker`, `@engine9/plugins/e9workers:ExportWorker`, `@frakture-com/workerbots/SFTPBot`) |
+| `worker_method` / `method` | Worker method name (e.g. `echo`, `export`, `put`) |
+| `plugin_id` | Required on each plugin step of a flow for one account. The installed plugin row id on that account. |
+| `assignee.bot_id` | Required on each plugin step of a flow for one account. That row's `remote_plugin_id` (the Frakture bot id). |
 | `options` | Passed to the worker method (must match that method's metadata). May include Handlebars templates resolved at **task start** (not schedule time). |
+
+### Plugin identifiers for one account
+
+A flow written for a specific account must name the plugin instance on that account. The package path is the code. `plugin_id` and `remote_plugin_id` identify which installed plugin runs it.
+
+Load the account's installed plugins first (MCP `account` with `command: "plugins"`). On each plugin step set:
+
+- `plugin_id` — the plugin row `id`
+- `assignee.bot_id` — that row's `remote_plugin_id`
+
+```json5
+{
+  task_key: 'putPeople',
+  name: 'Upload people CSV',
+  path: '@frakture-com/workerbots/SFTPBot',
+  method: 'put',
+  plugin_id: '<plugin id on this account>',
+  assignee: { type: 'bot', bot_id: '<remote_plugin_id>' },
+  options: {
+    directory: 'uploads/people',
+    file: "people {{date 'now' 'M-D-YY'}}.csv",
+  },
+}
+```
+
+When an account has more than one plugin with the same path, the identifiers select the instance. If the account's plugins cannot be loaded, stop. Do not write the flow with paths alone.
+
+A shared flow that is not bound to one account (built-in server flows such as `identity-rebuild`) names the package path. Those plugin ids differ per account. `scheduleRemoteTasks` fills `assignee.bot_id` from that account's `plugin` table at schedule time.
 
 ### Passing values between tasks
 
@@ -246,11 +276,12 @@ The blank SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b
 ## Checklist for a new flow
 
 1. Choose `id`, `name`, and tags.
-2. List tasks in execution order with unique `task_key`, unique `name`, `worker_path`/`path`, `worker_method`/`method`, `options`. Reject any two tasks that share a `name` or `task_key`.
-3. Save the `.json5` file wherever it fits your repo layout; pass that path to `createFlowRun`.
-4. Run `createFlowRun` with `account_id` for the target account.
-5. Call `taskWorker.runFlow(...)` to execute inline, or ensure SQLTaskManager is running to execute `PENDING` task runs from `createFlowRun`.
-6. Inspect `task_run` state in the DB and artifacts under `${ENGINE9_TASK_RUN_LOG_DIR:-/var/log/engine9/tasks}/{account_id}/flows/{flowId}/{date}/task_runs/{id}/output.json`.
+2. When the flow is for one account, load that account's installed plugins. If they cannot be loaded, stop.
+3. List tasks in execution order with unique `task_key`, unique `name`, `worker_path`/`path`, `worker_method`/`method`, `options`. For an account-specific flow, set `plugin_id` and `assignee.bot_id` (`remote_plugin_id`) on every plugin step. Reject any two tasks that share a `name` or `task_key`.
+4. Save the `.json5` file wherever it fits your repo layout; pass that path to `createFlowRun`.
+5. Run `createFlowRun` with `account_id` for the target account.
+6. Call `taskWorker.runFlow(...)` to execute inline, or ensure SQLTaskManager is running to execute `PENDING` task runs from `createFlowRun`.
+7. Inspect `task_run` state in the DB and artifacts under `${ENGINE9_TASK_RUN_LOG_DIR:-/var/log/engine9/tasks}/{account_id}/flows/{flowId}/{date}/task_runs/{id}/output.json`.
 
 ## Related code
 

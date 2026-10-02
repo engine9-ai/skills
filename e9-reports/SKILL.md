@@ -71,7 +71,7 @@ export const reports = { subscription_status };
 export default { metadata, reports };
 ```
 
-Ship only reports that belong on that plugin. Email send/engagement and fundraising dashboards live on `@engine9/plugins/reports/messaging` (`email`, `email_transactions`) because they query `global_message_summary` with `channel='email'`. Subscription counts and person-created charts live on `@engine9/plugins/reports/people`.
+Ship only reports that belong on that plugin. Email send/engagement and fundraising dashboards live on `@engine9/plugins/reports/messaging` (`email`, `email_transactions`) because they query `global_message_summary` with `channel='email'` and `date_column: 'publish_date'`. Ads and other long-running types use `global_message_summary_by_date` with `date_column: 'date'` (the day the statistic occurred, not `publish_date`). Subscription counts and person-created charts live on `@engine9/plugins/reports/people`.
 
 ## Concepts
 
@@ -150,6 +150,10 @@ Two ways to specify the query:
 2. **Explicit `query`** — full EQL object (`table`, `joins`, `columns`, `groupBy`, `orderBy`). Date + filter options are **appended** to `query.conditions`.
 
 Rule: Use only `StatCard`, `ComposedChart`, and `Table`.
+
+Rule: Email reports always use `global_message_summary` and `date_column: 'publish_date'`. Do not point email sends, opens, or clicks at `global_message_summary_by_date`.
+
+Rule: Use `global_message_summary_by_date` and `date_column: 'date'` for ads and other long-running message types. `date` is the day the platform reported the statistic, not the message `publish_date`.
 
 ## Rules
 
@@ -450,6 +454,7 @@ Recommendation only: add a future `reports:read` or `data:read` scope on `GET/PO
 - [ ] File under `reports/<key>.js`; key is the path tail
 - [ ] `name`, `description`, `tags`, `sections` with stable component `id`s
 - [ ] `data_sources.default.table` (and `date_column` if callers should pass `start`/`end`)
+- [ ] Email uses `global_message_summary` and `date_column: 'publish_date'`. Ads and long-running types use `global_message_summary_by_date` and `date_column: 'date'` (the day the statistic occurred)
 - [ ] Extra run variables as JSON Schema + `filter: { column, operator }`
 - [ ] Component names `StatCard` / `ComposedChart` / `Table` only
 - [ ] Exported on `reports` **and** `default.reports`
