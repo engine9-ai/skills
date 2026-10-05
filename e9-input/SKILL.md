@@ -230,7 +230,7 @@ A delete covers the input store (`metadata.json`, raw files, `.idv1.parquet`, an
 3. State the file count, and the input count when more than one input is in scope. Zero files is still a result: say there are none.
 4. Stop. Show that list and those counts. Do not delete in that turn.
 5. Delete only after a later message confirms that exact list. The original request to delete is not confirmation. A "yes" or "delete them" sent before the list was shown is not confirmation. A reply that does not refer to the listed set is not confirmation.
-6. Remove the confirmed files with one `@engine9/plugins/e9workers:FileWorker` `removeFiles` call. Pass `filenames` (comma-delimited or an array), `file_array` (path strings or `{ filename }` objects), or `options_filename` / `optionsFilename` (a JSON file of those options, including an `idFiles` options file). Do not schedule one `remove` task per file.
+6. Remove the confirmed files with one `@engine9/plugins/e9workers:FileWorker` `removeFiles` call. Pass `filenames` (comma-delimited or an array), `file_array` (path strings or `{ filename }` objects), or `options_filename` / `optionsFilename` (a JSON file of those options, including an `idFiles` options file). Do not schedule one `remove` task per file. When the confirmed set is every file in one input’s store directory, MCP `input` `deleteFiles` is that single call. It resolves the directory from `input_id` and does not take a path.
 7. If the store changes, or the user changes which inputs are in scope, list and count again and wait for a new confirmation.
 
 ## Rules
@@ -254,6 +254,10 @@ Rule: Leave `source_code` empty when the vendor has no code; ad ids and campaign
 Rule: Never delete input store files or an `input` row in the same turn that lists them. Show the file list and the count, then wait for a later message that confirms that exact list.
 
 Rule: Remove a confirmed set of input store files with one `FileWorker.removeFiles` call. Do not schedule one `remove` task per file.
+
+Rule: MCP `input` `deleteFiles` removes every file directly in one input’s store directory. Use it only after the user confirms that folder. It does not delete a subset of the folder, the warehouse `input` row, or timeline rows.
+
+Conductor’s Inputs artifact exposes the same folder delete: the Files card’s Delete button confirms, then calls `deleteFiles`.
 
 ## Examples
 
@@ -325,6 +329,7 @@ Do **not** key the input by ad, ad set, or campaign when the object people fille
 | Message and form share an id | They are different streams; do not reuse a message uuid as the form `input_id` unless they are intentionally the same store |
 | Entries missing on Person → Timeline | ID files may exist in the input store without a `timeline` load; see [e9-timeline](../e9-timeline/SKILL.md) |
 | Need the store files and a row sample for one input | Conductor `/input`, or MCP `input` (`list`, `files`, `summary`). The tool takes `input_type` as a filter and does not special-case messages, transactions, or other types. See [e9-mcp](../e9-mcp/SKILL.md) |
+| Delete every file in one input’s store folder | Conductor Inputs → Files → Delete, after the confirm. That calls MCP `input` `deleteFiles`. Same list-then-confirm rule when an agent does it. |
 | A delete ran without a shown file list | Stop. Deleting an input requires the file list, the count, and a later confirmation of that exact list |
 
 ## Related documentation

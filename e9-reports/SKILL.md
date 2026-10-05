@@ -1,6 +1,6 @@
 ---
 name: e9-reports
-description: "Author and consume engine9 reports: JSON dashboards with EQL-backed StatCard, ComposedChart, and Table widgets. Definitions are installed with plugins or hosted as portable JSON. ReportWorker compiles declarative filters and start/end into SQL. Use when adding reports/, defining filters, running via MCP/HTTP with path or definition, or rendering dashboards."
+description: "Author and consume engine9 reports: JSON dashboards with EQL-backed StatCard, ComposedChart, and Table widgets. Definitions are installed with plugins or hosted as portable JSON. ReportWorker compiles declarative filters and start/end into SQL. Use when adding reports/, defining filters, running via MCP/HTTP with path or definition, or rendering dashboards. Legacy stored report folders are not this system: never code against them, and call MCP legacyReportFolder only when the user explicitly asked to manage those folders."
 ---
 
 # engine9 reports
@@ -8,6 +8,8 @@ description: "Author and consume engine9 reports: JSON dashboards with EQL-backe
 Reports are **JSON dashboards**. The usual source is an installed plugin; the same JSON can be hosted elsewhere and passed to `run` as `definition`. `ReportWorker` turns run options into EQL conditions and compiles/runs SQL. Consumers pass `path` **or** `definition` plus filter options and render `sections` data — they never write SQL.
 
 Use this skill when defining a report, wiring filters to EQL, executing it through supported surfaces, or implementing a consumer for report results.
+
+Legacy report folders are a different stored-folder system used by a small number of legacy accounts. They are not plugins. Do not code reports against them. MCP `legacyReportFolder` is only for an explicit request to list, read, or change visibility of those folders. See [legacy-folders.md](legacy-folders.md).
 
 ## Quick reference
 
@@ -20,6 +22,7 @@ Use this skill when defining a report, wiring filters to EQL, executing it throu
 | Hosted | Artifact (or any host) fetches HTTPS JSON, then MCP `run` with `definition` |
 | Samples | Simplified messaging JSON in [samples/messaging](samples/messaging/README.md), usable as a remote report URL |
 | Render | Preserve section and component order |
+| Legacy folders | Do not code against them. [legacy-folders.md](legacy-folders.md) only when the user explicitly asked |
 
 ## Workflow
 
@@ -156,6 +159,8 @@ Rule: Email reports always use `global_message_summary` and `date_column: 'publi
 Rule: Use `global_message_summary_by_date` and `date_column: 'date'` for ads and other long-running message types. `date` is the day the platform reported the statistic, not the message `publish_date`.
 
 ## Rules
+
+Rule: Do not code against legacy report folders. They are not plugins, not JSON dashboards, and not a schema. MCP `report` is the only report implementation to author or consume. Read [legacy-folders.md](legacy-folders.md) only when the user explicitly asked to list, read, or change visibility of a legacy report folder.
 
 ### Options → conditions
 
@@ -459,10 +464,12 @@ Recommendation only: add a future `reports:read` or `data:read` scope on `GET/PO
 - [ ] Component names `StatCard` / `ComposedChart` / `Table` only
 - [ ] Exported on `reports` **and** `default.reports`
 - [ ] Documented in the package `README.md` (path, who it is for, filters)
+- [ ] The definition is a plugin JSON dashboard. It does not read or copy a legacy report folder
 
 ## Related documentation
 
 - [engine9 MCP](../e9-mcp/SKILL.md)
+- [Legacy report folders](legacy-folders.md) — stored folders for a few legacy accounts. Not a schema. Open only on an explicit request
 - [engine9 EQL](../e9-eql/SKILL.md)
 - [Global message view grain and metrics](../e9-global-message/SKILL.md)
 - [API key capabilities](../e9-api-key/SKILL.md)
