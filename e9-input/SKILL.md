@@ -32,7 +32,7 @@ The common case is **timeline** activity: each row is an **entry** with a string
 | SQL table / query | `input_type: sql` (or `person` / `timeline`), stable table or extract name |
 | Split mixed streams | Stamp `remote_input_id` on every row, then write one file per id |
 | Load path | `InputWorker.id` / `idFiles` → `.idv1.parquet` → optional `loadTimelineTables` |
-| Delete an input or its files | List every file and the count, then stop. Delete only after a later message confirms that exact list |
+| Delete an input or its files | List every file and the count, then stop. After a later confirmation, one `FileWorker.removeFiles` call removes that list |
 
 Rule: A submission, payment, click, or lead id is a **row** id (`remote_entry_id`), not a person id (`remote_person_id`).
 
@@ -230,7 +230,8 @@ A delete covers the input store (`metadata.json`, raw files, `.idv1.parquet`, an
 3. State the file count, and the input count when more than one input is in scope. Zero files is still a result: say there are none.
 4. Stop. Show that list and those counts. Do not delete in that turn.
 5. Delete only after a later message confirms that exact list. The original request to delete is not confirmation. A "yes" or "delete them" sent before the list was shown is not confirmation. A reply that does not refer to the listed set is not confirmation.
-6. If the store changes, or the user changes which inputs are in scope, list and count again and wait for a new confirmation.
+6. Remove the confirmed files with one `@engine9/plugins/e9workers:FileWorker` `removeFiles` call. Pass `filenames` (comma-delimited or an array), `file_array` (path strings or `{ filename }` objects), or `options_filename` / `optionsFilename` (a JSON file of those options, including an `idFiles` options file). Do not schedule one `remove` task per file.
+7. If the store changes, or the user changes which inputs are in scope, list and count again and wait for a new confirmation.
 
 ## Rules
 
@@ -251,6 +252,8 @@ Rule: `FORM_SUBMIT` is the form-action type. Use `SIGNUP` / `SIGNUP_INITIAL` / `
 Rule: Leave `source_code` empty when the vendor has no code; ad ids and campaign ids are detail, not source codes.
 
 Rule: Never delete input store files or an `input` row in the same turn that lists them. Show the file list and the count, then wait for a later message that confirms that exact list.
+
+Rule: Remove a confirmed set of input store files with one `FileWorker.removeFiles` call. Do not schedule one `remove` task per file.
 
 ## Examples
 

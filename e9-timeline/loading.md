@@ -49,7 +49,7 @@ One file (`filename`) or a directory of `.idv1.parquet` / legacy `.timeline.parq
 
 ### `loadTimelineTables`
 
-Timeline **and** detail: `fileArray` with `idFilename`, or `idFilename` / `filenames`, or `inputId` / `directory` via `getIdFilenames`. For each file: `loadTimeline`, then `loadTimelineDetails` when `loadTimelineDetail` and `timelineDetailTable` are set. Then `ensureTimelineSummary` — a view joining `timeline`, `input`, `plugin`, `source_code_dictionary`, and the detail table (`<detail>_summary`).
+Timeline **and** detail: `file_array` with `id_filename`, or `id_filename` / `filenames`, or `input_id` / `directory` via `getIdFilenames`. For each file: `loadTimeline`, then `loadTimelineDetails` when `load_timeline_detail` and `timeline_detail_table` are set. Then `ensureTimelineSummary` — a view joining `timeline`, `input`, `plugin`, `source_code_dictionary`, and the detail table (`<detail>_summary`).
 
 ### `loadTimelineDetails`
 

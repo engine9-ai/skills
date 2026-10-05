@@ -240,6 +240,35 @@ e9 exportworker export -a <account_id> \
 
 The definition supplies the default window and must reference `overrides.start` / `overrides.end`. See [Start and end dates](#start-and-end-dates).
 
+### Timeline rows from input files
+
+When the activity lives in idv1 files and is not loaded into warehouse `timeline`, put an input `universe` on the person-search export. The export loads those stores into a query engine and runs the search (and `sql.query` bindings whose table is `timeline`) against that, joined to the warehouse `input` rows for the same ids.
+
+```
+universe: [
+  {
+    type: 'inputs',
+    entry_types: ['EMAIL_SEND', 'EMAIL_OPEN', 'EMAIL_CLICK'],
+    eql: {
+      table: 'input',
+      columns: ['id', 'input_type'],
+      conditions: [
+        { eql: `(input.max_timeline_ts >= '{{date (or overrides.start "-30d")}}' or (input.max_timeline_ts is null and input.records > 0))` }
+      ]
+    }
+  }
+],
+search: {
+  eql: {
+    table: 'timeline',
+    columns: ['person_id'],
+    joins: [{ table: 'input', join_eql: 'timeline.input_id=input.id' }]
+  }
+}
+```
+
+`entry_types` still filters each store’s `metadata.json`. The search EQL keeps saying `timeline`; that name is the loaded files, not the warehouse table. `--start` / `--end` apply through the definition templates, including the universe EQL. A `people` export on a bundle run still does not receive those flags.
+
 A bundle `export` also runs named `:exports:` entries that have `search`.
 
 `--person_ids=1,2,3` scopes the search. `--dedupe=false` ignores prior export files. `--add_to_input_store` writes into an input store instead of only `exports/`.
