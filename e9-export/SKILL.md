@@ -24,7 +24,7 @@ Rule: `inventory.json5` is authoritative. Do not infer artifact locations from t
 
 Default root: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 
-`--export_dir` overrides that root and is the only destination: a local path or `s3://` / `r2://` / `gs://` / `gdrive://` URI. Use `{{account_id}}` / `{{export_id}}` / `{{date}}` in the path when you want a per-run folder under a customer bucket; otherwise the value is used as-is. The account store is not also written. `--credentials` (or account `settings.file_credentials`) is a bootstrap path/URI to the destination key file; it is not part of the package.
+`--export_dir` overrides that root and is the only destination: a local path, the token `temp`, or an `s3://` / `r2://` / `gs://` / `gdrive://` URI. `temp` resolves to `{os.tmpdir()}/{account_id}/exports/{export_id}` and is not copied to the account store. Use `{{account_id}}` / `{{export_id}}` / `{{date}}` in a path when you want a per-run folder under a customer bucket; otherwise a path is used as-is. The account store is not also written. `--credentials` (or account `settings.file_credentials`) is a bootstrap path/URI to the destination key file; it is not part of the package.
 
 Start with **`inventory.json5`**. Bundle export writes it **last**. It is the catalog of what was written; its presence means the run finished. A definition may relocate artifacts with `relative_path`; trust the inventory, not assumed paths.
 

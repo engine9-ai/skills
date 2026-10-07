@@ -21,6 +21,8 @@ Use this skill to configure or troubleshoot an engine9 MCP connection in Cursor 
 
 **Rule:** On any MCP tool error, follow [e9-mcp — MCP tool errors — stop immediately](../e9-mcp/SKILL.md#mcp-tool-errors--stop-immediately); do not call downstream account-scoped tools after a failed `account`, `task`, `search`, or similar call.
 
+**Rule:** If an account or parent cannot be found, stop. Do not resolve it by any other mechanism. A miss is MCP `account` search `count: 0`, an empty `user.accounts`, or plugins reporting the account unknown or unauthorized. Tell the user and end the turn. Do not search again with a different filter, a guessed id, or `include_disabled`. Do not read `accounts.d`, `accounts.compiled.json5`, `account-config.json`, `frakture-account-config.json`, `.e9_parameters`, or any other file, and do not run the `e9` CLI or a shell search to find the id.
+
 Operators are read-only in SQL and schedule published flows; on-demand tasks, keys, and plugin changes need the admin role.
 
 ## Step 0 — Log in (always first)
@@ -53,7 +55,7 @@ Project `.cursor/mcp.json` may define `engine9.local_noauth` with `Authorization
 
 When handling `/e9` or `/e9a` requests, **do not read local workspace code** to discover plugins, worker methods, paths, or options. Local source does not reliably match the connected MCP server or the account's installed plugins. Use MCP tool schemas, MCP `account` (cached as `engine9.plugins`), and MCP `task` / `sql` / `analyze` / `timelinePerson` / `timelinePersonLegacy` / `file` / `apiKey` only. See [e9-mcp — MCP-only discovery](../e9-mcp/SKILL.md#mcp-only-discovery--do-not-use-local-code).
 
-When an account or parent is not found, do NOT dig deeper into compiled account catalogs, etc. Account discovery when using MCP should only be through that MCP, not through any other mechanisms. Do not read `accounts.d/`, `accounts.compiled.json5`, or other on-disk catalogs.
+**Rule:** When an account or parent is not found, stop. Do not resolve it by any other mechanism. Account discovery is MCP `user` / `account` search only.
 
 **Rule:** Discover accounts, plugins, methods, paths, and options from the connected MCP server only.
 
@@ -141,7 +143,7 @@ The CLI bin script (`server/bin/e9a`) writes `.e9_parameters` for subsequent **l
 
 **Do not use leftover CLI files or compiled catalogs for MCP / Cursor session scope.** Never read `.e9_parameters`, `.e9_config.json5`, `accounts.d/`, `accounts.compiled.json5`, or similar local state to infer `account_id`. If chat session `engine9.account_id` is unset, **ask the user** (or suggest `/e9a <account_id>`) — do not invent scope from disk.
 
-**Discovering accounts (MCP):** when the user asks which accounts match a prefix, parent, type, tags, or installed plugin, call MCP `account` with `command: "search"` in **one** request — do not use `/e9a all` plus per-account plugin loads. Example: `{ "command": "search", "prefixes": ["<prefix>"], "plugins": ["acoustic"] }`. If that search returns `count: 0`, **stop** and report that MCP found no matching accounts. Use `/e9a <id>` afterward to pin a single primary account and cache its plugins.
+**Discovering accounts (MCP):** when the user asks which accounts match a prefix, parent, type, tags, or installed plugin, call MCP `account` with `command: "search"` in **one** request — do not use `/e9a all` plus per-account plugin loads. Example: `{ "command": "search", "prefixes": ["<prefix>"], "plugins": ["acoustic"] }`. If that search returns `count: 0`, **stop** and report that MCP found no matching accounts. Do not resolve the name through another search, `user`, `accounts.d`, or the `e9` CLI. Use `/e9a <id>` afterward only when search returned that id.
 
 ### Required behavior
 
@@ -158,7 +160,7 @@ The CLI bin script (`server/bin/e9a`) writes `.e9_parameters` for subsequent **l
 **`/e9a parent <parent_id>` or `/e9a all`:**
 
 1. Resolve ids **only via MCP**. Parent: `account` `{ "command": "search", "parents": ["<parent_id>"] }` (comma-separated parents → `parents` array; results are flat rows with `parent_ids`). All: MCP `user` and take active keys of `accounts` (`disabled` not true); each entry includes flat `parent_ids` (no nested tree).
-2. If search `count` is `0` or `user.accounts` is empty: **stop**. Report that MCP did not find the parent or any accounts. Do **not** read `accounts.d` / compiled catalogs.
+2. If search `count` is `0` or `user.accounts` is empty: **stop**. Report that MCP did not find the parent or any accounts. Do not resolve them by any other mechanism.
 3. Set `engine9.account_ids` to the MCP list; set `engine9.account_id` to the first id (label only — not a DB probe target). Clear `engine9.plugins`.
 4. Do **not** load plugins for every account (or for the first id). Do **not** call MCP `account` plugins / open account databases to “check access” across children. Report the resolved ids and count.
 5. For **remote task listing** under parent/all scope, see [Multi-account remote flow runs](#multi-account-remote-flow-runs-parent--all) — those calls must not fan out per-child DB access.
@@ -205,7 +207,7 @@ Account/domain create and secrets: use **e9-account** (`cloud-services/e9-accoun
 - Every MCP call that is account-scoped MUST include `account_id` **when the op is single-account** (search, sql, eql, plugin schedule, etc.).
 - If `account_id` is already known in **this chat session** (`engine9.account_id` from `/e9a` or an explicit user statement), reuse it.
 - If scope is missing, **ask the user** (single id, `/e9a parent …`, or `/e9a all`) before running scoped tools. Stop and wait — do not proceed with a guessed id.
-- Do not guess `account_id`. Do **not** treat `.e9_parameters`, `.e9_cli_history`, `accounts.d/`, `accounts.compiled.json5`, or other leftover local files as session scope.
+- Do not guess `account_id`. If MCP did not return it, stop. Do not resolve it from `.e9_parameters`, `.e9_cli_history`, `accounts.d/`, `accounts.compiled.json5`, or any other file.
 
 ### Multi-account remote flow runs (parent / all)
 

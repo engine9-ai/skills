@@ -6,7 +6,9 @@ Read [SKILL.md](SKILL.md) first for **what an export contains** (tables, idv1 fi
 e9 exportworker <method> -a <account_id> --<option>=<value>
 ```
 
-`-a` is the account id from `accounts.d` (same as `e9 sqlworker ok`). Options are `--snake_case` flags. Complex values can be piped as JSON5 on stdin.
+`-a` is an account id the caller already has (the same id `e9 sqlworker ok` prints). Options are `--snake_case` flags. Complex values can be piped as JSON5 on stdin.
+
+Rule: If MCP does not find that account, stop. Do not open `accounts.d`, `account-config.json`, `frakture-account-config.json`, or any other catalog to discover an id, and do not run this CLI as that lookup.
 
 Related: warehouse inventory [e9-inventory](../e9-inventory/SKILL.md); person-search remotes [e9-person-remote](../e9-person-remote/SKILL.md); identity [e9-person-id](../e9-person-id/SKILL.md); timeline files [e9-timeline](../e9-timeline/SKILL.md).
 
@@ -125,7 +127,7 @@ Optional: `--limit=N`, `--sample=true` / `--sample=false`, `--export_id=<uuid>`,
 
 `--sample=true` is a QA dump: 100 rows per warehouse table and person-search CSV, 10 rows per sampled `.idv1.parquet`, one parquet per `(input_type, filename)` plus that store’s `metadata.json`. The destination last segment gets `_sample` so a sample cannot overwrite a full export (`exports/{export_id}_sample/{date}`, or `{export_dir}_sample`). `--sample=false` (default) is a full run. `--limit=N` without `--sample=true` still only caps SQL tables and person-search (full idv1 copies).
 
-`--export_dir` is the only destination when set. Use a local directory or an object-store URI (`s3://`, `r2://`, `gs://` / `gcs://`, `gdrive://`). The account store is not also written. Omit it to use `{store_path}/{account_id}/exports/{export_id}/{date}/`. The bucket may be customer-owned.
+`--export_dir` is the only destination when set. Use a local directory, `temp` (a per-run folder under the OS temp directory, `{os.tmpdir()}/{account_id}/exports/{export_id}`, with no copy to the account store), or an object-store URI (`s3://`, `r2://`, `gs://` / `gcs://`, `gdrive://`). Omit it to use `{store_path}/{account_id}/exports/{export_id}/{date}/`. The bucket may be customer-owned.
 
 `export_id` / date are **not** appended automatically under a custom `export_dir`. To mirror the default layout on a customer bucket, put placeholders in the path:
 
@@ -288,7 +290,7 @@ Without `--tables`, tables-only mode uses the standard warehouse list (`plugin`,
 
 Default directory: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 
-Override with `--export_dir`. That value is the only write root: a local path or `s3://` / `r2://` / `gs://` / `gdrive://` URI. There is no second copy under the account store.
+Override with `--export_dir`. That value is the only write root: a local path, `temp` (OS temp directory, not the account store), or an `s3://` / `r2://` / `gs://` / `gdrive://` URI. There is no second copy under the account store.
 
 What those files mean for a receiver: [SKILL.md](SKILL.md).
 

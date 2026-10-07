@@ -255,7 +255,7 @@ Rule: Never delete input store files or an `input` row in the same turn that lis
 
 Rule: Remove a confirmed set of input store files with one `FileWorker.removeFiles` call. Do not schedule one `remove` task per file.
 
-Rule: MCP `input` `deleteFiles` removes every file directly in one input’s store directory. Use it only after the user confirms that folder. It does not delete a subset of the folder, the warehouse `input` row, or timeline rows.
+Rule: MCP `input` `deleteFiles` removes every file in one input’s store directory, including files inside subdirectories, then removes those subdirectories. Use it only after the user confirms that folder. It does not delete a subset of the folder, the warehouse `input` row, or timeline rows.
 
 Conductor’s Inputs artifact exposes the same folder delete: the Files card’s Delete button confirms, then calls `deleteFiles`.
 
