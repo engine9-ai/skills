@@ -10,7 +10,7 @@ description: >-
 
 # Map transactions into engine9
 
-This skill covers pure JavaScript mappers from third-party payment records to the standard engine9 Transaction shape. Use it for payment platforms, donor databases, API responses, and CSV exports. The canonical implementation lives in `interfaces/transaction/core/schema.js`, and mapped rows are processed by `interfaces/transaction/core/transforms/inbound/upsert_tables.js`.
+This skill covers pure JavaScript mappers from third-party payment records to the standard engine9 Transaction shape. Use it for payment platforms, donor databases, API responses, and CSV exports. The canonical implementation lives in `schemas/transaction/core/schema.js`, and mapped rows are processed by `schemas/transaction/core/transforms/inbound/upsert_tables.js`.
 
 ## Quick reference
 
@@ -172,8 +172,8 @@ function mapRefund(row) {
 - [Input files and `remote_input_id` grain](../../e9-input/SKILL.md)
 - [Complete transaction column reference](reference.md)
 - [Canonical Transaction schema](https://frakture.notion.site/Frakture-Transactions-Data-442349ac436a4f7db8e7d732359e7d8f)
-- `interfaces/transaction/core/schema.js`
-- `interfaces/transaction/core/transforms/inbound/upsert_tables.js`
-- `interfaces/transaction/contact_details/schema.js`
+- `schemas/transaction/core/schema.js`
+- `schemas/transaction/core/transforms/inbound/upsert_tables.js`
+- `schemas/transaction/contact_details/schema.js`
 - `input-tools/timelineTypes.js`
 - `TIMELINE_ENTRY_TYPES`

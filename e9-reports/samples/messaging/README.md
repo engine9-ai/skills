@@ -166,7 +166,7 @@ Rule: `report` `command: list` stays installed plugins only. Hosted samples do n
 | --- | --- |
 | Host returns HTML, not JSON | You used a `github.com/.../blob/...` URL. Switch to `raw.githubusercontent.com`. |
 | CORS / failed fetch | Use a simple GET to the raw URL, or the jsDelivr mirror. CORS is the publisher’s problem; GitHub raw allows GET CORS but not preflight. |
-| Empty widgets | The account may have no rows for that `channel` in the date range. Confirm `@engine9/interfaces/message` data is loaded. |
+| Empty widgets | The account may have no rows for that `channel` in the date range. Confirm `@engine9/schemas/message` data is loaded. |
 | `Unsupported report schema_version` | Keep `schema_version` at `1`. |
 | `path or definition, not both` | Pass only `definition` when using a hosted file. |
 | Numbers look like “native conversions” | Fundraising samples use `attributed_*`. Platform `revenue` is a different family. |

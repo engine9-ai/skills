@@ -2,7 +2,7 @@
 
 ## Path identity vs load source
 
-`plugin.path` is **package identity only**: `@engine9/interfaces/<pkg>`,
+`plugin.path` is **package identity only**: `@engine9/schemas/<pkg>`,
 `@engine9/plugins/<pkg>`, or a third-party path such as `acme-plugins/loyalty`.
 Never encode load location in the path.
 
@@ -18,7 +18,7 @@ canonical form.
 
 | Identity | Typical filesystem |
 |----------|-------------------|
-| `@engine9/interfaces/<pkg>` | `node_modules/@engine9/interfaces/<pkg>/index.js` |
+| `@engine9/schemas/<pkg>` | `node_modules/@engine9/schemas/<pkg>/index.js` |
 | `@engine9/plugins/<pkg>` | `node_modules/@engine9/plugins/<pkg>/index.js` |
 | `acme-plugins/<pkg>` | `node_modules/acme-plugins/<pkg>/index.js` |
 | `@acme/engine9-plugins/<pkg>` | `node_modules/@acme/engine9-plugins/<pkg>/index.js` |
@@ -38,12 +38,12 @@ Transforms registered on a plugin get `path` set to the canonical package path a
 
 1. The dependency path must already have a `plugin` row on the account.
 2. The range must satisfy the host’s npm version of `packageNameOf(depPath)`
-   (e.g. `"@engine9/interfaces/person": ">=1.7.0"` checks host
-   `@engine9/interfaces`).
+   (e.g. `"@engine9/schemas/person": ">=1.7.0"` checks host
+   `@engine9/schemas`).
 
 Same-package paths (two plugins inside `acme-plugins`) share one package
 version; presence of the dependency path is the meaningful check. Cross-package
-ranges (Acme → `@engine9/interfaces`) pin the interfaces release the host must
+ranges (Acme → `@engine9/schemas`) pin the `@engine9/schemas` release the host must
 run.
 
 See [Creating and versioning a package (Acme)](SKILL.md#creating-and-versioning-a-package-acme).
@@ -53,7 +53,7 @@ See [Creating and versioning a package (Acme)](SKILL.md#creating-and-versioning-
 | Situation | What to do |
 |-----------|------------|
 | Same package, local checkout vs npm | Identical — one `plugin.path`; host pin chooses files |
-| Two implementations of “person” | Different identity (e.g. `acme-plugins/person` vs `@engine9/interfaces/person`) |
+| Two implementations of “person” | Different identity (e.g. `acme-plugins/person` vs `@engine9/schemas/person`) |
 | Multiple installs of same contract | `metadata.unique: false` (e.g. `person_custom`) plus `metadata.prefix` for isolated tables |
 | Inline / not a package | `type: 'local'` + explicit `id` + schema object |
 
@@ -67,15 +67,15 @@ Do not set `metadata.prefix` for ordinary third-party plugins — that enables t
 
 `<pluginPath>:transforms:<exportName>`
 
-Example: `@engine9/interfaces/person_email:transforms:appendEmail`
+Example: `@engine9/schemas/person_email:transforms:appendEmail`
 
 The middle segment must be literally `transforms` or resolution fails.
 
 ## Search path shape (segments, pipelines)
 
-`@engine9/interfaces/<pkg>:search:<handlerKey>`
+`@engine9/schemas/<pkg>:search:<handlerKey>`
 
-Example from `person_email/segments.js`: `@engine9/interfaces/person_email:search:emails`.
+Example from `person_email/segments.js`: `@engine9/schemas/person_email:search:emails`.
 
 Handlers export optional `title`/`description`, a JSON Schema `form` (`{ title, type: 'object', properties, required? }`), and `optionsToEQL`. Account-scoped discovery: MCP `searchOptions` / `PersonWorker.searchOptions` / `GET /data/search/options`.
 
@@ -108,14 +108,14 @@ build time (`e9core build-plugins` for Cloudflare). A path that is not in a
 listed, installed package is not available to `listAvailable` or `install`.
 
 On the private server, `getActivePluginPaths` may still list a subset used by
-`deployAllSchemas`; new Engine9 interfaces may need to be added there (or
-deployed explicitly via `deploy({ schema: '@engine9/interfaces/...' })`).
+`deployAllSchemas`; new Engine9 schema plugins may need to be added there (or
+deployed explicitly via `deploy({ schema: '@engine9/schemas/...' })`).
 
 ## Repository map (examples)
 
 | Area | Repo / package path |
 |------|---------------------|
-| Interface examples | `interfaces/*` (each subfolder of `@engine9/interfaces`) |
+| Schema plugin examples | `schemas/*` (each subfolder of `@engine9/schemas`) |
 | Native plugins | `@engine9/plugins/*` (e.g. e9email, e9forms, e9workers) |
 | Third-party (Acme) | npm `acme-plugins` or `@acme/engine9-plugins` with subfolder plugins |
 | Core registry | `@engine9/core` `lib/pluginRegistry.js`, `bin/buildPlugins.js`, `bin/nodePluginRegistry.js` |

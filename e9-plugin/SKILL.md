@@ -5,7 +5,7 @@ description: >-
   (listAvailable, install, settings, setSetting). Fast path for deploying a
   package onto one account or every child of a parent. Use when the user says
   install a plugin, deploy a package, listAvailable, plugin settings, setSetting,
-  or asks to install `@engine9/plugins`, `@engine9/interfaces`, or a models
+  or asks to install `@engine9/plugins`, `@engine9/schemas`, or a models
   deployment path on accounts. Do not use create-engine9-plugin (authoring) or
   MCP `task` for install.
 ---
@@ -26,7 +26,7 @@ Plugins are first-class on a connected engine9 MCP server. Installing a package 
 | Settings catalog / update | `plugin` `settings` / `setSetting` |
 | Author / version a package | [create-engine9-plugin](../create-engine9-plugin/SKILL.md) (not this skill) |
 
-**Rule:** Prefer MCP `plugin`. Never schedule `PluginWorker.install` via MCP `task`. Never invent paths from local `plugins/` or `interfaces/`.
+**Rule:** Prefer MCP `plugin`. Never schedule `PluginWorker.install` via MCP `task`. Never invent paths from local `plugins/` or `schemas/`.
 
 **Rule:** `listAvailable` is the installable catalog for the **connected server**. If the path is absent, stop and report it — do not read workspace packages as a workaround. For third-party paths (e.g. `acme-plugins/loyalty`), the host must already `npm install` that package and list it in `engine9.pluginPackages`, then redeploy; otherwise it will never appear in the catalog.
 
@@ -42,7 +42,7 @@ The **version of code that runs** is the host’s npm package pin (e.g. `acme-pl
 | Shorthand from catalog | `models/deployment/v2026_09_16`, `e9email`, `loyalty` (only if unambiguous in `listAvailable`) |
 | User omits `@` | `engine9/plugins/...` → match `listAvailable` (`@engine9/plugins/...`) |
 
-Unique packages (`metadata.unique`, typical `@engine9/plugins/*` and most interfaces) reuse the existing row. Reinstall is idempotent for that path. Third-party packages often default to non-unique unless they set `metadata.unique: true`.
+Unique packages (`metadata.unique`, typical `@engine9/plugins/*` and most `@engine9/schemas/*`) reuse the existing row. Reinstall is idempotent for that path. Third-party packages often default to non-unique unless they set `metadata.unique: true`.
 
 Declared `settings` are inserted on first install only. Changing a value later is `setSetting`, not reinstall. Marketplace `auth_fields` are not settings.
 
@@ -82,7 +82,7 @@ Match the user's string to a returned path (exact, or add `@` / treat as suffix)
 | Prefix / tags / type | `account` search with those filters |
 | Session parent/all (`engine9.account_ids`) | Every id in that list |
 
-**Rule:** Discover ids only via MCP `user` / `account` search. If `count` is `0`, stop. Do not read `accounts.d` or compiled catalogs.
+**Rule:** Discover ids only via MCP `user` / `account` search. If `count` is `0`, stop. Do not resolve the account by any other mechanism: no second search, no `accounts.d`, `account-config.json`, `frakture-account-config.json`, or `e9` CLI.
 
 Do **not** call `account` `plugins` (or any other per-child DB probe) before install. Install does not need the method catalog.
 
@@ -157,5 +157,5 @@ Natural language ("install `<path>` on all `<parent>` clients") is the same work
 
 - [MCP tools](../e9-mcp/SKILL.md)
 - [CLI / account scope](../e9-cli/SKILL.md)
-- [Author a plugin or interface](../create-engine9-plugin/SKILL.md)
+- [Author a plugin or schema plugin](../create-engine9-plugin/SKILL.md)
 - [Plugin settings authoring](../create-engine9-plugin/SKILL.md#settings)

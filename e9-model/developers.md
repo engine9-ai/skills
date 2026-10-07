@@ -74,8 +74,11 @@ Entries arrive decorated with the parsed source-code columns from
 `source_code_summary` (falling back to `source_code_dictionary`) —
 `SOURCE_CODE_DICTIONARY_COLUMNS` in `source.js`, including `acquisition_cost`,
 `acquisition_cost_per_person`, `acquisition_date`, `source_code_date_parsed`,
-`source_code_channel`, and the parsed label fields. Transaction runs also carry
-`amount`, `refund_amount`, `recurring_number`, `recurs`, `recurs_id`.
+`source_code_channel`, and the parsed label fields. Each entry also carries
+`remote_person_id`: the `person_remote` value for that person on the plugin
+that owns the entry's input (the CRM id that used to arrive as `reference_id`
+on `CRM_ORIGIN`). Transaction runs also carry `amount`, `refund_amount`,
+`recurring_number`, `recurs`, `recurs_id`.
 
 Transaction identity is `transaction.id` (UUID).
 
@@ -149,7 +152,7 @@ into an `IN (...)` list.
 | `{prefix}_person_stats_by_date` | new people per `source_code_id` + first-seen day (`date_of_source` / credited `timeline.ts`, not `source_code_date`) |
 | `{prefix}_transaction_stats_by_date` | tx / revenue per `source_code_id` + `transaction.ts` day |
 
-No shared `person_model` interface table and no `@engine9/interfaces/model`.
+No shared `person_model` schema plugin table and no `@engine9/schemas/model`.
 Join `source_code_dictionary` for the code string; join `transaction` on `id`
 for amount / `ts`. `run` deploys these through SchemaWorker with `prefix: false`
 per table so PluginWorker's install counter is not applied. Full column DDL,

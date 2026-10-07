@@ -3,23 +3,23 @@
 ## name: create-engine9-plugin
 
 description: >-
-Author engine9 interfaces (`@engine9/interfaces/*`), native plugins
+Author engine9 schema plugins (`@engine9/schemas/*`), native plugins
 (`@engine9/plugins/*`), and third-party npm plugin packages (e.g. acme-plugins),
 including package layout, versioning, metadata, schemas, transforms, search,
 segments, metrics, reports, settings, UI, and worker classes. Use when building
 or documenting a plugin package for one or more core deployments. Do not use
 this skill to install onto accounts — use e9-plugin (MCP plugin install).
 
-# Create an engine9 plugin or interface
+# Create an engine9 plugin or schema plugin
 
-engine9 separates shared data contracts, called interfaces, from deployable integrations, called native plugins. Both are Node ESM modules resolved by **npm package path** from `node_modules` (or a monorepo sibling linked into `node_modules`). They never require a `local$` path prefix, and core does not load plugins from absolute paths or `install({ source })`. Use this skill when adding or extending an interface, native plugin, third-party package, transform, search handler, segment, report, settings, or deployment schema. To **install** an existing package onto accounts, use [e9-plugin](../e9-plugin/SKILL.md).
+engine9 separates shared data contracts, called schema plugins (`@engine9/schemas/*`, published as `@engine9/interfaces` through 1.8.1), from deployable integrations, called native plugins. A schema plugin's table definitions are its `schema.js`; "schema plugin" is the whole directory. Both are Node ESM modules resolved by **npm package path** from `node_modules` (or a monorepo sibling linked into `node_modules`). They never require a `local$` path prefix, and core does not load plugins from absolute paths or `install({ source })`. Use this skill when adding or extending a schema plugin, native plugin, third-party package, transform, search handler, segment, report, settings, or deployment schema. To **install** an existing package onto accounts, use [e9-plugin](../e9-plugin/SKILL.md).
 
 ## Quick reference
 
 | Need                                  | Contract or location                                                                     |
 | ------------------------------------- | ---------------------------------------------------------------------------------------- |
 | Install a package on accounts         | [e9-plugin](../e9-plugin/SKILL.md) — MCP `plugin` `install`, not this skill              |
-| Shared schema or reusable behavior    | `@engine9/interfaces/<name>`                                                             |
+| Shared schema or reusable behavior    | `@engine9/schemas/<name>`                                                             |
 | Engine9-owned deployable integration  | `@engine9/plugins/<name>`                                                                |
 | Third-party package (company example) | npm package `acme-plugins` → plugin paths `acme-plugins/<name>`                          |
 | Third-party table names               | Self-scope in the schema: `acme_blog_post` — do **not** set `metadata.prefix`            |
@@ -39,7 +39,7 @@ A **package** is one npm artifact. A **plugin** is one discoverable module insid
 
 ### Recommended layout for Acme
 
-Prefer one npm package that holds many plugins (same pattern as `@engine9/interfaces`):
+Prefer one npm package that holds many plugins (same pattern as `@engine9/schemas`):
 
 ```
 acme-plugins/                 ← npm name: "acme-plugins" (or "@acme/engine9-plugins")
@@ -79,8 +79,8 @@ const metadata = {
   name: "Acme Loyalty",
   unique: true,
   dependencies: {
-    // path must be installed; range is satisfied by host @engine9/interfaces version
-    "@engine9/interfaces/person": ">=1.7.0",
+    // path must be installed; range is satisfied by host @engine9/schemas version
+    "@engine9/schemas/person": ">=1.7.0",
   },
 };
 ```
@@ -98,11 +98,11 @@ Each engine9 core site (Cloudflare Worker or Node host) pins and loads packages 
 {
   "dependencies": {
     "@engine9/core": "...",
-    "@engine9/interfaces": "^1.7.4",
+    "@engine9/schemas": "^1.7.4",
     "acme-plugins": "^1.4.0"
   },
   "engine9": {
-    "pluginPackages": ["@engine9/interfaces", "acme-plugins"]
+    "pluginPackages": ["@engine9/schemas", "acme-plugins"]
   }
 }
 ```
@@ -116,17 +116,17 @@ Each engine9 core site (Cloudflare Worker or Node host) pins and loads packages 
 
 ## Concepts
 
-### Interfaces and install uniqueness
+### Schema plugins and install uniqueness
 
 `PluginWorker.install` determines whether a package path may have more than one `plugin` row:
 
 1. Use `metadata.unique` when set. Native plugins typically set it to `true`; `person_custom` sets it to `false`.
-2. Otherwise, packages under `@engine9/interfaces/*` default to unique, with one row per account.
+2. Otherwise, packages under `@engine9/schemas/*` default to unique, with one row per account.
 3. Otherwise, use `options.unique`, which defaults to `false`; third-party plugins may therefore be installed multiple times.
 
 When a package is unique, a second install reuses the existing row or errors if duplicate rows already exist. When it is not unique, every install without an `id` creates a row. Multi-instance plugins that need isolated tables (`person_custom`) opt into `metadata.prefix` so install allocates a hex suffix; third-party plugins should stay unique and self-scope table names instead.
 
-**Rule:** Export only standard feature modules and the default aggregate object from an interface. Server-only helpers, such as custom `resolveSegmentPluginId` functions, belong in server code keyed by `plugin.path`, not in the public interface API.
+**Rule:** Export only standard feature modules and the default aggregate object from a schema plugin. Server-only helpers, such as custom `resolveSegmentPluginId` functions, belong in server code keyed by `plugin.path`, not in the public schema plugin API.
 
 ### Table naming (self-scope)
 
@@ -145,21 +145,21 @@ Pick a stem you can keep forever (`acme_blog`, `acme_loyalty`). In the future, p
 
 ### Stacks
 
-A stack at `@engine9/interfaces/stacks/<name>` is a metadata-only interface with `name`, `description`, `include`, and `exclude`. Core `PluginWorker`, not `SchemaWorker`, installs stacks: it deploys the plugin table, records the stack as a plugin row, walks `include`, and rejects paths forbidden by an installed plugin's `metadata.exclude`. `SchemaWorker` installs only one plugin's schema and row.
+A stack at `@engine9/schemas/stacks/<name>` is a metadata-only schema plugin with `name`, `description`, `include`, and `exclude`. Core `PluginWorker`, not `SchemaWorker`, installs stacks: it deploys the plugin table, records the stack as a plugin row, walks `include`, and rejects paths forbidden by an installed plugin's `metadata.exclude`. `SchemaWorker` installs only one plugin's schema and row.
 
 `installDefaultPlugins({ path })` resolves an omitted path from (1)
-`exclude_pii` on `@engine9/interfaces/utilities/limited-pii` (when that plugin is
-installed) → `@engine9/interfaces/stacks/limited-pii`, (2) warehouse
-`default_stack` on `@engine9/interfaces/plugin`, or (3) the published core
-person interfaces — not automatically `@engine9/interfaces/stacks/standard`.
-Pass another stack, such as `@engine9/interfaces/stacks/limited-pii`, instead
+`exclude_pii` on `@engine9/schemas/utilities/limited-pii` (when that plugin is
+installed) → `@engine9/schemas/stacks/limited-pii`, (2) warehouse
+`default_stack` on `@engine9/schemas/plugin`, or (3) the published core
+person schema plugins — not automatically `@engine9/schemas/stacks/standard`.
+Pass another stack, such as `@engine9/schemas/stacks/limited-pii`, instead
 of hard-coding stack behavior into `SchemaWorker`. With `exclude_pii` set,
 installing standard must throw.
 
-Set `default_stack` on `@engine9/interfaces/plugin` and `exclude_pii` on
-`@engine9/interfaces/utilities/limited-pii` via MCP `plugin` `setSetting` (or
+Set `default_stack` on `@engine9/schemas/plugin` and `exclude_pii` on
+`@engine9/schemas/utilities/limited-pii` via MCP `plugin` `setSetting` (or
 `PluginWorker.updateSetting`). Empty `default_stack` means core person
-interfaces only. `exclude_pii: true` forces the limited-pii stack and refuses
+schema plugins only. `exclude_pii: true` forces the limited-pii stack and refuses
 standard, `person_email`, `person_phone`, and `person_address`, even when those
 plugins are already installed.
 
@@ -180,11 +180,11 @@ Install validates that each transform key exists and that transform `type` value
 
 Segments are keyed saved-audience definitions. The export key is the final part of `<package>:segments:<key>`. The deployed `segment.plugin_id` identifies the owning package; it need not match each plugin supplying data. An optional `universe` narrows the input IDs whose timeline files participate in a build, while an empty `pluginId` in search options preserves universe scope.
 
-Reports are composed dashboards owned by native report plugins at `@engine9/plugins/reports/<area>`, never by interfaces. Export a keyed `reports` map on the default plugin object. `ReportWorker` compiles report EQL/SQL.
+Reports are composed dashboards owned by native report plugins at `@engine9/plugins/reports/<area>`, never by schema plugins. Export a keyed `reports` map on the default plugin object. `ReportWorker` compiles report EQL/SQL.
 
 ## File format
 
-### Interface package layout
+### Schema plugin layout
 
 | Path                   | Purpose                                               |
 | ---------------------- | ----------------------------------------------------- |
@@ -199,14 +199,14 @@ Reports are composed dashboards owned by native report plugins at `@engine9/plug
 | `ui.console.json5`     | Optional console UI configuration                     |
 | `settings.js`          | Optional warehouse `setting` rows inserted on install |
 
-**Rule:** Do not ship `reports/` on interfaces. Put dashboards in `@engine9/plugins/reports/<area>`.
+**Rule:** Do not ship `reports/` on schema plugins. Put dashboards in `@engine9/plugins/reports/<area>`.
 
-At minimum, interface metadata identifies the package path (and optional deployment dependencies):
+At minimum, schema plugin metadata identifies the package path (and optional deployment dependencies):
 
 ```javascript
 const metadata = {
-  name: "@engine9/interfaces/example",
-  dependencies: { "@engine9/interfaces/person": ">=1.0.0" }, // optional; range = host npm package version
+  name: "@engine9/schemas/example",
+  dependencies: { "@engine9/schemas/person": ">=1.0.0" }, // optional; range = host npm package version
   schemas: ["schema.js"], // optional for a nonstandard schema filename
 };
 ```
@@ -269,7 +269,7 @@ Current model membership (`personSourceCode` / `transactionSourceCode`, include 
 
 ### Segment definition
 
-Export an object map, not an array. Each value has `name`, optional `universe` EQL objects whose rows yield `input_id`, and optional `search` trees using `and`, paths, or table/column clauses. Paths use `@engine9/interfaces/...:search:<handler>`.
+Export an object map, not an array. Each value has `name`, optional `universe` EQL objects whose rows yield `input_id`, and optional `search` trees using `and`, paths, or table/column clauses. Paths use `@engine9/schemas/...:search:<handler>`.
 
 ### Report definition
 
@@ -311,7 +311,7 @@ Native plugins follow the same package-root `README.md` convention and may provi
 const metadata = {
   name: "Acme Loyalty", // display name
   unique: true,
-  dependencies: { "@engine9/interfaces/person": ">=1.7.0" },
+  dependencies: { "@engine9/schemas/person": ">=1.7.0" },
 };
 
 export default {
@@ -331,7 +331,7 @@ Metadata-only plugins may declare dependencies without schema or handlers. Optio
 
 ## Workflow
 
-1. Choose an interface (`@engine9/interfaces/...`), an Engine9 native plugin (`@engine9/plugins/...`), or a third-party package (e.g. `acme-plugins/<name>`).
+1. Choose a schema plugin (`@engine9/schemas/...`), an Engine9 native plugin (`@engine9/plugins/...`), or a third-party package (e.g. `acme-plugins/<name>`).
 2. Create or extend the **npm package** (`package.json` name + `"version"`). Add plugin directories or `*.plugin.js` files inside it. Do not invent `metadata.version`.
 3. Declare `metadata` (display name, `unique` as needed) and `metadata.dependencies` (paths + semver against host packages). Do **not** set `metadata.prefix` for third-party plugins.
 4. Define tables, columns, indexes, and views. Self-scope every owned table name (`acme_blog_post`).
@@ -347,7 +347,7 @@ Metadata-only plugins may declare dependencies without schema or handlers. Optio
 `README.md` is the audience-facing contract. Do not rely on comments in `segments.js`, `metadata.description`, or skill files as package documentation. A useful outline is:
 
 ```markdown
-# Human Name Interface
+# Human Name Schema Plugin
 
 One-paragraph purpose. Name the package path and `metadata.dependencies`.
 
@@ -382,9 +382,9 @@ For every predefined segment, document its display name, export key, definition 
 
 **Rule:** `metadata.dependencies` keys are plugin **paths** that must already be installed on the account; semver ranges apply to the host npm version of each path’s package.
 
-**Rule:** Interface `metadata.name` values use `@engine9/interfaces/...`. Native and third-party plugins use a human display name in `metadata.name`.
+**Rule:** Schema plugin `metadata.name` values use `@engine9/schemas/...`. Native and third-party plugins use a human display name in `metadata.name`.
 
-**Rule:** Declare every interface or schema dependency required at deployment time.
+**Rule:** Declare every schema plugin or other plugin dependency required at deployment time.
 
 **Rule:** Index columns used for joins, filters, natural keys, and uniqueness.
 
@@ -398,7 +398,7 @@ For every predefined segment, document its display name, export key, definition 
 
 **Rule:** Declare settings on the package (`settings` export or sibling `settings.js`). Do not put warehouse settings in marketplace `auth_fields`.
 
-**Rule:** Wire only standard named exports and the default aggregate from interface `index.js`.
+**Rule:** Wire only standard named exports and the default aggregate from a schema plugin's `index.js`.
 
 ## Examples
 
@@ -406,7 +406,7 @@ For every predefined segment, document its display name, export key, definition 
 
 ```javascript
 const metadata = {
-  name: "@engine9/interfaces/example",
+  name: "@engine9/schemas/example",
   inbound: {
     id: ["extractLoyaltyNumber"],
     upsert: ["upsertMembership"],
@@ -509,39 +509,39 @@ An asynchronous `transform({ batch, options })` may compile `options.map` with H
 
 ### Export an inline transform
 
-An interface may expose `{ description?, bindings, transform }`, where `transform` is synchronous and consumes pre-resolved binding data such as `sql.query`.
+A schema plugin may expose `{ description?, bindings, transform }`, where `transform` is synchronous and consumes pre-resolved binding data such as `sql.query`.
 
 ### Define a metric
 
 Metric functions return `{ label, description?, eql: { table, columns: [aggregations] } }`.
 
-### Wire the interface
+### Wire the schema plugin
 
 ```javascript
 import schema from "./schema.js";
 import upsert from "./transforms/inbound/upsert_tables.js";
 
 const metadata = {
-  name: "@engine9/interfaces/example",
+  name: "@engine9/schemas/example",
 };
 export const transforms = { upsert };
 export { metadata, schema };
 export default { metadata, schema, transforms };
 ```
 
-Thin, schema-first interfaces are also valid. `message/index.js` exports only metadata with `schemas: ['schema.js']`; `job/index.js` and `segment_stats/index.js` export metadata, schema, and the default aggregate; `report/index.js` is a metadata-only marker.
+Thin, schema-only schema plugins are also valid. `message/index.js` exports only metadata with `schemas: ['schema.js']`; `job/index.js` and `segment_stats/index.js` export metadata, schema, and the default aggregate; `report/index.js` is a metadata-only marker.
 
 ## Troubleshooting
 
 | Symptom                                         | Check                                                                                                                          |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Second install creates or reuses the wrong row  | Review `metadata.unique`, interface defaults, and `options.unique`                                                             |
+| Second install creates or reuses the wrong row  | Review `metadata.unique`, schema plugin defaults, and `options.unique`                                                            |
 | Installed transform is absent                   | Confirm `metadata.inbound` names an exported transform and its `type` matches the slot                                         |
 | Upsert fails on duplicate keys                  | Merge rows by the schema's unique key with `mergeIntoQueue`                                                                    |
 | Search does not appear in discovery             | Confirm the plugin is installed and the handler uses a canonical form                                                          |
 | Settings do not appear in MCP `plugin` settings | Confirm the plugin is installed, `settings` is on the default export or sibling `settings.js`, and the setting is not `hidden` |
 | Segment membership is unexpectedly broad        | Inspect `universe`, search path, and optional `pluginId` scope                                                                 |
-| Interface report is not available               | Move it to a native `@engine9/plugins/reports/<area>` package                                                                  |
+| Schema plugin report is not available           | Move it to a native `@engine9/plugins/reports/<area>` package                                                                  |
 | Package cannot resolve                          | Use the package path and inspect resolver/registration rules; do not add `local$`                                              |
 | Stack installation conflicts                    | Inspect installed stack `exclude` metadata and utilities/limited-pii `exclude_pii`                                                         |
 

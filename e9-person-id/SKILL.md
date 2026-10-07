@@ -81,7 +81,7 @@ Written **after** `person_id` is assigned. Unique keys allow multiple emails/pho
 | `person_remote` | `(source_input_id, remote_person_id, person_id)` | Per-plugin CRM / vendor person id — when written / how exports filter: [e9-person-remote](../e9-person-remote/SKILL.md) |
 | `person_address` | (not an identity key) | Postal address; upserted in the same pipeline, never used to match |
 
-`person_hash_email` / `person_hash_phone` (optional `@engine9/interfaces/person_hash`) store hashes without plaintext. They are **not** in the default inbound chain.
+`person_hash_email` / `person_hash_phone` (optional `@engine9/schemas/person_hash`) store hashes without plaintext. They are **not** in the default inbound chain.
 
 ### Downstream consumers
 
@@ -96,7 +96,7 @@ Inbound rows do not match on raw email/phone strings in the lookup tables. Extra
 | `email_hash_v1` | SHA-256 hex of trimmed **lowercase** email | `email`, or inbound `email_hash_v1` | Skip if email shorter than 5 chars. Refuse the SHA-256 of `''`. |
 | `phone_hash_v1` | SHA-256 hex of normalized phone | `phone`, or `cell` / `mobile` / `mobile_phone`, or inbound `phone_hash_v1` | Digits only; US 10-digit → `+1…`; 11-digit starting `1` → `+1…`; already-`+` kept. Min 8 digits. |
 | `remote_person_id` | `{pluginId}.{remote_person_id}` lowercased | `remote_person_id` | If the value already starts with a UUID + `.`, it is used as-is (lowercased). Requires `pluginId`. |
-| `delegate` | trimmed lowercase unid | `delegate_id` | Core `PersonWorker.extractDelegateIdentifiers`; not an interface package. |
+| `delegate` | trimmed lowercase unid | `delegate_id` | Core `PersonWorker.extractDelegateIdentifiers`; not a schema plugin. |
 
 `appendPersonId` lowercases and strips accents on every identifier `value` before lookup (`NFD` + combining marks). Matching is case- and accent-insensitive.
 
@@ -104,13 +104,13 @@ Rule: Never store the blank SHA-256
 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
 Extract skips it, and `assignPersonIds` throws if it appears.
 
-Code: `@engine9/interfaces/person_email|person_phone|person_remote/transforms/inbound/extract_identifiers.js`, `@engine9/core/lib/id/index.js`.
+Code: `@engine9/schemas/person_email|person_phone|person_remote/transforms/inbound/extract_identifiers.js`, `@engine9/core/lib/id/index.js`.
 
 ## Workflow
 
 ### Inbound pipeline
 
-Shared by server `PersonWorker.loadPeople` (streams/files) and core `PersonWorker.processPeople` (in-memory). Woven by `buildInboundTransforms` in `@engine9/core/lib/peoplePipeline/getInboundTransforms.js` from the plugins **installed in the account** — core has no list of person plugins. Each people interface declares `metadata.inbound = { slot: [transformKey] }`; the snapshot is stored on `plugin.transforms` at install.
+Shared by server `PersonWorker.loadPeople` (streams/files) and core `PersonWorker.processPeople` (in-memory). Woven by `buildInboundTransforms` in `@engine9/core/lib/peoplePipeline/getInboundTransforms.js` from the plugins **installed in the account** — core has no list of person plugins. Each people schema plugin declares `metadata.inbound = { slot: [transformKey] }`; the snapshot is stored on `plugin.transforms` at install.
 
 Slots, in order (`assign` is core-only):
 

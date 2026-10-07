@@ -28,7 +28,7 @@ Legacy report folders are a different stored-folder system used by a small numbe
 
 ### Install with a plugin
 
-Path format: `@engine9/plugins/reports/<area>:reports:<key>` (same triple as transforms/search). Interfaces do not ship reports.
+Path format: `@engine9/plugins/reports/<area>:reports:<key>` (same triple as transforms/search). Schema plugins (`@engine9/schemas/*`) do not ship reports.
 
 Put files under `reports/` and export a **keyed object on the default plugin export** (`compilePlugin` reads `mod.default.reports`):
 

@@ -1,6 +1,6 @@
 # Transaction schema reference
 
-This file summarizes the schema as implemented in `interfaces/transaction/core/schema.js` and how the inbound transform and input-tools use it.
+This file summarizes the schema as implemented in `schemas/transaction/core/schema.js` and how the inbound transform and input-tools use it.
 
 ## Table: transaction
 

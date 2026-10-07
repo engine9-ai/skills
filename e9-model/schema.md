@@ -1,6 +1,6 @@
 # Per-model result tables
 
-Read [SKILL.md](SKILL.md) for concepts and [developers.md](developers.md) for the API. There is no `@engine9/interfaces/model`. Each plugin’s `metadata.prefix` is the stem (`model_first_touch` → `model_first_touch_person`). Same suffix set on every account.
+Read [SKILL.md](SKILL.md) for concepts and [developers.md](developers.md) for the API. There is no `@engine9/schemas/model`. Each plugin’s `metadata.prefix` is the stem (`model_first_touch` → `model_first_touch_person`). Same suffix set on every account.
 
 These tables are the **current** identity-aware model output (`person_id` bigint, `transaction_id` UUID). They are not `source_code_summary.origin_*` — those columns are the legacy origin implementation (old identity).
 

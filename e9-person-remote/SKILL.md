@@ -52,7 +52,7 @@ INNER JOIN input ON person_remote.source_input_id = input.id
   AND input.plugin_id = '<plugin uuid>'
 ```
 
-That is exactly what `@engine9/interfaces/person_remote:search:all` compiles when given `pluginId` — the filter used by export universes (“remote people for plugin X”).
+That is exactly what `@engine9/schemas/person_remote:search:all` compiles when given `pluginId` — the filter used by export universes (“remote people for plugin X”).
 
 An empty export or segment for “plugin remotes ∩ transactions” almost always
 means there are no `person_remote` rows whose `source_input_id` belongs to that
@@ -71,7 +71,7 @@ means there are no `person_remote` rows whose `source_input_id` belongs to that
   → sql.tables.upsert
 ```
 
-Built by `buildInboundTransforms` (`@engine9/core/lib/peoplePipeline/getInboundTransforms.js`). Upsert implementation: `@engine9/interfaces/person_remote/transforms/inbound/upsert_tables.js`.
+Built by `buildInboundTransforms` (`@engine9/core/lib/peoplePipeline/getInboundTransforms.js`). Upsert implementation: `@engine9/schemas/person_remote/transforms/inbound/upsert_tables.js`.
 
 ### Triggers that write `person_remote`
 
@@ -96,7 +96,7 @@ So: use **`idFiles` (or `loadPeople`) to populate Tatango-scoped `person_remote`
 
 ## Rules
 
-For `@engine9/interfaces/person_remote:search:all` with `pluginId = <Tatango uuid>` (or the equivalent export SQL) to return rows after an id/load:
+For `@engine9/schemas/person_remote:search:all` with `pluginId = <Tatango uuid>` (or the equivalent export SQL) to return rows after an id/load:
 
 1. Rule: **`plugin_id` / `pluginId`** must be that plugin’s UUID, not
    `remote_plugin_id` or a plugin slug.
@@ -157,14 +157,14 @@ await personWorker.loadPeople({
 | --- | --- |
 | Person identity matching, lookup keys, and first-wins behavior | [e9-person-id](../e9-person-id/SKILL.md) |
 | Timeline ID files | [e9-timeline loading](../e9-timeline/loading.md) |
-| Schema, search, and transforms | `@engine9/interfaces/person_remote` |
+| Schema, search, and transforms | `@engine9/schemas/person_remote` |
 | Pipeline wiring | `@engine9/core/lib/peoplePipeline/getInboundTransforms.js` |
 
 ### Code map
 
 | Piece | Location |
 |-------|----------|
-| Schema / search / transforms export | `@engine9/interfaces/person_remote` |
+| Schema / search / transforms export | `@engine9/schemas/person_remote` |
 | Extract identifiers | `…/transforms/inbound/extract_identifiers.js` |
 | Upsert | `…/transforms/inbound/upsert_tables.js` |
 | Pipeline wiring | `@engine9/core/lib/peoplePipeline/getInboundTransforms.js` |

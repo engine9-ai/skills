@@ -25,6 +25,8 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 
 **Rule:** Discover accounts, plugins, methods, and options from the connected MCP server only; never infer them from local workspace code.
 
+**Rule:** If an account or parent cannot be found, stop. Do not resolve it by any other mechanism. A miss is MCP `account` search `count: 0`, an empty `user.accounts`, or plugins reporting the account unknown or unauthorized. Tell the user MCP did not find it, and end the turn. Do not call `user` or `account` again with a different filter, a guessed id, or `include_disabled`. Do not read `accounts.d`, `accounts.compiled.json5`, `account-config.json`, `frakture-account-config.json`, `.e9_parameters`, or any other file. Do not run the `e9` CLI, a shell search, or a worker to discover the id. Another skill that says `-a` comes from `accounts.d` does not apply after this miss.
+
 **Roles:** Operators are read-only in SQL (SELECT/WITH) and schedule published flows (`flow_id` / `flow_path`); on-demand `path`+`method`, API keys, plugin install/settings, and legacy report-folder writes (`ensureChild`, `setVisibility`) need the admin role (`user.accounts[id].level`).
 
 ## Step 0 — Log in (always first)
@@ -106,14 +108,14 @@ When **any** of these is true, **stop the current workflow immediately** and rep
    - `getPluginMetadata` (e.g. `worker.getPluginMetadata is not a function`)
 3. MCP **`account`** did not return parseable `{ ok: true, plugins: [...] }`
 4. **`structuredContent.safeToRetryAutomatically`** is `false`
-5. An **account or parent is not found** in MCP: `user.accounts` is empty, `account` search `count` is `0` for that id/parent/prefix, or plugins says the account is unknown/unauthorized. **Stop.** Do **not** dig deeper into compiled account catalogs, etc. Account discovery when using MCP should only be through that MCP, not through any other mechanisms.
+5. An **account or parent is not found** in MCP: `user.accounts` is empty, `account` search `count` is `0` for that id, parent, prefix, or name, or plugins says the account is unknown or unauthorized. **Stop.** That search is the answer. Do not resolve the account by any other mechanism.
 
 ### What to do on stop
 
 1. Report the MCP error message verbatim to the user (or that MCP `user` / `account` search did not find the account or parent).
 2. Do **not** retry automatically or call downstream tools as a workaround.
 3. Do **not** guess plugin paths or methods when `account` failed — plugin discovery did not succeed.
-4. Do **not** open `accounts.d/`, `accounts.compiled.json5`, `account-config.json`, `account.<id>.json5`, `.e9_parameters`, or any other local catalog to “find” ids MCP did not return.
+4. Do **not** resolve a missing account another way. Do not open `accounts.d/`, `accounts.compiled.json5`, `account-config.json`, `frakture-account-config.json`, `account.<id>.json5`, `.e9_parameters`, or any other file. Do not run the `e9` CLI or a shell search. Do not call `user` or `account` again with a different filter, a guessed id, or `include_disabled`. Another skill that says `-a` comes from `accounts.d` does not apply after this miss.
 5. For **`Cannot connect to the <account_id> database`**: the account database is unreachable; every account-scoped operation **on that id** will fail the same way until connectivity is restored. Fleet `plugin` `install` skips that id and continues ([e9-plugin](../e9-plugin/SKILL.md)).
 6. For **`getPluginMetadata`**: plugin metadata loading is broken on this server. **Abort.** That must be fixed before continuing — do not schedule via local `TaskWorker`, SQL `plugin` / `bot_metadata` lookups, guessed `plugin_id`/`submodule` paths, or the REST Task API as a workaround. `account` plugins and `task` schedule both depend on it.
 
@@ -141,7 +143,7 @@ In all cases: stop. Do not call `task` or other account tools afterward. For `ge
 
 ## MCP-only discovery — do not use local code
 
-When interacting with an engine9 MCP server, **discover capabilities and accounts exclusively from the MCP server**. Do not search, read, or infer behavior from local workspace code (`server/workers/`, `plugins/`, `interfaces/`, etc.).
+When interacting with an engine9 MCP server, **discover capabilities and accounts exclusively from the MCP server**. Do not search, read, or infer behavior from local workspace code (`server/workers/`, `plugins/`, `schemas/`, etc.).
 
 **Rule:** If MCP does not return an account, plugin path, method, or option, report that result and do not guess or search local catalogs.
 
@@ -162,7 +164,7 @@ Account discovery when using MCP should only be through that MCP, not through an
 | Find accounts by prefix, parent, name, type, tags, plugin | `account` `command: "search"` (one call; flat rows with same listing fields) |
 | One account’s plugins / methods | `account` `command: "plugins"` |
 
-When an account or parent is not found, do NOT dig deeper into compiled account catalogs, etc. Do **not** read `accounts.d/`, `accounts.compiled.json5`, `account-config.json`, `account.<slug>.json5`, `.e9_parameters`, `.e9_config.json5`, or account trees on disk. Report that MCP did not return the account or parent, and stop.
+**Rule:** When an account or parent is not found, stop. Report that MCP did not return it. Do not resolve it by any other mechanism: no second search, no `user` scan, no `accounts.d`, `accounts.compiled.json5`, `account-config.json`, `frakture-account-config.json`, `.e9_parameters`, `e9` CLI, or shell search.
 
 **Use these sources instead:**
 
@@ -270,7 +272,7 @@ Three commands:
 - `include_plugins` attaches lite plugin rows (`id` / `name` / `path` / `table_prefix`) per account. `include_plugin_metadata` adds one marketplace metadata map keyed by plugin path — do not fan out `command: plugins` per account to build a method catalog.
 - `plugins` filter matches installed plugin `path` / `name` / `table_prefix` substrings (e.g. `["acoustic"]`). Apply `prefix`/`parents` first so DB probes stay bounded.
 - Per-account DB failures go into `warnings` (do not fail the whole search).
-- `count: 0` is the answer. Do **not** fall back to compiled account catalogs to find ids MCP omitted.
+- `count: 0` is the answer. Stop. Do not resolve the account by any other mechanism.
 
 Example — accounts matching a prefix with a plugin installed:
 
@@ -378,7 +380,7 @@ Person search by metadata filters and/or a plugin search tree. Prefer this over 
 
 - Required: `account_id`
 - Filters (string or array each): `emails`, `person_ids`, `phones`, `given_names`, `last_names`
-- Optional: `search` — plugin search tree from `searchOptions`, e.g. `{ and: [{ path: "@engine9/interfaces/person_email:search:emails", options: { emailMatch: "a@" } }] }` (merged with metadata filters using AND)
+- Optional: `search` — plugin search tree from `searchOptions`, e.g. `{ and: [{ path: "@engine9/schemas/person_email:search:emails", options: { emailMatch: "a@" } }] }` (merged with metadata filters using AND)
 - Optional: `limit` (max 1000, default 10)
 - Returns: `{ ok: true, result }` where `result` is the `PersonWorker.search` payload
 
@@ -396,7 +398,7 @@ Example — plugin clause from `searchOptions`:
   "search": {
     "and": [
       {
-        "path": "@engine9/interfaces/person_email:search:emails",
+        "path": "@engine9/schemas/person_email:search:emails",
         "options": { "subscriptionStatus": "Subscribed" }
       }
     ]
@@ -583,7 +585,7 @@ Example list:
 Example list by plugin path:
 
 ```json
-{ "command": "list", "account_id": "test", "plugin_path": "@engine9/interfaces/channels/email" }
+{ "command": "list", "account_id": "test", "plugin_path": "@engine9/schemas/channels/email" }
 ```
 
 Example detail after matching a listed row:
@@ -598,7 +600,7 @@ Example build by definition path:
 {
   "command": "build",
   "account_id": "test",
-  "definition_path": "@engine9/interfaces/channels/email:segments:email_openers_30d"
+  "definition_path": "@engine9/schemas/channels/email:segments:email_openers_30d"
 }
 ```
 
@@ -722,9 +724,9 @@ Debug any account input. Generic over `input_type`: the tool does not special-ca
 
 - Required: `account_id`
 - **command: list** (default) — rows from the warehouse `input` table, joined to `plugin` for `plugin_name` / `plugin_path`, newest `modified_at` first. Optional exact `input_type` (string, comma-separated, or array), `plugin_id`, and `q` (substring on remote id, remote name, input id, plugin name, plugin path). Also returns `input_types` (`{ input_type, inputs }`) so a client can build filters. Includes `sql`. Default limit 200 (max 500).
-- **command: files** — recent files in that input’s store (`ServerBaseWorker.listStore` / `FileWorker.list`). Requires `input_id`. Newest `modified_at` first. Does not read file contents. Default limit 40 (max 200). `file_count` is every file in that directory, including ones past the recent page.
+- **command: files** — recent files and subdirectories in that input’s store (`ServerBaseWorker.listStore` / `FileWorker.list`). Requires `input_id`. Newest `modified_at` first. Does not read file contents. Default limit 40 (max 200). `file_count` is every file and subdirectory in that directory, including ones past the recent page.
 - **command: summary** — record count and a row sample for one `filename` returned by `files`. Requires `input_id` and `filename`. `.json` and `.json5` (optional `.gz`) use `FileWorker.json` and return `format: "json"` plus the parsed `json` value. A JSON array’s length is `records`; a JSON object has no record count. Other files use `FileWorker.sample` (default 8 rows, max 25). Their record count prefers that file’s `records` on `metadata.json` when present (`records_source: "metadata"`). Otherwise `FileWorker.count` reads the whole file (`records_source: "scan"`). Summary does not pass `limit` to `count`: that option is forwarded to the parser, and `limit: 1` stops on the header and returns 0 records.
-- **command: deleteFiles** — delete every file directly in that input’s store directory. Requires `input_id` and the admin role. The directory comes from the input id; do not pass a path. One `FileWorker.removeFiles` call. Does not delete the warehouse `input` row, timeline rows, or files outside that folder. Call it only after `files` has been shown and the user has confirmed that folder. Do not call it in the same turn that lists the files.
+- **command: deleteFiles** — delete every file in that input’s store directory, including files inside subdirectories, then remove those subdirectories. Requires `input_id` and the admin role. The directory comes from the input id; do not pass a path. Files go through one `FileWorker.removeFiles` call. Does not delete the warehouse `input` row, timeline rows, or anything outside that folder. Call it only after `files` has been shown and the user has confirmed that folder. Do not call it in the same turn that lists the files.
 
 Example list:
 
@@ -839,7 +841,7 @@ For account-specific plugins (RENxt, …), discover `path` + `method` from MCP `
 
 When the user's request does not map cleanly to a native tool:
 
-1. **Ensure account scope** — `account_id` must be known from **this chat session** (`engine9.account_id` after `/e9a`), an explicit user statement, or MCP `account` search when the user asked you to find matching accounts. If missing, **ask the user** or suggest `/e9a <account_id>` and stop — do not read leftover CLI files or compiled account catalogs for scope. If you only know org/prefix/plugin constraints and the user wants discovery, call `account` with `command: "search"` first. If search returns no accounts, **stop** — do not look up ids on disk.
+1. **Ensure account scope** — `account_id` must be known from **this chat session** (`engine9.account_id` after `/e9a`), an explicit user statement, or one MCP `account` search when the user asked you to find matching accounts. If missing, **ask the user** or suggest `/e9a <account_id>` and stop. If search `count` is `0`, **stop**. Do not resolve the account by any other mechanism.
 2. **Pick the schedule mode:**
    - **Predefined / built-in flow** (`flow_id` such as `identity-rebuild`, or account-published slug): call `task` with `flow_id` only (optional `label`). First task is **paused** by default — resume `paused_task_run_id` to start. See [e9-tasks-api deploy-flow.md](../e9-tasks-api/deploy-flow.md).
    - **On-demand built-in** (`@engine9/plugins/e9workers:<Worker>` such as Echo): call `task` with `path` + `method`. Skip plugin discovery.
@@ -884,7 +886,7 @@ User: "List custom fields on RENxt people for account `<account_id>`"
 
 ## Account-scoped calls
 
-All tools except `ok`, `plugin_id`, and `input_id` require authentication. Account-scoped tools (including `file` and `apiKey` except `command: catalog`) require an `account_id` the signed-in user can access. Do not guess account ids. Do not infer them from leftover local CLI state or compiled account catalogs — those are for the `e9` / `e9a` bin scripts or the MCP host, not the agent. For MCP, ask for scope, require `/e9a`, or use MCP `account` search. If MCP does not return the account or parent, stop.
+All tools except `ok`, `plugin_id`, and `input_id` require authentication. Account-scoped tools (including `file` and `apiKey` except `command: catalog`) require an `account_id` the signed-in user can access. Do not guess account ids. If MCP does not return the account or parent, stop. Do not resolve it by any other mechanism.
 
 ### Parent / all scope — do not fan out DB access
 
