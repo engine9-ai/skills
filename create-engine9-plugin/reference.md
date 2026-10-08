@@ -12,9 +12,9 @@ Core loads plugins only from packages listed in the site’s
 `*.plugin.js` file inside those packages under `node_modules`. Absolute paths
 and `install({ source })` are not supported.
 
-Legacy `local$@engine9/...` is accepted as an **input alias** and stripped to
-the canonical package path. New rows and capability strings always use the
-canonical form.
+Paths match exactly. A `local$...` or `@engine9/interfaces/...` path fails to
+load; `PluginWorker.migratePackageRename` rewrites stored rows that still use
+one.
 
 | Identity | Typical filesystem |
 |----------|-------------------|
