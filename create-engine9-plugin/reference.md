@@ -12,9 +12,7 @@ Core loads plugins only from packages listed in the site’s
 `*.plugin.js` file inside those packages under `node_modules`. Absolute paths
 and `install({ source })` are not supported.
 
-Paths match exactly. A `local$...` or `@engine9/interfaces/...` path fails to
-load; `PluginWorker.migratePackageRename` rewrites stored rows that still use
-one.
+Paths match exactly; there are no alias spellings or prefixes.
 
 | Identity | Typical filesystem |
 |----------|-------------------|

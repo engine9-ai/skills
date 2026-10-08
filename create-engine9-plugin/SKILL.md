@@ -12,7 +12,7 @@ this skill to install onto accounts — use e9-plugin (MCP plugin install).
 
 # Create an engine9 plugin or schema plugin
 
-engine9 separates shared data contracts, called schema plugins (`@engine9/schemas/*`, published as `@engine9/interfaces` through 1.8.1), from deployable integrations, called native plugins. A schema plugin's table definitions are its `schema.js`; "schema plugin" is the whole directory. Both are Node ESM modules resolved by **npm package path** from `node_modules` (or a monorepo sibling linked into `node_modules`). They never require a `local$` path prefix, and core does not load plugins from absolute paths or `install({ source })`. Use this skill when adding or extending a schema plugin, native plugin, third-party package, transform, search handler, segment, report, settings, or deployment schema. To **install** an existing package onto accounts, use [e9-plugin](../e9-plugin/SKILL.md).
+engine9 separates shared data contracts, called schema plugins (`@engine9/schemas/*`), from deployable integrations, called native plugins. A schema plugin's table definitions are its `schema.js`; "schema plugin" is the whole directory. Both are Node ESM modules resolved by **npm package path** from `node_modules` (or a monorepo sibling linked into `node_modules`). Core does not load plugins from absolute paths or `install({ source })`. Use this skill when adding or extending a schema plugin, native plugin, third-party package, transform, search handler, segment, report, settings, or deployment schema. To **install** an existing package onto accounts, use [e9-plugin](../e9-plugin/SKILL.md).
 
 ## Quick reference
 
@@ -542,7 +542,7 @@ Thin, schema-only schema plugins are also valid. `message/index.js` exports only
 | Settings do not appear in MCP `plugin` settings | Confirm the plugin is installed, `settings` is on the default export or sibling `settings.js`, and the setting is not `hidden` |
 | Segment membership is unexpectedly broad        | Inspect `universe`, search path, and optional `pluginId` scope                                                                 |
 | Schema plugin report is not available           | Move it to a native `@engine9/plugins/reports/<area>` package                                                                  |
-| Package cannot resolve                          | Use the package path and inspect resolver/registration rules; do not add `local$`                                              |
+| Package cannot resolve                          | Use the package path and inspect resolver/registration rules; do not add a prefix                                              |
 | Stack installation conflicts                    | Inspect installed stack `exclude` metadata and utilities/limited-pii `exclude_pii`                                                         |
 
 ## Related documentation
