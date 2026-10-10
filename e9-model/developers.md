@@ -75,9 +75,12 @@ Entries arrive decorated with the parsed source-code columns from
 `SOURCE_CODE_DICTIONARY_COLUMNS` in `source.js`, including `acquisition_cost`,
 `acquisition_cost_per_person`, `acquisition_date`, `source_code_date_parsed`,
 `source_code_channel`, and the parsed label fields. Each entry also carries
-`remote_person_id`: the `person_remote` value for that person on the plugin
-that owns the entry's input (the CRM id that used to arrive as `reference_id`
-on `CRM_ORIGIN`). Transaction runs also carry `amount`, `refund_amount`,
+`remote_person_id` from `person_remote`: matched on `person_id` and on
+`input.plugin_id` (timeline entry's input vs the remote's `source_input_id`),
+so the CRM id is for the plugin that owns that entry (the value that used to
+arrive as `reference_id` on `CRM_ORIGIN`). This is not
+`person_id_remote_person_id` (hash lookup). Pass `includeRemotePersonId: false`
+to skip it. Transaction runs also carry `amount`, `refund_amount`,
 `recurring_number`, `recurs`, `recurs_id`.
 
 Transaction identity is `transaction.id` (UUID).
