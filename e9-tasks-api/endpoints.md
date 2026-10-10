@@ -142,6 +142,26 @@ curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows/nightly-sync" \
 
 **404** — no flow with that slug for your account.
 
+### Remote dataflow (`?remote=true`)
+
+`GET /flows/:id?remote=true` loads one Frakture dataflow as an engine9 flow definition (`GET /flows/:id` on the data layer). `:id` is the dataflow id. Child dataflows are parent-merged before the response, so bot and option overrides are already on `tasks`.
+
+```bash
+curl $CURL_TLS -sS -H "$AUTH" -H "$ACCOUNT" "$BASE_URL/flows/<dataflow_id>?remote=true" \
+  | jq '{id, name, labels, tasks: [.tasks[] | {task_key, path, method, options}]}'
+```
+
+| Field | Meaning |
+|-------|---------|
+| `id` | Dataflow id |
+| `name` | Dataflow label |
+| `labels` | Account, parent, description, cron `schedule`, disabled, sharable, email spawn |
+| `tasks[]` | Jobs as steps: `task_key`, `name`, `path`, `method`, `assignee.bot_id`, `options` |
+
+MCP `task` `action: "getFlow"` reads a local JSON5 file or built-in slug. Pass `remote: true` to load this Frakture definition.
+
+**404** — dataflow missing or outside the caller's account.
+
 ### `POST /flows/filter`
 
 Search and paginate flows.
@@ -357,7 +377,26 @@ curl $CURL_TLS -sS -X POST \
   "$BASE_URL/flow_runs/filter"
 ```
 
-`flow_id.eq_` matches slug **or** flow UUID.
+`flow_id.eq_` matches slug **or** flow UUID on local listings (`"remote": false`).
+
+**Recent runs of one remote dataflow** (default `remote: true`):
+
+On the remote-legacy listing, `flow_id` is the **Frakture dataflow id** — the same id as `GET /flows/<dataflow_id>?remote=true` and the `dataflow_id` on every listed flow run. The server forwards it to Frakture as `dataflow_id`. Slugs and flow UUIDs do not match remote runs.
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flow_id": "<dataflow_id>",
+    "limit": 25
+  }' \
+  "$BASE_URL/flow_runs/filter"
+```
+
+Aliases: `"dataflow_id": "<dataflow_id>"`, `"flow_runs": { "flow_id": { "eq_": "<dataflow_id>" } }`, or `"flow_runs": { "dataflow_id": { "eq_": "<dataflow_id>" } }`. Works the same on `POST /flow_runs/count` and `POST /flow_runs/metrics`.
+
+Rule: Check `dataflow_id` on returned runs when exact results matter. A Frakture deployment that predates the `dataflow_id` filter ignores it and returns runs of every dataflow.
 
 **Filter by parent account:**
 
@@ -422,7 +461,7 @@ curl $CURL_TLS -sS -X POST \
 
 Aliases: `"q": "…"`, or `"flow_runs": { "search": { "like_": "…" } }`. Case-insensitive substring; special regex characters are treated literally.
 
-Each flow run in the response includes `account_id`, **`parent_account_id`**, **`parent_ids`**, `completed_since`, `last_completed`, `dataflow_last_completed`, **`tags`**, and `tracking_code`.
+Each flow run in the response includes `account_id`, **`parent_account_id`**, **`parent_ids`**, **`dataflow_id`** (remote listings), `completed_since`, `last_completed`, `dataflow_last_completed`, **`tags`**, and `tracking_code`.
 
 - `parent_account_id` is the first id in the owning account's `parent_ids` (`null` if the account has no parent).
 - `parent_ids` is the full array from the account document (an account can have more than one parent).

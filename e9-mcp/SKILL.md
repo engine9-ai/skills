@@ -184,6 +184,7 @@ Account discovery when using MCP should only be through that MCP, not through an
 | Compare current `model_*_stats` by source code | MCP `timelinePerson` (`command: compareSourceCodes`). Legacy pivot: [e9-model/legacy.md](../e9-model/legacy.md), only when the user explicitly asked for legacy |
 | Date histogram on a datetime column (index optional) | MCP `sql` with `command: "histo"` |
 | List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
+| Read one flow definition | MCP `task` `action: "getFlow"` — built-in slug or JSON5 file. `remote: true` loads a Frakture dataflow via `GET /flows/:id` |
 
 If a path, method, or option is not present in MCP responses, report that to the user — do not guess from local code.
 
@@ -900,13 +901,23 @@ When the user asks for **all accounts**, **parent** children, or other multi-acc
 
 ### `task` action `list` — remote flow runs
 
-MCP `task` with `action: "list"` calls `TaskWorker.listRemoteFlowRuns` (`POST /flow_runs/filter` on the remote-legacy Task API). Returns **flow runs only** — nested `task_runs` are not included. Each flow run includes `account_id`, `parent_account_id` (first id in that account's `parent_ids`, or `null`), and `parent_ids`.
+MCP `task` with `action: "list"` calls `TaskWorker.listRemoteFlowRuns` (`POST /flow_runs/filter` on the remote-legacy Task API). Returns **flow runs only** — nested `task_runs` are not included. Each flow run includes `account_id`, `parent_account_id` (first id in that account's `parent_ids`, or `null`), `parent_ids`, and `dataflow_id` (the Frakture dataflow the run came from).
+
+**Runs of one flow:** pass `flow_id` set to the Frakture dataflow id — the same id as `getFlow` with `remote: true`, and the `dataflow_id` on a listed run. The server sends it to Frakture as `dataflow_id`. `count` and `metrics` take the same `flow_id`.
+
+```json
+{ "action": "list", "account_id": "<account_id>", "flow_id": "<dataflow_id>", "limit": 25 }
+```
+
+Rule: For a remote listing, `flow_id` is the dataflow id, not a flow slug. Check `dataflow_id` on returned runs when exact results matter: a Frakture deployment that predates the filter ignores it and returns runs of every dataflow.
 
 MCP `task` with `action: "count"` calls `POST /flow_runs/count` (same filters as list). Returns `{ count }`. Use with the current `status` filter for “N of total”.
 
 MCP `task` with `action: "metrics"` calls `POST /flow_runs/metrics`. Returns `{ count, total, FAILED, RUNNING, COMPLETED }` (extra types such as `PAUSED` only when matching). Rule: omit `status` so pills ignore the current state filter.
 
 MCP `task` with `action: "listTasks"` (or `"debug"`) calls `TaskWorker.listRemoteTaskRuns` (`POST /task_runs/filter` on the remote-legacy Task API) for a specific `flow_run_id` / `task_run_ids`. The result is `{ task_runs: [ … ], flow_run? }` — the same shape as REST `POST /task_runs/filter`. Pass `remote: false` to list local runs. Each `task_run` / `flow_run` includes `account_id`, `parent_account_id`, and `parent_ids`. Each `task_run` includes **`log_link`** (`/task_runs/{id}/log` on the Task API). Listings omit **`checkpoints`**. Display `state.name` (aka `state_name`); color/group by `state.type` (`state_type`). Render commands from `allowed_actions` (`pause`, `resume`, `retry`, `stop`, `update_options`, `reset_checkpoints`). Do **not** read deprecated `status` (Mongo vocabulary).
+
+MCP `task` with `action: "getFlow"` returns one flow definition. The default reads a local definition: `flow_id` (a built-in slug such as `identity-rebuild`) or `flow_path` (a JSON5 file). Set `remote: true` to call Frakture `GET /flows/:id` (`TaskWorker.getRemoteFlow`) with `flow_id` set to the dataflow id. That body is an engine9 flow (`id`, `name`, `tags`, `labels`, `tasks` with `path`, `method`, `assignee`, `options`).
 
 MCP `task` with `action: "get"` calls `GET /task_runs/:id` (`TaskWorker.getRemoteTaskRun`). This is the single-task detail read: `resolved_options`, `output`, and **`checkpoints`** (`[{ modified, options }]` from worker `modify_history`). A task can have **multiple** checkpoints, oldest first. Checkpoints can exceed 1MB — request them only for one task. Workers write them; `PATCH` does not create a checkpoint. **Retry does not clear them.** `allowed_actions` includes `reset_checkpoints` when the job has checkpoints.
 
@@ -922,11 +933,12 @@ MCP `task` per-task-run controls (Firebase / MCP session — **do not** send `e9
 | `stop` | `POST /task_runs/:id/stop` | Kill. `set_state` `CANCELLED` equivalent |
 | `updateOptions` | `PATCH /task_runs/:id` `{ options }` | Pending/paused only; 409 when RUNNING/terminal |
 | `describe` | `POST /tasks/describe` | Method option metadata for `path` (marketplace first, then Frakture). `method` optional. Does not enqueue |
+| `getFlow` | `GET /flows/:id` | Flow definition. Built-in slug (`flow_id`) or JSON5 file (`flow_path`). `remote: true` reads a Frakture dataflow id |
 | `get` | `GET /task_runs/:id` | Single-task details including **`checkpoints`**. Do not use `listTasks` for this |
 | `resetCheckpoints` | `POST /task_runs/:id/reset_checkpoints` | Walk back checkpoints. `{ "start_index": 0 }` (default) is RESET ALL; `N` keeps the first N (oldest) and drops later ones. Cannot yank from the middle. Retry does not clear. Alias: `reset_checkpoints` |
 | `log` / `output` | `GET /task_runs/:id/log` / `/output` | `{ log_link, log, truncated }` and optional signed **`log_url`** from remote-legacy; prefer **`log_link`** for integrations |
 | `archive` / bulk `retry` | `POST /flow_runs/archive` / `/retry` | All `flow_run_ids` in one call. After parent/all list, pass `parent_account_id`. **`user_id` is not required**. See [bulk archive](#bulk-archive--retry-of-flow-runs) |
-| `count` | `POST /flow_runs/count` | Same filters as `list`. `{ count }`. Ignores limit |
+| `count` | `POST /flow_runs/count` | Same filters as `list` (including `flow_id`). `{ count }`. Ignores limit |
 | `metrics` | `POST /flow_runs/metrics` | FAILED / RUNNING / COMPLETED pills. Omit `status` so pills ignore the current state filter |
 
 Same account-scope auth as `action: "list"` (account header + bearer). Do **not** ask the user for a remote-legacy `user_id`.

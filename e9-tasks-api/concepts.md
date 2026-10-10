@@ -67,6 +67,7 @@ A **flow run** is one execution of a predefined flow **or** the wrapper around a
 | `parent_ids` | Full `parent_ids` array from the account document |
 | `flow_slug` | Which flow template (e.g. `nightly-sync`) |
 | `flow_id` | UUID associated with the slug |
+| `dataflow_id` | Remote runs: the Frakture dataflow this run came from. Pass it as `flow_id` to `GET /flows/:id?remote=true`, or to `POST /flow_runs/filter` for that dataflow's runs |
 | `state_type` / `state.type` | `PENDING`, `RUNNING`, `PAUSED`, `COMPLETED`, `FAILED`, … |
 | `state_name` / `state.name` | Display name that refines the type (`Scheduled`, `Running`, `Cancelling`) |
 | `allowed_actions` | Commands the UI may offer (`pause`, `resume`, `retry`, `stop`, `update_options`) |
@@ -127,7 +128,7 @@ Third-party Prefect clients should send **one** flow-run tag. `tracking_code` re
 
 ### Count and metrics
 
-`POST /flow_runs/filter` is paged (HTTP default 20, max 500) and does not report how many runs matched. Use these read-only routes for totals and status pills. Both reuse the **same filters** as filter (`status`, `tags` / `tracking_code`, `search` / `q`, `parent_account_id`, `account_ids`, `completed_since`, `archived`, date range). They never load nested task runs. Default `remote: true` (Frakture); pass `"remote": false` for local runs.
+`POST /flow_runs/filter` is paged (HTTP default 20, max 500) and does not report how many runs matched. Use these read-only routes for totals and status pills. Both reuse the **same filters** as filter (`status`, `flow_id` / `dataflow_id`, `tags` / `tracking_code`, `search` / `q`, `parent_account_id`, `account_ids`, `completed_since`, `archived`, date range). They never load nested task runs. Default `remote: true` (Frakture); pass `"remote": false` for local runs.
 
 | Route | Response |
 |-------|----------|

@@ -21,6 +21,7 @@ The engine9 Task API schedules predefined flows and on-demand worker methods ove
 | Production base URL | `https://data.engine9.ai` |
 | Authentication | `Authorization: Bearer e9key_…` plus `X-ENGINE9-ACCOUNT-ID` |
 | Discover flows | `GET /flows` with `tasks:read` |
+| One flow definition | `GET /flows/:id` (local file). `?remote=true` for a Frakture dataflow. MCP `task` `action: "getFlow"` |
 | Schedule a predefined flow | `POST /flow_runs/` with `flow_id` |
 | Schedule an on-demand task | `POST /tasks/schedule` with `path` + `method` |
 | Poll task runs | `POST /task_runs/filter` |
@@ -53,7 +54,7 @@ Follow [echo-walkthrough.md](./echo-walkthrough.md) end to end: **ask the user f
 ## Workflow
 
 1. **Discover flows** — `GET /flows` (or `POST /flows/filter`) lists published slugs; `GET /flows/:id` shows each step's `task_key` and default `options`
-2. `POST /flow_runs/filter` with `{"limit":20}` — list recent **remote** runs for the account (default `remote: true`; no `flow_run_id`). For totals and FAILED / RUNNING / COMPLETED pills, `POST /flow_runs/count` and `POST /flow_runs/metrics` with the same filters (omit `status` on metrics so pills ignore the current state filter).
+2. `POST /flow_runs/filter` with `{"limit":20}` — list recent **remote** runs for the account (default `remote: true`; no `flow_run_id`). Add `"flow_id": "<dataflow_id>"` for runs of one remote dataflow ([endpoints.md](./endpoints.md#post-flow_runsfilter)). For totals and FAILED / RUNNING / COMPLETED pills, `POST /flow_runs/count` and `POST /flow_runs/metrics` with the same filters (omit `status` on metrics so pills ignore the current state filter).
 3. Schedule — pick the matching endpoint:
    - **On-demand task:** `POST /tasks/schedule` with `{ "path": "@engine9/plugins/e9workers:EchoWorker", "method": "echo", "options"? }`. Built-in workers: `@engine9/plugins/e9workers:<Worker>` (no plugin lookup). Account plugins: path from discovery, then this endpoint. Optional flow-run **`tags`** (Prefect name for Frakture `tracking_code`, one string). See also `POST /flow_runs/`.
    - **Predefined flow:** `GET /flows` then `POST /flow_runs/` with `{ "flow_id": "<slug>", "options"? }` — optional top-level `options` (e.g. `start` / `end`) merges into every step; optional `tasks: [{ task_key, options }]` for per-step overrides. `flow_id` is required. Optional `tags` same as on-demand (not flow-definition tags). See also `POST /tasks/schedule`.
