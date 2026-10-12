@@ -15,6 +15,7 @@ An **export** is a self-contained snapshot of one account’s warehouse data; a 
 | Understand an input store | Its `metadata.json`, then its `.idv1.parquet` files |
 | Join warehouse entities | `person_id`, `input_id`, `plugin_id`, and `source_code_id` |
 | Inspect a named audience extract | `{export_id}.{export_name}.export.csv` in `export_dir`, and its metadata sidecar |
+| Query an export in a local DuckDB (no engine9 install) | [duckdb.md](duckdb.md): builds `{export_root}/engine9.duckdb`, with participant, opt-out, and transaction/click lists |
 | Create or debug an export | Export building documentation |
 | Limit by start/end date | [Start and end dates](building.md#start-and-end-dates) — tables, person-search, and input stores differ |
 
@@ -146,12 +147,12 @@ Snake_case on disk. Older files may still use camelCase (`inputId`, `pluginId`, 
 | `records` | Row count across idv1 files |
 | `distinct_people` | Distinct `person_id` |
 | `distinct_records` | Distinct timeline entry `id` |
-| `files[]` | `{ filename, records }` for files **in the source store**. Only `.idv1.parquet` names in this list were copied. Legacy entries may be a bare string. |
+| `files[]` | `{ filename, records }` for files **in the source store** when `metadata.json` was last written. It can be stale: the copied `.idv1.parquet` may have a different name. Use `inventory.json5` `files[]` or the folder listing for what was copied. Legacy entries may be a bare string. |
 | `entry_types` | Map keyed by **string name** (not an array). Each value has `min_timeline_ts`, `max_timeline_ts`, `records`, `distinct_people`, `distinct_records`. |
 
-`entry_types` names are exact (`EMAIL_OPEN`, not `EMAIL_*`). That map is how a bundle selected the store; it is also how a receiver knows which activity kinds are in the parquet.
+`entry_types` names are exact (`EMAIL_OPEN`, not `EMAIL_*`). A bundle can select a store by that map, but message stores selected by `input_type` and `channel` may have an empty `entry_types`. Count `entry_type_id` in the parquet to see which activity kinds it holds.
 
-`records: 0` in metadata can be stale. Prefer parquet `COUNT(*)` when the count matters.
+`records` in metadata can be stale. Prefer parquet `COUNT(*)` when the count matters.
 
 ### `.idv1.parquet` rows
 
@@ -246,7 +247,7 @@ The sidecar records how the file was built:
 
 ## Examples
 
-Parquet is the native format. DuckDB example:
+Parquet is the native format. For a full walkthrough that loads the export into one DuckDB file (`{export_root}/engine9.duckdb`) and builds participant, opt-out, and transaction/click lists, see [duckdb.md](duckdb.md). Ad-hoc reads straight from the files:
 
 ```sql
 -- Catalog

@@ -258,7 +258,7 @@ Typical uses:
 - **Per-person message entries (optional)** — `inputs.by_plugin_entry_type_month` where `subcategory === 'messages'` (what was extracted into idv1; may never be loaded into warehouse `timeline`). Inventory UI: **Timeline → Messages**.
 - **Loaded warehouse volumes** — `tables[]` monthly buckets (what is already in SQL tables such as `timeline` / `transaction`).
 - **Warehouse timeline UI** — one row per source; each month tick is populated when `months[].records > 0` or a matching statistics bucket exists.
-- **Home dashboard** — monthly KPIs and charts (see below). People and channel StatCards compare the latest month with data to the same month a year earlier for `% vs`, and name both months. Revenue / donations / average gift show the latest month only (a partial month is not comparable to last year). Revenue and people charts are the last 12 months. Email charts use publish month (`messages`) and span first to last month with sends/opens/clicks (max 36 months). Ads and long-running channels use `message_activity` (`date`).
+- **Home dashboard** — monthly KPIs and charts (see below). People and channel StatCards compare the latest month with data to the same month a year earlier for `% vs`, and name both months. Revenue / donations / average gift show the latest month at or before today only (a partial current month is not comparable to last year; future pledges are excluded). Every chart ends at the current calendar month. Revenue and people charts share the last 12 months through today. Email charts use publish month (`messages`) and span first month with sends/opens/clicks through today (max 36 months). Ads and long-running channels use `message_activity` (`date`).
 - **Analytics DB iteration** — walk `statistics.tables` / `messages` first; use `inputs.by_plugin_entry_type_month` only when you need per-person months.
 - **Gap detection** — compare `statistics.month_range` to expected span; empty `months` on a table that should have data → stats job or load missing. Empty or smaller warehouse `timeline` vs large email input buckets is often intentional (space), not a gap to “fix” with SQL. Empty Timeline → Messages with a populated Messages series is also normal.
 
@@ -268,16 +268,16 @@ Grain is monthly (`YYYY-MM`). Plot `month` as the date axis (`YYYY-MM-01`). Filt
 
 | Home surface | Statistics source |
 |--------------|-------------------|
-| Total revenue | `tables[]` where `table === 'transaction'` → `months[].revenue` (`sum(amount)`). Latest month only — no year-over-year delta. |
-| Donations (count) | same `months[].records` (latest month only). |
-| Average gift | `revenue / records` for the latest month (no year-over-year delta). |
-| Active people | `tables[]` where `table === 'timeline'` → `months[].people` (`count(distinct person_id)`). Fallback: `person` table `records` (warehouse people, not activity). |
-| People created chart | Prefer person `created_months` (`frakture_date_created` / `date_created` / `created_at`). Fallback: person `months[]` only when `date_column` is a created-date column. Last 12 months. |
+| Total revenue | `tables[]` where `table === 'transaction'` → `months[].revenue` (`sum(amount)`). Latest month at or before today only — no year-over-year delta; future pledge months are excluded. |
+| Donations (count) | same `months[].records` (latest month at or before today only). |
+| Average gift | `revenue / records` for that same latest month (no year-over-year delta). |
+| Active people | `tables[]` where `table === 'timeline'` → `months[].people` (`count(distinct person_id)`). Fallback: `person` table `records` (warehouse people, not activity). Cap at the current month. |
+| People created chart | Prefer person `created_months` (`frakture_date_created` / `date_created` / `created_at`). Fallback: person `months[]` only when `date_column` is a created-date column. Last 12 months ending today (aligned with revenue). |
 | Emails sent | **`messages.by_channel_month`** where `channel` is `email` → `sent`. Source is `global_message_summary` grouped by **`publish_date`**. Never `message_activity`. Do **not** use timeline `inputs` / `EMAIL_SEND`. Score the last finished calendar month with sends; the StatCard caption is that month and the delta names the same month a year earlier. |
-| Email activity chart (sends, opens, clicks) | Same source as Emails sent (`messages`, `publish_date`). Span first month with sends/opens/clicks through the last finished month, capped at 36 months. Per-person timeline entries stay on Inventory **Timeline → Messages**. |
+| Email activity chart (sends, opens, clicks) | Same source as Emails sent (`messages`, `publish_date`). Span first month with sends/opens/clicks through the current calendar month, capped at 36 months. Per-person timeline entries stay on Inventory **Timeline → Messages**. |
 | Other one-shot sends (SMS blasts) | Same `messages` series on `publish_date`. Lifetime totals live on the message, same as email. |
 | Ads and long-running channel charts | **`message_activity.by_channel_month`** on **`date`** (the day the statistic occurred), not `publish_date`. |
-| Revenue and donations chart | transaction `months[]` for the last 12 months: `revenue` (bars) + `records` (donations line) |
+| Revenue and donations chart | transaction `months[]` for the last 12 months ending today: `revenue` (bars) + `records` (donations line). Future months (pledges) are omitted. |
 
 Paid/social **coverage** (which months had spend) still maps to `message_summary_by_date` (`spend > 0` on `date`). Do not use that block for email opens/clicks — it excludes rows without spend, and email does not use the by-date view.
 

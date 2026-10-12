@@ -235,6 +235,8 @@ A delete covers the input store (`metadata.json`, raw files, `.idv1.parquet`, an
 
 ## Rules
 
+Rule: When reading an existing account input store from Cursor, use MCP `input` with `input_id`: root `files`, then `files` with `path` for a listed subdirectory (e.g. `"batched"`), then `download` / `summary` with the **store-relative** `name` (e.g. `batched/foo.batch.csv`). Do not use local `aws s3`. If MCP cannot list or download the file, stop and say so.
+
 Rule: One named remote stream per input. If the vendor has a durable form, message, ad, or table id, that object is the input.
 
 Rule: Call timeline records entries, never events.
@@ -329,6 +331,8 @@ Do **not** key the input by ad, ad set, or campaign when the object people fille
 | Message and form share an id | They are different streams; do not reuse a message uuid as the form `input_id` unless they are intentionally the same store |
 | Entries missing on Person → Timeline | ID files may exist in the input store without a `timeline` load; see [e9-timeline](../e9-timeline/SKILL.md) |
 | Need the store files and a row sample for one input | Conductor `/input`, or MCP `input` (`list`, `files`, `summary`). The tool takes `input_type` as a filter and does not special-case messages, transactions, or other types. See [e9-mcp](../e9-mcp/SKILL.md) |
+| Download store files with only an `input_id` (no AWS/S3) | MCP `input`: `files` → `files` + `path: "batched"` → `download` with store-relative `name` (`batched/foo.batch.csv`). Rejects `..`, absolute paths, `s3://`. Never local `aws s3`. See [e9-mcp](../e9-mcp/SKILL.md#input) |
+| Funnel: query → export → batch → remote outcome | [e9-funnel](../e9-funnel/SKILL.md) (tentative) |
 | Delete every file in one input’s store folder | Conductor Inputs → Files → Delete, after the confirm. That calls MCP `input` `deleteFiles`. Same list-then-confirm rule when an agent does it. |
 | A delete ran without a shown file list | Stop. Deleting an input requires the file list, the count, and a later confirmation of that exact list |
 

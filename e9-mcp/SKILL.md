@@ -20,7 +20,7 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 | Run an on-demand worker method | `task` with `path` + `method` |
 | Run a predefined flow | `task` with `flow_id` |
 | Diagnose generated queries | The response's top-level `sql` field |
-| Debug an input (table, recent store files, record count and sample) | `input` — [Input](#input). Caller supplies `input_type` |
+| Debug an input (table, store files, download, record count and sample) | `input` — [Input](#input). Caller supplies `input_type`. Third parties: `files` then `download` by `input_id` (no AWS) |
 | Legacy report folders | Do not call unless the user explicitly asked. Never code reports against them. [Legacy report folders](../e9-reports/legacy-folders.md) |
 
 **Rule:** Discover accounts, plugins, methods, and options from the connected MCP server only; never infer them from local workspace code.
@@ -215,15 +215,17 @@ If a path, method, or option is not present in MCP responses, report that to the
 | List or run reports (plugin `path` or portable JSON `definition`; filters, date range) | `report` (`list` first for plugins; `run` with `path` or `definition`). This is the only report system to code against |
 | Legacy stored report folders | Do not use unless the user explicitly asked. `legacyReportFolder` is not a report to code against. [Legacy report folders](../e9-reports/legacy-folders.md) |
 | Read or schedule account warehouse inventory | `inventory` (`get` first; `build` only if not ready) |
-| Debug an input: list the `input` table, recent store files, file record count and sample | `input` (`list`, `files`, `summary`). Caller supplies `input_type`; the tool does not catalog types |
+| Debug an input: list the `input` table, store files, download a file, record count and sample | `input` (`list`, `files`, `download`, `summary`). Caller supplies `input_type`; the tool does not catalog types |
 | Create accounts / manage domains or domain secrets | e9-account Worker (`cloud-services/e9-account`) — not MCP |
 | Run a SQL/EQL query | `eql` / `sql` (`command: "query"` or omit when `sql` is set) |
 | Analyze / summarize a table | `analyze` |
 | Describe tables, indexes, list tables, histo | `sql` with `command: "describe"` / `"indexes"` / `"tables"` / `"histo"` |
 | Compute plugin or input UUIDs | `plugin_id`, `input_id` |
 | Chat / conversation history | `chat` |
-| Read a small slice of an account file (S3 / local) | `file` |
-| List inputs, recent store files, or a file sample | `input` (`list` / `files` / `summary`). `input_type` is an exact filter the caller supplies |
+| Read a small slice of an account file (S3 / local) by path | `file` |
+| List or download input-store files by `input_id` only (no AWS) | `input` (`files` then `download`). Use `path` for subdirs (e.g. `batched`); download store-relative `name`. Never local `aws s3` |
+| List inputs, store files, download, or a file sample | `input` (`list` / `files` / `download` / `summary`). `input_type` is an exact filter the caller supplies |
+| People funnel (exported vs batched vs remote outcome) | [e9-funnel](../e9-funnel/SKILL.md) (tentative) — MCP-only; use `files` + `path` for `batched/` |
 | Create / list / update / rotate / revoke API keys and scopes | `apiKey` — see [e9-api-key](../e9-api-key/SKILL.md). Never via `task` |
 | Run an on-demand plugin method | `task` with `path` + `method`. Built-in: `@engine9/plugins/e9workers:EchoWorker` + `echo` (no `account` lookup). Other plugins: discover via `account` first |
 | Run a published flow (predefined) | `task` with `flow_id` (slug from REST `GET /flows`) — no `path`/`method` |
@@ -721,12 +723,31 @@ Store and replay account-scoped conversations.
 
 ### `input`
 
-Debug any account input. Generic over `input_type`: the tool does not special-case messages, transactions, plugins, or other types. Conductor `/input` is a shell over this tool. Type chips on that screen come from the distinct types this tool returns, with a client-side preferred order. The server does not ship that list.
+Debug any account input, and retrieve store files by `input_id` without AWS/S3 credentials. Generic over `input_type`: the tool does not special-case messages, transactions, plugins, or other types. Conductor `/input` is a shell over this tool. Type chips on that screen come from the distinct types this tool returns, with a client-side preferred order. The server does not ship that list.
+
+**Third-party retrieval:** with only an `input_id`, list then download. Subdirectories use a second `files` call with `path`. `download` defaults to **100MB**; when still `truncated`, call again with `start: end + 1`. MCP `file` stays at a 300KB sample cap.
+
+```json
+{ "command": "files", "account_id": "<account_id>", "input_id": "<uuid>" }
+{ "command": "files", "account_id": "<account_id>", "input_id": "<uuid>", "path": "batched" }
+{ "command": "download", "account_id": "<account_id>", "input_id": "<uuid>", "filename": "batched/foo.batch.csv" }
+```
+
+Rule: Do **not** use local `aws s3`, client AWS credentials, shell S3 sync, or `e9 fileworker` against `s3://…` to fetch input-store files. Use MCP `input` `files` → `download` (or `summary`).
+
+Rule: Listed `name` values are **relative to the input store root** (e.g. `batched/seen_records.txt`, not bare `seen_records.txt`). Pass that same string as `filename` to `download` / `summary`.
+
+Rule: `path` on `files` is a directory `name` from a prior listing (or omit / `""` for the store root). Response includes `path` and `directory` (resolved listing path). `path` is on the MCP tool schema for discovery.
+
+Rule: Reject `..`, absolute paths, and `s3://` (or other object-store) URIs for `path` / `filename`.
+
+Rule: If the data required for the user’s question is not available through MCP, note that and stop. Do not work around with local object-store tooling.
 
 - Required: `account_id`
 - **command: list** (default) — rows from the warehouse `input` table, joined to `plugin` for `plugin_name` / `plugin_path`, newest `modified_at` first. Optional exact `input_type` (string, comma-separated, or array), `plugin_id`, and `q` (substring on remote id, remote name, input id, plugin name, plugin path). Also returns `input_types` (`{ input_type, inputs }`) so a client can build filters. Includes `sql`. Default limit 200 (max 500).
-- **command: files** — recent files and subdirectories in that input’s store (`ServerBaseWorker.listStore` / `FileWorker.list`). Requires `input_id`. Newest `modified_at` first. Does not read file contents. Default limit 40 (max 200). `file_count` is every file and subdirectory in that directory, including ones past the recent page.
-- **command: summary** — record count and a row sample for one `filename` returned by `files`. Requires `input_id` and `filename`. `.json` and `.json5` (optional `.gz`) use `FileWorker.json` and return `format: "json"` plus the parsed `json` value. A JSON array’s length is `records`; a JSON object has no record count. Other files use `FileWorker.sample` (default 8 rows, max 25). Their record count prefers that file’s `records` on `metadata.json` when present (`records_source: "metadata"`). Otherwise `FileWorker.count` reads the whole file (`records_source: "scan"`). Summary does not pass `limit` to `count`: that option is forwarded to the parser, and `limit: 1` stops on the header and returns 0 records.
+- **command: files** — one level of that input’s store (`FileWorker.list`). Requires `input_id`. Optional `path` (directory `name` from a prior listing, e.g. `"batched"`; omit or `""` for root). Each entry `name` is store-relative. Response includes `path` and `directory` (resolved listing path). Rejects `..`, absolute paths, and `s3://` URIs. Default limit 40 (max 200); page with `offset` when `truncated`.
+- **command: download** — read one file returned by `files` through the server (local / `s3://` / `r2://` / `gs://`). Requires `input_id` and `filename` set to the listed store-relative `name` (e.g. `batched/foo.batch.csv`). Default/max **100MB** (`max_bytes`). Text → `encoding: "utf8"`; binary → `encoding: "base64"`. Parquet returns a small JSON record sample (`encoding: "object"`). No client AWS credentials.
+- **command: summary** — record count and a row sample for one store-relative `filename` returned by `files`. Requires `input_id` and `filename`. `.json` and `.json5` (optional `.gz`) use `FileWorker.json` and return `format: "json"` plus the parsed `json` value. A JSON array’s length is `records`; a JSON object has no record count. Other files use `FileWorker.sample` (default 8 rows, max 25). Their record count prefers that file’s `records` on `metadata.json` when present (`records_source: "metadata"`). Otherwise `FileWorker.count` reads the whole file (`records_source: "scan"`). Summary does not pass `limit` to `count`: that option is forwarded to the parser, and `limit: 1` stops on the header and returns 0 records.
 - **command: deleteFiles** — delete every file in that input’s store directory, including files inside subdirectories, then remove those subdirectories. Requires `input_id` and the admin role. The directory comes from the input id; do not pass a path. Files go through one `FileWorker.removeFiles` call. Does not delete the warehouse `input` row, timeline rows, or anything outside that folder. Call it only after `files` has been shown and the user has confirmed that folder. Do not call it in the same turn that lists the files.
 
 Example list:
@@ -735,10 +756,37 @@ Example list:
 { "command": "list", "account_id": "<account_id>", "input_type": "message" }
 ```
 
-Example files:
+Example files (root, then subdirectory):
 
 ```json
 { "command": "files", "account_id": "<account_id>", "input_id": "<uuid>" }
+```
+
+```json
+{ "command": "files", "account_id": "<account_id>", "input_id": "<uuid>", "path": "batched" }
+```
+
+Example download (store-relative name; whole file up to 100MB):
+
+```json
+{
+  "command": "download",
+  "account_id": "<account_id>",
+  "input_id": "<uuid>",
+  "filename": "batched/foo.batch.csv"
+}
+```
+
+Example download next window when still `truncated` (>100MB):
+
+```json
+{
+  "command": "download",
+  "account_id": "<account_id>",
+  "input_id": "<uuid>",
+  "filename": "batched/foo.batch.csv",
+  "start": 100000001
+}
 ```
 
 Example summary:
@@ -748,7 +796,7 @@ Example summary:
   "command": "summary",
   "account_id": "<account_id>",
   "input_id": "<uuid>",
-  "filename": "<filename from files>"
+  "filename": "batched/foo.batch.csv"
 }
 ```
 
