@@ -7,6 +7,7 @@ This directory contains public skills for working with engine9 deployments, data
 | Task | Skill |
 | --- | --- |
 | Install a plugin on accounts | [Plugin install](e9-plugin/SKILL.md) |
+| Upgrade databases after a core or schemas release | [Upgrades](e9-upgrade/SKILL.md) |
 | Build a schema plugin or plugin | [Create plugin or schema plugin](create-engine9-plugin/SKILL.md) |
 | Connect Cursor and choose account scope | [CLI](e9-cli/SKILL.md) |
 | Select and call MCP tools | [MCP](e9-mcp/SKILL.md) |
