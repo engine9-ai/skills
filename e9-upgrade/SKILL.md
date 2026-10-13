@@ -6,7 +6,7 @@ description: >-
   on an engine9 server. One mechanism everywhere: install, deploy, then
   `e9core upgrade` (PluginWorker.upgrade) with a dry run first. Covers
   POST /api/admin/upgrade, MCP `plugin` `upgrade`, the upgrade.<id> ledger,
-  blocked upgrades (PII-free accounts and --discard-names), release guides
+  blocked and opt-in upgrades (--drop-name-columns, --discard-names), release guides
   such as 1.10.1 person names moving to person_name, rollback, and why
   wrangler d1 migrations are not used for engine9 tables. Use when upgrading,
   migrating, or rolling out a core or schemas version, or when columns,
@@ -28,7 +28,7 @@ A deploy changes code, never the database. After a new `@engine9/core` or `@engi
 
 | Release | Guide |
 | --- | --- |
-| 1.10.1 | Person names move from `person` to `person_name`; columns dropped from `person` |
+| 1.10.1 | Person names are copied from `person` to `person_name`; the `person` columns stay until the opt-in `--drop-name-columns` |
 | 1.9.1 | Package rename `@engine9/interfaces` → `@engine9/schemas` (manual runbook, predates `e9core upgrade`) |
 
 Release guides live in `@engine9/core` under `docs/upgrade-<version>.md`. The process is `docs/upgrading.md`.
@@ -37,13 +37,16 @@ Release guides live in `@engine9/core` under `docs/upgrade-<version>.md`. The pr
 
 **Rule:** Always dry run first. Never pass `--discard-names` (or `discard_names`) unless the database owner chose it.
 
+**Rule:** Never pass `--drop-name-columns` (or `drop_name_columns`) as part of a routine upgrade. It removes columns site code may still read; run it only when the owner confirms nothing reads them.
+
 ## Concepts
 
 ### What one upgrade run does
 
 | Step | What happens |
 | --- | --- |
-| Account upgrades | Each upgrade in release order inspects the database, does nothing if the account is current, otherwise moves the data (for example copies names into `person_name`, verifies, then drops the old columns). Safe to re-run; a re-run finishes a partial run |
+| Account upgrades | Each upgrade in release order inspects the database, does nothing if the account is current, otherwise moves the data (for example copies names into `person_name` and verifies). Safe to re-run; a re-run finishes a partial run |
+| Opt-in upgrades | A removal (for example dropping `person.given_name`) runs only with its switch (`drop_name_columns`). Without it the run reports `opt_in` and changes nothing |
 | Refresh | Reinstalls every installed `@engine9/schemas/*` plugin from the deployed package. Adds tables and columns (never drops) and refreshes inbound snapshots. Stacks first, so a stack that gained a plugin installs it |
 | Ledger | One `setting` row per upgrade on the `@engine9/schemas/plugin` row, named `upgrade.<id>`, value `{ at, status, schemas }`. Written once, on the first real run that finds the account current |
 
@@ -53,7 +56,7 @@ Release guides live in `@engine9/core` under `docs/upgrade-<version>.md`. The pr
 | --- | --- |
 | `ok` | `false` when an upgrade is blocked or a plugin failed to reinstall. The CLI exits 1 |
 | `schemas_version` | The `@engine9/schemas` version the host is running |
-| `upgrades[].status` | `pending` (dry run, work to do), `applied`, `current`, or `blocked` |
+| `upgrades[].status` | `pending` (dry run, work to do), `applied`, `current`, `blocked`, or `opt_in` (a removal that runs only with the switch named in `opt_in`) |
 | `upgrades[].plan` | What the upgrade does or did, in order |
 | `upgrades[].recorded` | The ledger value, if this account already has one |
 | `refresh.plugins` | Paths reinstalled, or that would be reinstalled on a dry run |
@@ -108,9 +111,13 @@ wrangler deploy && npx e9core upgrade --url "$E9_SITE_URL"
 
 **Rule:** Upgrade every database the release touches: production, every wrangler environment, and local development.
 
-**Rule:** A `blocked` upgrade is a decision for the data owner. For 1.10.1 it means a PII-free account still has names on `person`. Either the account should not be PII-free (install the standard stack, then upgrade), or the names are discarded (`--discard-names`).
+**Rule:** A `blocked` upgrade needs a decision before it can run. For 1.10.1:
 
-**Rule:** After a destructive upgrade, roll back the database and the code together (`wrangler d1 time-travel restore` plus `wrangler rollback`). Rolling back only the Worker leaves old code on new tables.
+- `person_is_view: true`: `person` is a view over an older table. Replace the view with a `person` table first, then re-run.
+- `person_plugin_installed: false`: the `person` table exists without its `@engine9/schemas/person` plugin row. Install the account's stack, then re-run.
+- With `--drop-name-columns` on a PII-free account that still has names on `person`: ask the data owner. Either the account should not be PII-free (install the standard stack, then upgrade), or the names are discarded (`--discard-names`).
+
+**Rule:** After an opt-in drop, roll back the database and the code together (`wrangler d1 time-travel restore` plus `wrangler rollback`). Rolling back only the Worker leaves old code on new tables.
 
 **Rule:** Skills and reports name no specific clients. Use `<account_id>`, `<parent_account_id>`, and `<site>`.
 
@@ -135,6 +142,15 @@ npx e9core upgrade --url https://www.example.com --dry-run
       "plan": [
         "install @engine9/schemas/person_name",
         "copy names for 1834 people into person_name",
+        "refresh the @engine9/schemas/person inbound snapshot"
+      ]
+    },
+    {
+      "id": "person_name_columns",
+      "since": "1.10.1",
+      "opt_in": "drop_name_columns",
+      "status": "opt_in",
+      "plan": [
         "refresh the @engine9/schemas/person inbound snapshot",
         "drop person.given_name",
         "drop person.family_name"
@@ -157,7 +173,8 @@ npx e9core upgrade --url https://www.example.com --dry-run
 | `answered 404` from `--url` | Site still runs an older core | Deploy the new build first |
 | `status: blocked` | A choice that loses data | Ask the owner (see Rules) |
 | `refresh.failed` with `PLUGIN_NOT_FOUND` | A plugin row names a path the package no longer has | Report it; do not delete plugin rows yourself |
-| Site errors on `given_name` after 1.10.1 | Site code still reads `person.given_name` | Join `person_name` on `person_id` |
+| Site shows old names after 1.10.1 | Site code still reads `person.given_name`, which stopped changing at the upgrade | Join `person_name` on `person_id` |
+| Site errors on `given_name` after `--drop-name-columns` | Site code still reads `person.given_name` | Join `person_name` on `person_id` |
 | New columns missing after a deploy | Upgrade not run | Run `e9core upgrade` |
 
 ## Related documentation
