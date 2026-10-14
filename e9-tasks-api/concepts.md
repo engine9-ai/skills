@@ -40,7 +40,7 @@ Pick the endpoint that matches the work. Do not send `flow_id` to `/tasks/schedu
 
 | Endpoint | When to use | Required fields |
 |----------|-------------|-----------------|
-| **`POST /flow_runs/`** | Run a published workflow (`GET /flows`) | **`flow_id`** — the flow slug (e.g. `nightly-sync`) |
+| **`POST /flow_runs/`** | Run a published / built-in workflow, or a Frakture dataflow by id | **`flow_id`** — built-in slug (e.g. `identity-rebuild`) or Frakture dataflow id when remote |
 | **`POST /tasks/schedule`** | Invoke one **on-demand** plugin method | Plugin **`path`** + **`method`** (optional `options`) |
 
 See also: [POST /flow_runs/](./endpoints.md#post-flow_runs) ↔ [POST /tasks/schedule](./endpoints.md#post-tasksschedule).

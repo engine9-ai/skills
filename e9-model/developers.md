@@ -151,9 +151,9 @@ into an `IN (...)` list.
 | `{prefix}_person` | one row per `person_id` (bigint) |
 | `{prefix}_transaction` | one row per `transaction_id` (UUID) |
 | `{prefix}_person_stats` | people per `source_code_id` |
-| `{prefix}_transaction_stats` | tx / revenue / refunds / unique people per `source_code_id` |
+| `{prefix}_transaction_stats` | tx / revenue / refunds / unique people / incipient (initial gift) metrics per `source_code_id` |
 | `{prefix}_person_stats_by_date` | new people per `source_code_id` + first-seen day (`date_of_source` / credited `timeline.ts`, not `source_code_date`) |
-| `{prefix}_transaction_stats_by_date` | tx / revenue per `source_code_id` + `transaction.ts` day |
+| `{prefix}_transaction_stats_by_date` | tx / revenue / incipient metrics per `source_code_id` + `transaction.ts` day |
 
 No shared `person_model` schema plugin table and no `@engine9/schemas/model`.
 Join `source_code_dictionary` for the code string; join `transaction` on `id`
@@ -297,13 +297,13 @@ const { queried, tables, person_ids, emails } = await model.inspectPerson({
 });
 ```
 
-Account-wide (no identity filter) defaults timeline activity to the last 7 days
-(`start: '-7d'`) unless `start` / exclusive `end` are passed. Conductor’s
-Timeline and Models FilterBar presets Previous 7 days via `dateRange`.
+Requires `emails`, `person_ids`, `source_codes`, `segment_id`, or `search`.
+Optional `start` / exclusive `end` scope `timeline.ts`. Unfiltered calls are
+rejected.
 
 `tables[]` entries have `status` `ok` / `skipped` / `error`. Current tables:
-`timeline`, `models`. Emails are the only identity bridge; `person.id` is never
-joined to `person_id_int`.
+`timeline_counts`, `timeline`, `models`. Emails are the only identity bridge;
+`person.id` is never joined to `person_id_int`.
 
 The payload includes top-level **`sql`**: `[{ id, sql, error, table? }]` for
 every warehouse statement the request ran. Same field on `compareSourceCodes`.

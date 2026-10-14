@@ -214,9 +214,22 @@ Supported `sort`: `CREATED_DESC` (default), `CREATED_ASC`.
 
 **Scope:** `tasks:schedule`
 
-Schedule a **predefined** (published) flow. **`flow_id` is required** — the flow slug from `GET /flows`, not a plugin path. Resolves the account flows directory JSON5 file and calls `scheduleTasks`.
+Schedule a **predefined** flow via `flow_id`, `flow_path`, or `definition` (exactly one).
+
+- **`flow_id`** — built-in server slug from `GET /flows` (e.g. `identity-rebuild`), **or** (with `remote` default true and no local file) a **Frakture dataflow id**. The remote case posts `dataflow_id` to Frakture `POST /tasks/schedule` → `createJoblist` (console Run; no definition pull).
+- **`flow_path` / `definition`** — JSON5 file or inline flow object expanded to tasks.
 
 To invoke a single plugin method instead, use [`POST /tasks/schedule`](#post-tasksschedule) with `path` + `method` (no `flow_id`). Echo smoke test is on-demand (`@engine9/plugins/e9workers:EchoWorker` + `echo`), not a flow.
+
+**Frakture dataflow by id (console Run):**
+
+```bash
+curl $CURL_TLS -sS -X POST \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{"flow_id": "<dataflow_id>", "pause_first": false}' \
+  "$BASE_URL/flow_runs/"
+```
 
 **Minimal body:**
 
@@ -285,16 +298,18 @@ curl $CURL_TLS -sS -X POST \
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `flow_id` | **Yes** | Flow slug (e.g. `nightly-sync`), not the UUID |
+| `flow_id` | One of three | Built-in slug, or Frakture dataflow id when remote and no local file |
+| `flow_path` / `definition` | One of three | JSON5 path or inline flow (mutually exclusive with `flow_id`) |
 | `name` / `label` | No | Display label for the run |
-| `options` | No | Merged into **every** task's `options` (e.g. shared `start` / `end`) |
+| `pause_first` | No | Pause first task after enqueue (default `true`). For remote dataflow ids, passed through as Frakture `pause_first_job` |
+| `options` | No | Merged into **every** task's `options` (e.g. shared `start` / `end`); not used for id-only dataflow schedule |
 | `tasks` | No | Per-step overrides `{ task_key, options }` or a full replacement task list `{ path, method, options }` |
 | `tags`, `tracking_code`, `start_after_timestamp` | No | Schedule metadata (defer entire run — not the same as worker `start`/`end` options). **`tags`** maps to Frakture `tracking_code` (one tag). Not flow-definition tags |
 | `remote` | No | Default `true` |
 
-**Response:** `scheduleTasks` result (`flow_run_id`, `task_run_ids`, …).
+**Response:** schedule result (`flow_run_id`, `task_run_ids`, …; remote dataflow may include `dataflow_id`).
 
-**422** — missing `flow_id`. **404** — unknown flow slug.
+**422** — missing locator or more than one of `flow_id` / `flow_path` / `definition`.
 
 See also: [`POST /tasks/schedule`](#post-tasksschedule) for a specific plugin method.
 

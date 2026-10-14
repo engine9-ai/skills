@@ -177,14 +177,15 @@ Account discovery when using MCP should only be through that MCP, not through an
 | Install a package on an account | MCP `plugin` `command: "install"` — [e9-plugin](../e9-plugin/SKILL.md) |
 | Plugin settings (types, descriptions, current values), grouped by plugin | MCP `plugin` `command: "settings"` (`PluginWorker.listSettings`) |
 | Schema / tables / indexes / raw SQL | MCP `sql` (`command`: query, describe, indexes, tables, info, histo, compile_eql) |
-| Schedule or check async work | MCP `task`: on-demand = `path`+`method` (`@engine9/plugins/e9workers:EchoWorker` needs no `account` lookup); predefined flow = `flow_id` slug |
+| Schedule or check async work | MCP `task`: on-demand = `path`+`method` (`@engine9/plugins/e9workers:EchoWorker` needs no `account` lookup); predefined flow = `flow_id` (built-in slug, or Frakture dataflow id with remote default) |
 | Analyze / summarize table contents (min, max, distinct, samples) | MCP `analyze` (uses `tables` then `analyze`; optional `target_buckets`) |
-| Account / person current timeline + identity / model health | MCP `timelinePerson` (`command: inspect`) |
+| Person / source-filtered current timeline + models | MCP `timelinePerson` (`command: inspect`) |
 | Account / person **legacy** `timeline_v3*` inspect | MCP `timelinePersonLegacy` (separate tool; not `inspect` + `legacy`) |
 | Compare current `model_*_stats` by source code | MCP `timelinePerson` (`command: compareSourceCodes`). Legacy pivot: [e9-model/legacy.md](../e9-model/legacy.md), only when the user explicitly asked for legacy |
 | Date histogram on a datetime column (index optional) | MCP `sql` with `command: "histo"` |
 | List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
 | Read one flow definition | MCP `task` `action: "getFlow"` — built-in slug or JSON5 file. `remote: true` loads a Frakture dataflow via `GET /flows/:id` |
+| Run an existing Frakture dataflow (console Run) | MCP `task` `action: "schedule"` with `flow_id` set to the dataflow id (remote default). No `getFlow` first |
 
 If a path, method, or option is not present in MCP responses, report that to the user — do not guess from local code.
 
@@ -208,7 +209,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Search people in or out of a current model by source code | `search` with a `searchOptions` clause — [e9-model — Person search](../e9-model/SKILL.md#person-search) |
 | Search people in a legacy model and out of the current model | [e9-model/legacy.md](../e9-model/legacy.md) — only when the user explicitly asked for legacy |
 | List available person-search form options for an account | `searchOptions` |
-| Account / person current timeline + identity / model health | `timelinePerson` (`command: inspect`) |
+| Person / source-filtered current timeline + models | `timelinePerson` (`command: inspect`) |
 | Account / person **legacy** `timeline_v3*` inspect | `timelinePersonLegacy` |
 | Compare current `model_*_stats` by source code | `timelinePerson` with `command: "compareSourceCodes"`. Legacy pivot: [e9-model/legacy.md](../e9-model/legacy.md), only when the user explicitly asked for legacy |
 | List segments, load segment detail, or schedule segment builds | `segment` |
@@ -506,23 +507,19 @@ A public folder makes every report in it available without a per-report sign-in.
 
 ### `timelinePerson`
 
-Account- or person-level **current-identity** timeline + model inspect (`ModelWorker.inspectPerson`) and source-code model compare (`compareSourceCodes`). SQL lives on the server; prefer this over ad-hoc SQL. The conductor Timeline artifact is a shell over `command: inspect`; `/model` is a shell over `command: compareSourceCodes`. There is no separate `auditPeople` tool — inspect includes those **current** aggregations.
+Person- or source-filtered **current-identity** timeline + model inspect (`ModelWorker.inspectPerson`) and source-code model compare (`compareSourceCodes`). SQL lives on the server; prefer this over ad-hoc SQL. The conductor Timeline artifact is a shell over `command: inspect`; `/model` is a shell over `command: compareSourceCodes`.
 
 Rule: `inspect` never loads `timeline_v3*`. Call **`timelinePersonLegacy`** for legacy tables. Current vs legacy contract: [e9-timeline — MCP: current vs legacy](../e9-timeline/SKILL.md#mcp-current-timeline-vs-legacy-timeline).
 
+Rule: `inspect` requires `emails`, `person_ids`, `source_codes`, or `segment_id`. Unfiltered account-wide inspect is rejected.
+
 - Required: `account_id`
-- **command: inspect** (default) — omit `emails` / `person_ids` / `source_codes` for an account-wide load (entry-type min/max/count, identity table counts, transaction min/max, `model_*_person` / `model_*_transaction` counts — not `*_stats`). Person-scoped (`person_ids` / `emails`) returns timeline detail + `model_*_person` only and **skips** those account audit COUNTs. `person_ids` is a number, string, or array of either (warehouse `person.id` is an integer — do not stringify). Optional `source_codes` (comma-delimited; `%` is LIKE) filters those queries. Missing tables are skipped. Do not join `person.id` to `person_id_int`.
+- **command: inspect** (default) — requires `emails`, `person_ids`, `source_codes`, or `segment_id`. Returns entry-type min/max/count plus capped timeline detail and `model_*_person` when people resolve. `person_ids` is a number, string, or array of either (warehouse `person.id` is an integer — do not stringify). `source_codes` (comma-delimited; `%` is LIKE) scopes timeline queries. Missing tables are skipped. Do not join `person.id` to `person_id_int`.
 - **command: compareSourceCodes** — all current `model_*_stats` by source code (`person_count`, `revenue`, `transactions`). Omit `source_codes` to union each model's top 10 by people and by revenue. Optional `models` subset. Returns `sql` for top-N selection and per-model stats. Pivot stems and `legacy: true` are in [e9-model/legacy.md](../e9-model/legacy.md); use them only when the user explicitly asked for legacy.
 - **command: compareSourceCodesLegacy** — legacy pivot vs current. [e9-model/legacy.md](../e9-model/legacy.md). Only when the user explicitly asked for legacy.
 - **command: summarizeSourceCodesLegacy** — pivot rows only. [e9-model/legacy.md](../e9-model/legacy.md). Only when the user explicitly asked for legacy.
 
 All commands include top-level **`sql`**: `[{ id, sql, error, table? }]` — the statements executed for this request. Use that log when debugging inspect/compare results.
-
-Example — account-wide inspect (current aggregations):
-
-```json
-{ "account_id": "test" }
-```
 
 Example — person inspect (current only):
 
@@ -534,6 +531,12 @@ Example — person inspect by numeric `person.id`:
 
 ```json
 { "account_id": "test", "person_ids": 1517 }
+```
+
+Example — source-code scoped timeline:
+
+```json
+{ "account_id": "test", "source_codes": "EM_%" }
 ```
 
 Example — auto top source codes across current models:
@@ -857,6 +860,21 @@ Example create:
 MCP `task` (default `action: "schedule"`) and REST `POST /tasks/schedule` use the same **on-demand** names: **`path` + `method`** (no `flow_id`).
 
 For **multi-step flows** (identity rebuild, etc.), prefer `flow_id` / `flow_path` — see [e9-tasks-api/deploy-flow.md](../e9-tasks-api/deploy-flow.md). Do not hand-expand flow steps into on-demand schedules.
+
+### Existing Frakture dataflows (console Run)
+
+To launch a dataflow already in the Frakture console (e.g. Load Messages), pass its Mongo id as `flow_id`. With `remote` default true, engine9 does **not** pull the definition — it posts `dataflow_id` to Frakture `POST /tasks/schedule` → `DataFlowBot.createJoblist` (same as console Run / GraphQL `dataflow_run`). First task is paused by default (`pause_first`); resume to start.
+
+```json
+{
+  "action": "schedule",
+  "account_id": "<account_id>",
+  "flow_id": "<dataflow_id>",
+  "pause_first": false
+}
+```
+
+Built-in slugs such as `identity-rebuild` still resolve locally first. Use `getFlow` with `remote: true` only when you need to inspect the definition, not to schedule.
 
 ### Built-in engine9 Workers
 

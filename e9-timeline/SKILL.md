@@ -80,26 +80,26 @@ These are two tools. The UI should call them independently so legacy can be drop
 
 | Need | MCP tool | Worker |
 |------|----------|--------|
-| Current `timeline` / `model_*` / identity counts | `timelinePerson` `command: inspect` | `ModelWorker.inspectPerson` |
+| Current `timeline` / `model_*` for a person or source filter | `timelinePerson` `command: inspect` | `ModelWorker.inspectPerson` |
 | Legacy `timeline_v3*` / `person_model_source_code` | `timelinePersonLegacy` | `ModelWorker.inspectPersonLegacy` |
 
 Rule: `timelinePerson` `inspect` never reads `timeline_v3*`. Do not pass `legacy: true` on inspect expecting those tables. Pivot stats and legacy model search are [e9-model/legacy.md](../e9-model/legacy.md), and only when the user explicitly asked for legacy.
 
 Rule: `person.id` is not `person_id_int`. Legacy person detail hashes **email** onto `person_metadata`. Current `person_ids` on `timelinePersonLegacy` are only an email lookup on `person_email`.
 
+Rule: `inspect` requires `emails`, `person_ids`, `source_codes`, or `segment_id`. Unfiltered account-wide inspect is rejected (full-table identity COUNTs were too expensive).
+
 **Current inspect** (default person Timeline / Models view):
 
 ```json
-{ "account_id": "<account_id>" }
-{ "account_id": "<account_id>", "start": "-7d" }
 { "account_id": "<account_id>", "emails": "user@example.com" }
 { "account_id": "<account_id>", "person_ids": 1517 }
+{ "account_id": "<account_id>", "source_codes": "EM_%" }
 { "account_id": "<account_id>", "person_ids": 1517, "source_codes": "EM_%" }
+{ "account_id": "<account_id>", "segment_id": "<segment_uuid>" }
 ```
 
-Rule: Account-wide inspect (no email / person_ids / source_codes) defaults `start` to `-7d` on `timeline.ts` when `start` and `end` are omitted, so large accounts do not full-scan. Pass explicit `start` / exclusive `end` (YYYY-MM-DD or relativeDate) to override. The Conductor Timeline and Models artifact presets FilterBar `dateRange` to Previous 7 days.
-
-Returns `section: "current"` tables: `timeline_counts`, `timeline`, `models`. Account-wide / source_codes-only also appends identity / transaction / `model_*_person|transaction` aggregations. Person-scoped inspect skips those account audit COUNTs. Timeline type is `entry_type` / `entry_type_id`. `effective_date` is `timeline.ts`.
+Optional `start` / exclusive `end` (YYYY-MM-DD or relativeDate) scope `timeline.ts`. Returns `section: "current"` tables: `timeline_counts`, `timeline`, `models`. Timeline type is `entry_type` / `entry_type_id`. `effective_date` is `timeline.ts`.
 
 **Legacy inspect** (optional second call; unregister the tool to slice it away):
 

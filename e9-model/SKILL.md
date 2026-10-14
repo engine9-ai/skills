@@ -216,9 +216,9 @@ One `run` of one model produces six tables, named from its prefix:
 | `{prefix}_person` | person | chosen `source_code_id`, `date_of_source`, `reason` |
 | `{prefix}_transaction` | transaction | the credit for that transaction |
 | `{prefix}_person_stats` | source code | `person_count` — people acquired (lifetime) |
-| `{prefix}_transaction_stats` | source code | `transactions`, `revenue`, `refund_count`, `refund_amount`, `transaction_unique_person` (lifetime) |
+| `{prefix}_transaction_stats` | source code | `transactions`, `revenue`, `refund_count`, `refund_amount`, `transaction_unique_person`, plus `incipient_*` initial-gift metrics (lifetime) |
 | `{prefix}_person_stats_by_date` | source code + first-seen day | `person_count` — new people that day. `date` is `CAST(date_of_source AS DATE)` = credited `timeline.ts` (when the person was first seen for this credit), **not** dictionary `source_code_date` |
-| `{prefix}_transaction_stats_by_date` | source code + gift day | same metrics as lifetime transaction stats, `date` = `CAST(transaction.ts AS DATE)` |
+| `{prefix}_transaction_stats_by_date` | source code + gift day | same metrics as lifetime transaction stats (including `incipient_*`), `date` = `CAST(transaction.ts AS DATE)` |
 
 So `model_first_touch_person`, `model_first_touch_transaction`,
 `model_first_touch_person_stats`, `model_first_touch_transaction_stats`,

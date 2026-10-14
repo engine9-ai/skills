@@ -83,8 +83,15 @@ Lifetime giving of people (or transactions) credited to each source code. Primar
 | `refund_count` | int | rows with non-zero `refund_amount` |
 | `refund_amount` | currency | `SUM(transaction.refund_amount)` |
 | `transaction_unique_person` | int | `COUNT(DISTINCT person_id)` among credited transactions |
+| `incipient_transactions` | int | initial gifts (one-time + first recurring) where model credit equals `transaction.final_source_code_id`; excludes `recurring_number > 1` |
+| `incipient_transaction_revenue` | currency | `SUM(amount)` for those initial gifts |
+| `incipient_transaction_refund_count` | int | schema placeholder; `replaceModelStats` leaves at 0 |
+| `incipient_transaction_refund_amount` | currency | `SUM(refund_amount)` for those initial gifts |
+| `incipient_transaction_unique_person` | int | distinct people with at least one such gift |
 | `created_at` | datetime | stats rebuild time |
 | `modified_at` | datetime | stats rebuild time |
+
+**Incipient gifts** are initial gifts credited to a source code: one-time gifts plus the first installment of a recurring series (`recurring_number` not greater than 1), where the model’s credited `source_code_id` equals `transaction.final_source_code_id` (native code after overrides). Later recurring charges are excluded. `incipient_transaction_refund_count` exists for parity with the legacy pivot but is not computed (stays 0).
 
 Closest conceptual replacement for legacy `source_code_summary.origin_revenue` (and related origin transaction rollups). Again: per-model, current identity, optional when the tables exist.
 
@@ -118,6 +125,7 @@ Gifts credited to each source code, by the day the gift happened. Primary key `(
 | `refund_count` | int | rows with non-zero `refund_amount` |
 | `refund_amount` | currency | |
 | `transaction_unique_person` | int | distinct people who gave that day |
+| `incipient_*` | same as lifetime | same initial-gift metrics, scoped to that gift day |
 | `created_at` / `modified_at` | datetime | stats rebuild time |
 
 `compareSourceCodes` / `summarizeSourceCodes` stay on the lifetime `*_stats` tables. These by-date tables are for warehouse SQL and `source_code_summary_by_date` joins.
@@ -251,7 +259,7 @@ Rule: `person_id_int` is not `person.id`. Do not join them. The type column on
 
 ## inspectPerson (conductor tables)
 
-`ModelWorker.inspectPerson` (`server/workers/model/inspect.js`) is **current-identity only** (`timeline`, `model_*_person`). MCP tool **`timelinePerson`**. Timeline rows add **`effective_date`** = `timeline.ts` (resolved at load time — see [SKILL.md](SKILL.md#effective-date-of-an-entry)). `inspectPersonLegacy` / MCP **`timelinePersonLegacy`** is a separate call documented in [legacy.md](legacy.md); use it only when the user explicitly asked for legacy. Missing tables are `skipped`. Emails bridge identity; `person.id` is never joined to `person_id_int`. Returns top-level **`sql`**: `[{ id, sql, error, table? }]` for every statement this request ran.
+`ModelWorker.inspectPerson` (`server/workers/model/inspect.js`) is **current-identity only** (`timeline`, `model_*_person`). MCP tool **`timelinePerson`**. Requires `emails`, `person_ids`, `source_codes`, `segment_id`, or `search`. Timeline rows add **`effective_date`** = `timeline.ts` (resolved at load time — see [SKILL.md](SKILL.md#effective-date-of-an-entry)). `inspectPersonLegacy` / MCP **`timelinePersonLegacy`** is a separate call documented in [legacy.md](legacy.md); use it only when the user explicitly asked for legacy. Missing tables are `skipped`. Emails bridge identity; `person.id` is never joined to `person_id_int`. Returns top-level **`sql`**: `[{ id, sql, error, table? }]` for every statement this request ran.
 
 ## compareSourceCodes (all current models)
 

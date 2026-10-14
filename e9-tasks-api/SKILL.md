@@ -22,7 +22,8 @@ The engine9 Task API schedules predefined flows and on-demand worker methods ove
 | Authentication | `Authorization: Bearer e9key_…` plus `X-ENGINE9-ACCOUNT-ID` |
 | Discover flows | `GET /flows` with `tasks:read` |
 | One flow definition | `GET /flows/:id` (local file). `?remote=true` for a Frakture dataflow. MCP `task` `action: "getFlow"` |
-| Schedule a predefined flow | `POST /flow_runs/` with `flow_id` |
+| Schedule a predefined flow | `POST /flow_runs/` with `flow_id` (built-in slug), `flow_path`, or `definition` |
+| Run an existing Frakture dataflow | `POST /flow_runs/` with `flow_id` = dataflow Mongo id (`remote` default); or Frakture `POST /tasks/schedule` with `dataflow_id` |
 | Schedule an on-demand task | `POST /tasks/schedule` with `path` + `method` |
 | Poll task runs | `POST /task_runs/filter` |
 | Count matching flow runs | `POST /flow_runs/count` |
