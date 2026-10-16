@@ -162,6 +162,22 @@ MCP `task` `action: "getFlow"` reads a local JSON5 file or built-in slug. Pass `
 
 **404** — dataflow missing or outside the caller's account.
 
+### Enable or disable a remote dataflow
+
+`PUT /flows/:id?remote=true` writes the fields you send. To flip the schedule flag, send only `labels.disabled`. That becomes `dataflow.disabled` on Frakture `PUT /flows/:id` (the same route as `PATCH /flows/:id`). Jobs, name, and cron stay as they are.
+
+```bash
+curl $CURL_TLS -sS -X PUT \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{ "remote": true, "labels": { "disabled": true } }' \
+  "$BASE_URL/flows/<dataflow_id>"
+```
+
+`disabled: false` enables it again. Add `"dry_run": true` to get the would-be diff without writing. The response is the saved flow; `labels.disabled` is the string `"true"` or `"false"`.
+
+MCP `task` `action: "setDisabled"` is that write: `flow_id` plus `disabled`, admin role. The Frakture cron scheduler skips a dataflow with `disabled: true`. A run already in progress keeps going. Console Run, triggers, spawn, listeners, and email starts ignore the flag.
+
 ### `POST /flows/filter`
 
 Search and paginate flows.
