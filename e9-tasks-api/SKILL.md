@@ -23,6 +23,7 @@ The engine9 Task API schedules predefined flows and on-demand worker methods ove
 | Discover flows | `GET /flows` with `tasks:read` |
 | One flow definition | `GET /flows/:id` (local file). `?remote=true` for a Frakture dataflow. MCP `task` `action: "getFlow"` |
 | Enable or disable a remote dataflow | `PUT /flows/:id?remote=true` with `{ "labels": { "disabled": true } }` (`tasks:schedule`). MCP `task` `action: "setDisabled"` |
+| Set a remote dataflow cron | `PUT /flows/:id?remote=true` with `{ "schedule": { "cron": "0 6 * * *" } }`. Empty `cron` clears it. MCP `task` `action: "setSchedule"` |
 | Schedule a predefined flow | `POST /flow_runs/` with `flow_id` (built-in slug), `flow_path`, or `definition` |
 | Run an existing Frakture dataflow | `POST /flow_runs/` with `flow_id` = dataflow Mongo id (`remote` default); or Frakture `POST /tasks/schedule` with `dataflow_id` |
 | Schedule an on-demand task | `POST /tasks/schedule` with `path` + `method` |
@@ -71,7 +72,7 @@ Full curl: [echo-walkthrough.md](./echo-walkthrough.md).
 | Method | Path | Scope |
 |--------|------|--------|
 | GET | `/flows`, `/flows/:id` | `tasks:read` |
-| PUT | `/flows/:id?remote=true` | `tasks:schedule` (partial flow write; `{ "labels": { "disabled": true\|false } }` enables or disables a Frakture dataflow) |
+| PUT | `/flows/:id?remote=true` | `tasks:schedule` (partial flow write; `labels.disabled` enables or disables; `schedule.cron` sets or clears the cron) |
 | POST | `/flows/filter` | `tasks:read` |
 | POST | `/tasks/schedule` | `tasks:schedule` |
 | POST | `/tasks/describe` | `tasks:read` |

@@ -20,6 +20,7 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 | Run an on-demand worker method | `task` with `path` + `method` |
 | Run a predefined flow | `task` with `flow_id` |
 | Enable or disable a remote dataflow | `task` `action: "setDisabled"` with `flow_id` and `disabled` (admin) |
+| Set a remote dataflow cron | `task` `action: "setSchedule"` with `flow_id` and `cron` (admin). Empty `cron` clears it |
 | Diagnose generated queries | The response's top-level `sql` field |
 | Debug an input (table, store files, download, record count and sample) | `input` — [Input](#input). Caller supplies `input_type`. Third parties: `files` then `download` by `input_id` (no AWS) |
 | Legacy report folders | Do not call unless the user explicitly asked. Never code reports against them. [Legacy report folders](../e9-reports/legacy-folders.md) |
@@ -28,7 +29,7 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 
 **Rule:** If an account or parent cannot be found, stop. Do not resolve it by any other mechanism. A miss is MCP `account` search `count: 0`, an empty `user.accounts`, or plugins reporting the account unknown or unauthorized. Tell the user MCP did not find it, and end the turn. Do not call `user` or `account` again with a different filter, a guessed id, or `include_disabled`. Do not read `accounts.d`, `accounts.compiled.json5`, `account-config.json`, `frakture-account-config.json`, `.e9_parameters`, or any other file. Do not run the `e9` CLI, a shell search, or a worker to discover the id. Another skill that says `-a` comes from `accounts.d` does not apply after this miss.
 
-**Roles:** Operators are read-only in SQL (SELECT/WITH) and schedule published flows (`flow_id` / `flow_path`); on-demand `path`+`method`, API keys, plugin install/settings, enabling or disabling a remote dataflow (`task` `setDisabled`), and legacy report-folder writes (`ensureChild`, `setVisibility`) need the admin role (`user.accounts[id].level`).
+**Roles:** Operators are read-only in SQL (SELECT/WITH) and schedule published flows (`flow_id` / `flow_path`); on-demand `path`+`method`, API keys, plugin install/settings, enabling or disabling a remote dataflow (`task` `setDisabled`), setting its cron (`task` `setSchedule`), and legacy report-folder writes (`ensureChild`, `setVisibility`) need the admin role (`user.accounts[id].level`).
 
 ## Step 0 — Log in (always first)
 
@@ -187,6 +188,7 @@ Account discovery when using MCP should only be through that MCP, not through an
 | List flow definitions (REST) | Task API `GET /flows` — see [e9-tasks-api](../e9-tasks-api/SKILL.md) |
 | Read one flow definition | MCP `task` `action: "getFlow"` — built-in slug or JSON5 file. `remote: true` loads a Frakture dataflow via `GET /flows/:id` |
 | Enable or disable a remote dataflow | MCP `task` `action: "setDisabled"` with `flow_id` and `disabled` (`true` disables, `false` enables). Admin. Frakture `PUT /flows/:id` `{ labels: { disabled } }` |
+| Set a remote dataflow cron | MCP `task` `action: "setSchedule"` with `flow_id` and `cron` (getFlow `schedule.cron`). Admin. Frakture `PUT /flows/:id` `{ schedule: { cron } }` |
 | Run an existing Frakture dataflow (console Run) | MCP `task` `action: "schedule"` with `flow_id` set to the dataflow id (remote default). No `getFlow` first |
 
 If a path, method, or option is not present in MCP responses, report that to the user — do not guess from local code.
@@ -235,6 +237,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Archive or retry flow runs / job lists | `task` with `action: "archive"` or bulk `"retry"` (`flow_run_ids`). One call for all ids. After a parent/all list, pass the same `parent_account_id` — [bulk archive](#bulk-archive--retry-of-flow-runs) |
 | Pause / resume / retry a task run, edit options, fetch log/output/checkpoints | `task` with `action: "pause"` / `"resume"` / `"retry"` (`task_run_id`) / `"updateOptions"` / `"log"` / `"output"` / `"get"` (`checkpoints` only on `get`). To walk back checkpoints: `action: "resetCheckpoints"` with `start_index` (0 / omitted clears all; N keeps the first N — cannot yank from the middle) |
 | Enable or disable a remote Frakture dataflow | `task` `action: "setDisabled"` with `flow_id` and `disabled` (admin). Cron schedule only |
+| Set or clear a remote dataflow cron | `task` `action: "setSchedule"` with `flow_id` and `cron` (admin). Empty string clears |
 | Method option schema for a plugin path (Options form) | `task` with `action: "describe"` and `path` (same naming as schedule; `method` optional) |
 
 `task` is the **catch-all** for behaviors that do not have a native MCP call. Do not reach for `task` when a native tool already covers the request with equal or better fidelity.
@@ -996,6 +999,12 @@ Rule: `setDisabled` writes `dataflow.disabled`. The Frakture cron scheduler (`Da
 { "action": "setDisabled", "account_id": "<account_id>", "flow_id": "<dataflow_id>", "disabled": true }
 ```
 
+MCP `task` with `action: "setSchedule"` sets that dataflow's cron. Pass `flow_id` and `cron` (the `schedule.cron` string from `getFlow`, for example `0 6 * * *`). An empty string clears the cron. It `PUT`s `{ "schedule": { "cron": "<cron>" } }` to the same Frakture `PUT /flows/:id`. The write clears `next_run` so the scheduler recomputes the next time. A non-empty cron sets `status` to `scheduled`. Jobs, name, and `disabled` stay as they are. Requires the admin role. `dry_run: true` returns the would-be diff and does not write.
+
+```json
+{ "action": "setSchedule", "account_id": "<account_id>", "flow_id": "<dataflow_id>", "cron": "0 6 * * *" }
+```
+
 MCP `task` with `action: "get"` calls `GET /task_runs/:id` (`TaskWorker.getRemoteTaskRun`). This is the single-task detail read: `resolved_options`, `output`, and **`checkpoints`** (`[{ modified, options }]` from worker `modify_history`). A task can have **multiple** checkpoints, oldest first. Checkpoints can exceed 1MB — request them only for one task. Workers write them; `PATCH` does not create a checkpoint. **Retry does not clear them.** `allowed_actions` includes `reset_checkpoints` when the job has checkpoints.
 
 MCP `task` with `action: "resetCheckpoints"` (alias `"reset_checkpoints"`) calls `POST /task_runs/:id/reset_checkpoints`. Reset only walks **back from the most recent**: `start_index` N keeps `checkpoints[0 .. N)` and drops later ones. Omitted / `0` clears all (RESET ALL). You cannot yank a checkpoint out of the middle while keeping later ones. Same as GraphQL `job_reset_checkpoint`. Not status-gated.
@@ -1012,6 +1021,7 @@ MCP `task` per-task-run controls (Firebase / MCP session — **do not** send `e9
 | `describe` | `POST /tasks/describe` | Method option metadata for `path` (marketplace first, then Frakture). `method` optional. Does not enqueue |
 | `getFlow` | `GET /flows/:id` | Flow definition. Built-in slug (`flow_id`) or JSON5 file (`flow_path`). `remote: true` reads a Frakture dataflow id |
 | `setDisabled` | `PUT /flows/:id` `{ labels: { disabled } }` | Enable (`disabled: false`) or disable (`disabled: true`) a remote dataflow. Admin. Cron schedule only. `dry_run: true` previews the diff |
+| `setSchedule` | `PUT /flows/:id` `{ schedule: { cron } }` | Set the remote dataflow cron (`cron` from getFlow `schedule.cron`). Empty `cron` clears it and `next_run`. Admin. `dry_run: true` previews the diff |
 | `get` | `GET /task_runs/:id` | Single-task details including **`checkpoints`**. Do not use `listTasks` for this |
 | `resetCheckpoints` | `POST /task_runs/:id/reset_checkpoints` | Walk back checkpoints. `{ "start_index": 0 }` (default) is RESET ALL; `N` keeps the first N (oldest) and drops later ones. Cannot yank from the middle. Retry does not clear. Alias: `reset_checkpoints` |
 | `log` / `output` | `GET /task_runs/:id/log` / `/output` | `{ log_link, log, truncated }` and optional signed **`log_url`** from remote-legacy; prefer **`log_link`** for integrations |

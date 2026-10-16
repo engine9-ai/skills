@@ -164,7 +164,7 @@ MCP `task` `action: "getFlow"` reads a local JSON5 file or built-in slug. Pass `
 
 ### Enable or disable a remote dataflow
 
-`PUT /flows/:id?remote=true` writes the fields you send. To flip the schedule flag, send only `labels.disabled`. That becomes `dataflow.disabled` on Frakture `PUT /flows/:id` (the same route as `PATCH /flows/:id`). Jobs, name, and cron stay as they are.
+`PUT /flows/:id?remote=true` writes the fields you send. To enable or disable the dataflow, send only `labels.disabled`. That becomes `dataflow.disabled` on Frakture `PUT /flows/:id` (the same route as `PATCH /flows/:id`). Jobs, name, and cron stay as they are.
 
 ```bash
 curl $CURL_TLS -sS -X PUT \
@@ -177,6 +177,20 @@ curl $CURL_TLS -sS -X PUT \
 `disabled: false` enables it again. Add `"dry_run": true` to get the would-be diff without writing. The response is the saved flow; `labels.disabled` is the string `"true"` or `"false"`.
 
 MCP `task` `action: "setDisabled"` is that write: `flow_id` plus `disabled`, admin role. The Frakture cron scheduler skips a dataflow with `disabled: true`. A run already in progress keeps going. Console Run, triggers, spawn, listeners, and email starts ignore the flag.
+
+### Set a remote dataflow cron
+
+The same `PUT` accepts `schedule.cron` alone. That becomes `dataflow.schedule`, clears `next_run`, and sets `status` to `scheduled` when the cron is non-empty. Jobs, name, and `disabled` stay as they are. An empty `cron` clears the schedule.
+
+```bash
+curl $CURL_TLS -sS -X PUT \
+  -H "$AUTH" -H "$ACCOUNT" \
+  -H "Content-Type: application/json" \
+  -d '{ "remote": true, "schedule": { "cron": "0 6 * * *" } }' \
+  "$BASE_URL/flows/<dataflow_id>"
+```
+
+The response includes `schedule.cron` when a cron is stored. MCP `task` `action: "setSchedule"` is that write: `flow_id` plus `cron` (the string from `getFlow` `schedule.cron`). Empty `cron` clears it. Admin role. `dry_run: true` returns the diff and does not write.
 
 ### `POST /flows/filter`
 
