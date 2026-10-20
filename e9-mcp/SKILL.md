@@ -347,13 +347,13 @@ Conductor artifact `billing` (`/billing`) renders this for direct children of th
 
 **Fast path:** [e9-plugin](../e9-plugin/SKILL.md) — install is native MCP `plugin`, not `task`.
 
-Install plugins and catalog **declared settings** for an account via `PluginWorker`. Settings are warehouse configuration on a plugin row (`setting` table). They are **not** marketplace authorization (`auth_fields` on `account` plugin metadata).
+Install plugins and catalog **declared settings** for an account via `PluginWorker`. Settings are warehouse configuration on a plugin row (`setting` table), declared in the plugin catalog entry and/or the package. They are **not** authorization (`auth_fields` on `account` plugin metadata).
 
 - Required: `account_id`, `command`
 - **listAvailable** — installable package paths on this server (server-wide catalog; any accessible `account_id` works)
 - **install** — install `path` (full package path or shorthand from listAvailable). One call per account. Unique packages reuse the existing row
-- **settings** — catalog grouped by plugin path: `path`, `name`, `plugin.instances`, JSON Schema `form`, `settings[]` (`type`, `description`, `values`, `default`, current `value`). Optional `path` / `plugin_id`. Hidden settings omitted unless `include_hidden: true`. Compile failures go in `errors` (call still succeeds)
-- **setSetting** — update one warehouse value. Required: `plugin_id`, `name`. Validates `values` / type when the package declares that name
+- **settings** — catalog grouped by plugin path: `path`, `name`, `plugin.instances`, JSON Schema `form`, `settings[]` (`type`, `description`, `values`, `default`, current `value`). Optional `path` / `plugin_id`. Hidden settings omitted unless `include_hidden: true`. Submodule settings carry `section: "<Submodule>"`. A plugin goes in `errors` only when its package fails to load and the plugin catalog has no entry for its path (call still succeeds)
+- **setSetting** — update one warehouse value. Required: `plugin_id`, `name`. Validates `values` / type when the catalog entry or package declares that name
 
 Example — install:
 

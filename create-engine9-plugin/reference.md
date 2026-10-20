@@ -75,13 +75,13 @@ The middle segment must be literally `transforms` or resolution fails.
 
 Example from `person_email/segments.js`: `@engine9/schemas/person_email:segment_definition_clause:emails`.
 
-Handlers live on `segmentDefinitionClauses`. Each has optional `title`/`description`, a JSON Schema `form` (`{ title, type: 'object', properties, required? }`), and `optionsToEQL`. Discovery: MCP `segmentDefinitionClauses` / `GET /data/segment-definition/clauses`.
+Handlers live on `segmentDefinitionClauses`. Each has optional `title`/`description`, a JSON Schema `form` (`{ title, type: 'object', properties, required? }`), and `optionsToEQL`. Discovery: MCP `segmentDefinitionClauses` / `GET /data/segment-definition/clauses`. A form property may set `resolveOptionsUsing` (`segment` or `plugin`); its choices come from `segmentDefinitionClauses` `command: "options"` / `GET /data/segment-definition/clauses/options`.
 
 ## Settings (warehouse configuration)
 
-Declared on the package (`export const settings` or sibling `settings.js`), stored per installed plugin row in `setting`. Distinct from marketplace `auth_fields` (authorization).
+Declared in the plugin catalog entry (`metadata.settings`, `submodules.<Name>.metadata.settings`) and/or on the package (`export const settings` or sibling `settings.js`), stored per installed plugin row in `setting`. The catalog declaration wins on a name collision. Settings are not authorization; credentials stay in `auth_fields`.
 
-Account-scoped discovery uses the same compile-and-aggregate path as inbound weaving, search, and reports: list installed plugins, `compilePlugin`, read `settings`, group by plugin path.
+Account-scoped discovery uses the same aggregate path as inbound weaving, search, and reports: list installed plugins, read each path's catalog entry (`PluginWorker.getPluginCatalogEntry`) and package (`compilePlugin`), group by plugin path.
 
 | Surface | Call |
 |---------|------|
@@ -89,7 +89,7 @@ Account-scoped discovery uses the same compile-and-aggregate path as inbound wea
 | MCP | `plugin` `command: settings` / `setSetting` |
 | HTTP | `GET /data/settings`, `POST /data/settings` |
 
-`compilePlugin` (SchemaWorker and ServerBaseWorker) attaches `settings` from the default export, a named `settings` export, or sibling `settings.js`.
+`compilePlugin` (SchemaWorker and ServerBaseWorker) attaches `settings` from the default export, a named `settings` export, or sibling `settings.js`. The server registers `PluginWorker.getPluginCatalogEntry`, which returns the entry for a path from the files under `ENGINE9_PLUGIN_METADATA_PATH`.
 
 ## Binding paths (transforms)
 

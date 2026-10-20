@@ -269,6 +269,25 @@ export default { segmentDefinitionClauses }
 
 Clauses on a `search` export throw. Canonical forms use `{ title, type: 'object', properties, required? }`. EQL may contain `table`, `columns`, `conditions`, and `joins`; conditions may be structured (`EQUALS`, `LIKE`) or raw `{ eql: '...' }` fragments.
 
+#### Field choices from account data
+
+A form property whose value is a row id on the account sets `resolveOptionsUsing` to a source name. A UI reads the choices with MCP `segmentDefinitionClauses` `command: "options"` (`path`, `field`, optional `search` and `limit`) or `GET /data/segment-definition/clauses/options`. The result's `oneOf` (`[{ const, title, description? }]`) is the field's choices; `truncated` is true when more than `limit` exist.
+
+```javascript
+segmentId: { title: 'Segment', type: 'string', resolveOptionsUsing: 'segment' }
+```
+
+| Source    | Choices                                                                                       |
+| --------- | --------------------------------------------------------------------------------------------- |
+| `segment` | `segment` rows: `const` is `segment.id`, `title` is `segment.name`                            |
+| `plugin`  | Plugins that own at least one input other than a segment: `const` is `plugin.id`, `description` is `plugin.path` |
+
+Rule: A source reads a small account table by key. Do not add a source that scans person-scale tables (distinct postal codes, email domains, source codes); those fields stay free text.
+
+Rule: A fixed list is not a source. Put region codes, statuses, and other known values in the form as `enum` or `oneOf`.
+
+An unknown `resolveOptionsUsing` value appears in the catalog's `errors` for that clause path.
+
 Clauses are discovered with MCP `segmentDefinitionClauses` (`GET /data/segment-definition/clauses`). A segment definition combines them and is previewed with `segment` `command: "preview"` (`POST /data/segment-definition/preview`). Set `exclude: true` on a clause for people outside that handler's set; `exclude` is not a form field. A path is `<plugin>:segment_definition_clause:<handler>`. MCP `search` (`POST /data/search`) is quick lookup by email, phone, name, or person id, and does not accept clauses.
 
 Current model membership (`personSourceCode` / `transactionSourceCode`, include and exclude) is [e9-model — Model segment definition clauses](../e9-model/SKILL.md#model-segment-definition-clauses). People in a legacy model for a source code and out of the matching current model are [e9-model/legacy.md](../e9-model/legacy.md). Read that file only when the user explicitly asked for legacy models.
@@ -283,21 +302,35 @@ Each report contains `name`, `description`, `tags`, optional `data_sources`, `fi
 
 ### Settings
 
-Settings are per-install warehouse configuration. They are **not** marketplace authorization (`auth_fields` / vendor credentials on `account` plugin metadata).
+Settings are per-install warehouse configuration, stored per plugin row in the `setting` table. They are **not** authorization: credentials and vendor keys stay in `auth_fields`.
 
-Export `settings` from `index.js` and/or ship a sibling `settings.js`. Each entry is `{ name, type?, default?, values?, description?, label?, required?, secret?, hidden?, section? }` (or a name→def object). On `PluginWorker.install`, each name is inserted into `setting` for that plugin row when it is missing. Reinstall does not overwrite an existing value. Plugins with no `metadata.prefix` get an empty `table_prefix` (settings-only packages, and third-party schemas that self-scope table names).
+A plugin declares settings in either or both places:
+
+| Where | Use when | How |
+| --- | --- | --- |
+| Plugin catalog entry | Always works, and is the only option for plugins that run remotely (third-party bots whose code the engine9 host does not load) | `metadata.settings` on the entry for plugin-wide settings; `submodules.<Name>.metadata.settings` for settings that belong to one submodule |
+| Package | The host loads the plugin's code (`@engine9/schemas`, `@engine9/plugins`, packages in `engine9.pluginPackages`) | Export `settings` from `index.js` and/or ship a sibling `settings.js` |
+
+The plugin catalog is the set of JSON/JSON5 files the server reads from `ENGINE9_PLUGIN_METADATA_PATH`, keyed by plugin path (`engine9-plugins.catalog.json`, plus one file per third-party catalog). When both places declare the same name, the catalog declaration wins. If the host cannot load the package but the catalog has an entry for the path, the settings catalog reports no error for that plugin.
+
+Each declaration is `{ name, type?, default?, values?, description?, label?, required?, secret?, hidden?, section? }` (an array, or a name→def object). On `PluginWorker.install`, each package-declared name is inserted into `setting` for that plugin row when it is missing. Reinstall does not overwrite an existing value. Plugins with no `metadata.prefix` get an empty `table_prefix` (settings-only packages, and third-party schemas that self-scope table names).
+
+Submodules share their plugin's row, so setting names are plugin-wide. A submodule declaration gets `section: '<Name>'` unless it sets its own `section`, which groups it in UIs. If two declarations use the same name, the first one wins (plugin-level, then submodules in name order); give submodule settings distinct names such as `transaction_custom_fields`.
 
 | Field                   | Purpose                                                                            |
 | ----------------------- | ---------------------------------------------------------------------------------- |
 | `name`                  | Warehouse `setting.name`                                                           |
-| `type`                  | `string` (default), `int`, `number`, `boolean`, `json`, `email`, `url`, `password` |
+| `type`                  | `string` (default), `int`, `number`, `boolean`, `json`, `array`, `email`, `url`, `password` |
 | `values`                | Enum of allowed values (UI + `setSetting` validation)                              |
-| `default`               | Inserted on first install (`default_value` is also accepted)                       |
+| `default`               | Shown in the settings catalog. Package defaults are also inserted on first install (`default_value` is also accepted) |
 | `description` / `label` | UI copy                                                                            |
+| `section`               | UI grouping; submodule declarations default to the submodule name                  |
 | `secret`                | Redact current value in catalogs                                                   |
 | `hidden`                | Omit from UI catalogs unless `include_hidden` (internal allocators)                |
 
-Account-scoped discovery uses the same compile-and-aggregate path as inbound weaving, `search` `command: "list"`, and report list:
+Rule: Code that reads a catalog-declared setting applies the declared default itself when no `setting` row exists. Nothing inserts catalog defaults into the warehouse.
+
+Account-scoped discovery uses the same aggregate path as inbound weaving, `search` `command: "list"`, and report list:
 
 | Surface | Call                                                                                        |
 | ------- | ------------------------------------------------------------------------------------------- |
@@ -306,7 +339,7 @@ Account-scoped discovery uses the same compile-and-aggregate path as inbound wea
 | HTTP    | `GET /data/settings`                                                                        |
 | Update  | `PluginWorker.updateSetting` / MCP `plugin` `command: "setSetting"` / `POST /data/settings` |
 
-`listSettings` groups by plugin path, includes JSON Schema `form` plus current warehouse values per instance, and puts per-plugin `compilePlugin` failures in `errors`. Do not read settings from marketplace metadata.
+`listSettings` reads each installed plugin path's declarations from its plugin catalog entry (core hook `PluginWorker.getPluginCatalogEntry`, which the server registers) and from the package (`compilePlugin`). It groups by plugin path and includes a JSON Schema `form` plus current warehouse values per instance. A plugin goes in `errors` only when its package fails to load and the catalog has no entry for its path. `updateSetting` validates against the same merged declarations.
 
 ### Native plugin layout
 
@@ -402,7 +435,7 @@ For every predefined segment, document its display name, export key, definition 
 
 **Rule:** Segment exports must be keyed objects, and every key must be documented in the package README with membership and universe behavior.
 
-**Rule:** Declare settings on the package (`settings` export or sibling `settings.js`). Do not put warehouse settings in marketplace `auth_fields`.
+**Rule:** Declare settings in the plugin catalog entry (`metadata.settings`, `submodules.<Name>.metadata.settings`) or on the package (`settings` export or sibling `settings.js`). Plugins that run remotely declare them in the catalog. Do not put settings in `auth_fields`; `auth_fields` are for credentials only.
 
 **Rule:** Wire only standard named exports and the default aggregate from a schema plugin's `index.js`.
 
@@ -422,7 +455,45 @@ const metadata = {
 
 Identifier extraction transforms set `export const type = 'id'` and mutate each batch row's `identifiers`.
 
-### Declare plugin settings
+### Declare plugin settings in the plugin catalog
+
+A plugin catalog file maps each plugin path to an entry. Put plugin-wide settings in `metadata.settings` and submodule settings in `submodules.<Name>.metadata.settings`:
+
+```json
+{
+  "@acme-com/bots/CrmBot": {
+    "path": "@acme-com/bots/CrmBot",
+    "metadata": {
+      "name": "Acme CRM",
+      "auth_fields": { "api_key": { "label": "API key" } },
+      "settings": [
+        { "name": "default_phone_type", "type": "string", "values": ["home", "mobile"], "default": "mobile" }
+      ]
+    },
+    "submodules": {
+      "Gifts": {
+        "metadata": {
+          "settings": [
+            {
+              "name": "transaction_custom_fields",
+              "type": "array",
+              "default": [],
+              "label": "Transaction custom fields",
+              "description": "Custom field names to include on every transaction load"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+`transaction_custom_fields` appears in the settings catalog with `section: "Gifts"`. A plugin that generates its catalog from code should emit the same shape: the plugin's own metadata becomes `metadata`, and each submodule's metadata becomes `submodules.<Name>.metadata`.
+
+Set a value with MCP `plugin` `{ "command": "setSetting", "plugin_id": "<plugin uuid>", "name": "transaction_custom_fields", "value": ["custom_fund"] }`. The value is validated as JSON and stored as a string. The plugin reads it from `setting` for its plugin row (`select name, value from setting where plugin_id = ?`).
+
+### Declare plugin settings on the package
 
 ```javascript
 export const settings = [
@@ -545,7 +616,7 @@ Thin, schema-only schema plugins are also valid. `message/index.js` exports only
 | Installed transform is absent                   | Confirm `metadata.inbound` names an exported transform and its `type` matches the slot                                         |
 | Upsert fails on duplicate keys                  | Merge rows by the schema's unique key with `mergeIntoQueue`                                                                    |
 | Clause does not appear in discovery             | Confirm the plugin is installed, the clause is on `segmentDefinitionClauses`, and it uses a canonical form                    |
-| Settings do not appear in MCP `plugin` settings | Confirm the plugin is installed, `settings` is on the default export or sibling `settings.js`, and the setting is not `hidden` |
+| Settings do not appear in MCP `plugin` settings | Confirm the plugin is installed, the setting is not `hidden`, and it is declared in one of two places: the catalog entry for the exact plugin path (`metadata.settings` or `submodules.<Name>.metadata.settings`, in a file under `ENGINE9_PLUGIN_METADATA_PATH`; the server re-reads changed catalog files every `ENGINE9_PLUGIN_METADATA_REFRESH_MS`, default 5 minutes), or the package's default export or sibling `settings.js` |
 | Segment membership is unexpectedly broad        | Inspect `universe`, clause path, and optional `pluginId` scope                                                                 |
 | Schema plugin report is not available           | Move it to a native `@engine9/plugins/reports/<area>` package                                                                  |
 | Package cannot resolve                          | Use the package path and inspect resolver/registration rules; do not add a prefix                                              |
