@@ -13,7 +13,7 @@ description: >-
   working with ModelWorker, model_*_person, model_*_transaction, lifetime value,
   LTV, acquisition ROI, first touch, CRM origin, reading/running a model, or
   a person search for people in or out of a current model by source code
-  (searchOptions personSourceCode / transactionSourceCode). Legacy model
+  (search command list, personSourceCode / transactionSourceCode). Legacy model
   search is legacy.md and is used only when the user explicitly asks for legacy.
 ---
 
@@ -358,13 +358,9 @@ when the user explicitly asked for legacy.
 
 ## Person search
 
-Each current model plugin exports two search handlers. Installing the model
-installs both. A UI loads the catalog from MCP `searchOptions` (or
-`GET /data/search/options`) and submits `{ and: [{ path, options, exclude? }] }`
-to MCP `search` (or `POST /data/search`). Handlers are listed only for plugins
-installed on that account.
+Each current model plugin exports two segment definition clauses and lists both on `search.people`. Installing the model installs both. A people-search UI loads MCP `search` with `command: "list"` (`searches.people.segmentDefinitionClauses`, also `GET /data/search`) and submits those clauses as `segmentDefinitionClauses` on `command: "people"`. A segment definition tree (`{ and: [{ path, options, exclude? }] }`) is previewed with MCP `segment` `command: "preview"`, not with `search`. Handlers are listed only for plugins installed on that account.
 
-Rule: Build the form from the `searchOptions` entry (`path`, `title`, `form`).
+Rule: Build the form from the catalog entry (`path`, `title`, `form`).
 `form` is JSON Schema `{ type: "object", properties, required }`. `options`
 keys are the property names. `exclude` is not a form field; the UI sets
 `exclude: true` on the clause to mean "out of this model."
@@ -376,12 +372,12 @@ keys are the property names. `exclude` is not a form field; the UI sets
 
 | Path | `options` |
 | --- | --- |
-| `@engine9/plugins/models/first_touch:search:personSourceCode` | `sourceCode` |
-| `@engine9/plugins/models/first_touch:search:transactionSourceCode` | `sourceCode` |
-| `@engine9/plugins/models/crm_origin:search:personSourceCode` | `sourceCode` |
-| `@engine9/plugins/models/crm_origin:search:transactionSourceCode` | `sourceCode` |
-| `@engine9/plugins/models/last_acquisition:search:personSourceCode` | `sourceCode` |
-| `@engine9/plugins/models/last_acquisition:search:transactionSourceCode` | `sourceCode` |
+| `@engine9/plugins/models/first_touch:segment_definition_clause:personSourceCode` | `sourceCode` |
+| `@engine9/plugins/models/first_touch:segment_definition_clause:transactionSourceCode` | `sourceCode` |
+| `@engine9/plugins/models/crm_origin:segment_definition_clause:personSourceCode` | `sourceCode` |
+| `@engine9/plugins/models/crm_origin:segment_definition_clause:transactionSourceCode` | `sourceCode` |
+| `@engine9/plugins/models/last_acquisition:segment_definition_clause:personSourceCode` | `sourceCode` |
+| `@engine9/plugins/models/last_acquisition:segment_definition_clause:transactionSourceCode` | `sourceCode` |
 
 `sourceCode` is a string and is required. A value containing `%` is `LIKE`;
 otherwise it is an exact match.
@@ -391,7 +387,7 @@ use the same `form`, with that model's title):
 
 ```json
 {
-  "path": "@engine9/plugins/models/first_touch:search:personSourceCode",
+  "path": "@engine9/plugins/models/first_touch:segment_definition_clause:personSourceCode",
   "title": "First Touch person source code",
   "form": {
     "title": "First Touch person source code",
@@ -414,12 +410,12 @@ People in First Touch for a code, and out of CRM Origin for that same code:
 {
   "and": [
     {
-      "path": "@engine9/plugins/models/first_touch:search:personSourceCode",
+      "path": "@engine9/plugins/models/first_touch:segment_definition_clause:personSourceCode",
       "options": { "sourceCode": "WEB_PET_2019" }
     },
     {
       "exclude": true,
-      "path": "@engine9/plugins/models/crm_origin:search:personSourceCode",
+      "path": "@engine9/plugins/models/crm_origin:segment_definition_clause:personSourceCode",
       "options": { "sourceCode": "WEB_PET_2019" }
     }
   ]
@@ -431,7 +427,7 @@ Rule: Pick the handler that matches the question. Person credit uses
 one does not exclude the other.
 
 Account-specific models that export `createModelSearches` show up the same way:
-`<package>:search:personSourceCode` and `<package>:search:transactionSourceCode`,
+`<package>:segment_definition_clause:personSourceCode` and `<package>:segment_definition_clause:transactionSourceCode`,
 with the same `sourceCode` form.
 
 Rule: Legacy membership — people in `person_model_source_code` for a source

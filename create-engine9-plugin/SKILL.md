@@ -26,7 +26,7 @@ engine9 separates shared data contracts, called schema plugins (`@engine9/schema
 | Package / release version             | npm `package.json` `"version"` only — never `metadata.version`                           |
 | Host must load the package            | Site `package.json` → `engine9.pluginPackages` + `npm install`                           |
 | Transform capability                  | `<package>:transforms:<name>`                                                            |
-| Search capability                     | `<package>:search:<handler>`                                                             |
+| Search capability                     | `<package>:segment_definition_clause:<handler>`                                                             |
 | Segment definition                    | `<package>:segments:<key>`                                                               |
 | Report definition                     | `@engine9/plugins/reports/<area>:reports:<key>`                                          |
 | Settings                              | `<package>` `settings` export or sibling `settings.js`; MCP `plugin` `command: settings` |
@@ -250,9 +250,20 @@ export const tables = [
 export default { tables };
 ```
 
-### Search
+### Segment definition clauses and search
 
-The named `search` export is a map of handlers:
+Publish each person predicate once on `segmentDefinitionClauses`. `search` is keyed by command name. `people` is the command this change implements. List the handler keys that people search may use:
+
+```javascript
+const emails = { title: 'Emails', form, optionsToEQL }
+export const segmentDefinitionClauses = { emails }
+export const search = {
+  people: {
+    title: 'People',
+    segmentDefinitionClauses: ['emails']
+  }
+}
+```
 
 | Member                         | Purpose                           |
 | ------------------------------ | --------------------------------- |
@@ -261,15 +272,15 @@ The named `search` export is a map of handlers:
 | `optionsToEQL(options)`        | Returns `{ text, eql }`           |
 | `optionsToEQLContext(options)` | Optional pre-query lookup context |
 
-Canonical forms use `{ title, type: 'object', properties, required? }`. The server still normalizes legacy flat property maps and single-key wrappers. EQL may contain `table`, `columns`, `conditions`, and `joins`; conditions may be structured (`EQUALS`, `LIKE`) or raw `{ eql: '...' }` fragments.
+A flat map of handlers on `search` throws. Canonical forms use `{ title, type: 'object', properties, required? }`. EQL may contain `table`, `columns`, `conditions`, and `joins`; conditions may be structured (`EQUALS`, `LIKE`) or raw `{ eql: '...' }` fragments.
 
-Account-scoped discovery through MCP `searchOptions`, `PersonWorker.searchOptions`, or `GET /data/search/options` returns standard filters and all installed-plugin handlers with normalized forms. A UI submits `{ and: [{ path, options }] }` to search. Set `exclude: true` on a clause for people outside that handler's set; `exclude` is not a form field.
+People search is MCP `search` with `command: "people"` (the default) or `POST /data/search`. Quick lookup is `emails`, `phones`, `given_names`, `last_names`, `person_ids`. Opted-in clauses go in `segmentDefinitionClauses` as an array of `{ path, options, exclude? }`. `command: "list"` and `GET /data/search` return `searches.people`. Authoring a full segment definition uses MCP `segmentDefinitionClauses` (`GET /data/segment-definition/clauses`) and previews the tree with `segment` `command: "preview"`. Set `exclude: true` on a clause for people outside that handler's set; `exclude` is not a form field. A path is `<plugin>:segment_definition_clause:<handler>`.
 
 Current model membership (`personSourceCode` / `transactionSourceCode`, include and exclude) is [e9-model — Person search](../e9-model/SKILL.md#person-search). People in a legacy model for a source code and out of the matching current model are [e9-model/legacy.md](../e9-model/legacy.md). Read that file only when the user explicitly asked for legacy models.
 
 ### Segment definition
 
-Export an object map, not an array. Each value has `name`, optional `universe` EQL objects whose rows yield `input_id`, and optional `search` trees using `and`, paths, or table/column clauses. Paths use `@engine9/schemas/...:search:<handler>`.
+Export an object map, not an array. Each value has `name`, optional `universe` EQL objects whose rows yield `input_id`, and a `definition` tree using `and`, paths, or table/column clauses. Paths use `@engine9/schemas/...:segment_definition_clause:<handler>`. A `search` key on that object throws.
 
 ### Report definition
 
@@ -291,7 +302,7 @@ Export `settings` from `index.js` and/or ship a sibling `settings.js`. Each entr
 | `secret`                | Redact current value in catalogs                                                   |
 | `hidden`                | Omit from UI catalogs unless `include_hidden` (internal allocators)                |
 
-Account-scoped discovery uses the same compile-and-aggregate path as inbound weaving, `searchOptions`, and report list:
+Account-scoped discovery uses the same compile-and-aggregate path as inbound weaving, `search` `command: "list"`, and report list:
 
 | Surface | Call                                                                                        |
 | ------- | ------------------------------------------------------------------------------------------- |

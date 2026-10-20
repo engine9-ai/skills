@@ -52,7 +52,7 @@ INNER JOIN input ON person_remote.source_input_id = input.id
   AND input.plugin_id = '<plugin uuid>'
 ```
 
-That is exactly what `@engine9/schemas/person_remote:search:all` compiles when given `pluginId` — the filter used by export universes (“remote people for plugin X”).
+That is exactly what `@engine9/schemas/person_remote:segment_definition_clause:all` compiles when given `pluginId` — the filter used by export universes (“remote people for plugin X”).
 
 An empty export or segment for “plugin remotes ∩ transactions” almost always
 means there are no `person_remote` rows whose `source_input_id` belongs to that
@@ -96,7 +96,7 @@ So: use **`idFiles` (or `loadPeople`) to populate Tatango-scoped `person_remote`
 
 ## Rules
 
-For `@engine9/schemas/person_remote:search:all` with `pluginId = <Tatango uuid>` (or the equivalent export SQL) to return rows after an id/load:
+For `@engine9/schemas/person_remote:segment_definition_clause:all` with `pluginId = <Tatango uuid>` (or the equivalent export SQL) to return rows after an id/load:
 
 1. Rule: **`plugin_id` / `pluginId`** must be that plugin’s UUID, not
    `remote_plugin_id` or a plugin slug.

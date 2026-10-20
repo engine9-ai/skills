@@ -2,15 +2,15 @@
 
 Legacy models are the old-identity scores: `person_model_source_code` (`model_id` + `source_code_id`) and `transaction_model_pivot`. Use this file when the user explicitly asked for legacy models — a legacy-vs-current person search, a Legacy tab, or a pivot comparison. Current `{prefix}_*` models and their person-search forms are in [SKILL.md](SKILL.md#person-search).
 
-Rule: Do not open this file, recommend a legacy search, pass `legacy: true`, or call `timelinePersonLegacy` unless the user explicitly asked for legacy. `searchOptions` may still list `@engine9/plugins/models/legacy` when that plugin is installed; leave it out of the UI until legacy is requested.
+Rule: Do not open this file, recommend a legacy search, pass `legacy: true`, or call `timelinePersonLegacy` unless the user explicitly asked for legacy. `search` `command: "list"` may still list `@engine9/plugins/models/legacy` when that plugin is installed; leave it out of the UI until legacy is requested.
 
 ## Quick reference
 
 | Need | Use |
 | --- | --- |
-| People in a legacy model for a source code | `@engine9/plugins/models/legacy:search:personSourceCode` |
+| People in a legacy model for a source code | `@engine9/plugins/models/legacy:segment_definition_clause:personSourceCode` |
 | Those people, and not in the matching current model | That clause, plus `exclude: true` on the current `personSourceCode` path |
-| UI catalog | MCP `searchOptions` / `GET /data/search/options` — render `form`, submit `{ path, options, exclude? }` |
+| UI catalog | MCP `search` `command: "list"` / `GET /data/search` — render `form`, submit the clause on `segmentDefinitionClauses` for people search, or inside a segment definition for preview |
 | Legacy person / timeline inspect | MCP `timelinePersonLegacy` |
 | Pivot vs current stats | `timelinePerson` `compareSourceCodesLegacy` (opt-in) |
 
@@ -18,11 +18,11 @@ Rule: Do not open this file, recommend a legacy search, pass `legacy: true`, or 
 
 Package `@engine9/plugins/models/legacy` exports one handler. It reads `person_model_source_code` and returns current `person.id` values. It is person-level credit, the same question as current `personSourceCode`, on the old identity.
 
-The handler appears in `searchOptions` only after `@engine9/plugins/models/legacy` is installed. The UI renders the catalog entry as returned:
+The handler appears in `search` `command: "list"` only after `@engine9/plugins/models/legacy` is installed. The UI renders the catalog entry as returned:
 
 | Field | Value |
 | --- | --- |
-| `path` | `@engine9/plugins/models/legacy:search:personSourceCode` |
+| `path` | `@engine9/plugins/models/legacy:segment_definition_clause:personSourceCode` |
 | `title` | `Legacy model source code` |
 | `form.properties.modelId` | string, required. `enum` is `{ value, name }` objects (below) |
 | `form.properties.sourceCode` | string, required. Exact code, or `LIKE` when the value contains `%` |
@@ -30,13 +30,13 @@ The handler appears in `searchOptions` only after `@engine9/plugins/models/legac
 
 | `modelId` | Name | Current person search to exclude |
 | --- | --- | --- |
-| `1` | First Touch | `@engine9/plugins/models/first_touch:search:personSourceCode` |
-| `2` | CRM Origin | `@engine9/plugins/models/crm_origin:search:personSourceCode` |
-| `8` | Last Channel Acquisition | `@engine9/plugins/models/last_acquisition:search:personSourceCode` |
+| `1` | First Touch | `@engine9/plugins/models/first_touch:segment_definition_clause:personSourceCode` |
+| `2` | CRM Origin | `@engine9/plugins/models/crm_origin:segment_definition_clause:personSourceCode` |
+| `8` | Last Channel Acquisition | `@engine9/plugins/models/last_acquisition:segment_definition_clause:personSourceCode` |
 
 Other numeric `modelId` values are accepted (label falls through to `Model <id>`). Exclude a current handler only when the user names that current model; unknown legacy ids have no shipped twin.
 
-`exclude` is not a form field. The UI sets it on the clause. `PersonWorker.getPersonSearchSQL` turns `exclude: true` into `id not in (...)`.
+`exclude` is not a form field. The UI sets it on the clause. `PersonWorker.getSegmentDefinitionSQL` turns `exclude: true` into `id not in (...)`.
 
 ### In a legacy model, out of the current model
 
@@ -46,12 +46,12 @@ People credited to a source code by the legacy model, who are not credited to th
 {
   "and": [
     {
-      "path": "@engine9/plugins/models/legacy:search:personSourceCode",
+      "path": "@engine9/plugins/models/legacy:segment_definition_clause:personSourceCode",
       "options": { "modelId": "1", "sourceCode": "WEB_PET_2019" }
     },
     {
       "exclude": true,
-      "path": "@engine9/plugins/models/first_touch:search:personSourceCode",
+      "path": "@engine9/plugins/models/first_touch:segment_definition_clause:personSourceCode",
       "options": { "sourceCode": "WEB_PET_2019" }
     }
   ]
@@ -64,7 +64,7 @@ Catalog entry the UI binds the legacy control to:
 
 ```json
 {
-  "path": "@engine9/plugins/models/legacy:search:personSourceCode",
+  "path": "@engine9/plugins/models/legacy:segment_definition_clause:personSourceCode",
   "title": "Legacy model source code",
   "description": "People credited in person_model_source_code (legacy model_id). Bridged to current person.id via person_email / person_metadata.",
   "form": {

@@ -71,11 +71,11 @@ The middle segment must be literally `transforms` or resolution fails.
 
 ## Search path shape (segments, pipelines)
 
-`@engine9/schemas/<pkg>:search:<handlerKey>`
+`@engine9/schemas/<pkg>:segment_definition_clause:<handlerKey>`
 
-Example from `person_email/segments.js`: `@engine9/schemas/person_email:search:emails`.
+Example from `person_email/segments.js`: `@engine9/schemas/person_email:segment_definition_clause:emails`.
 
-Handlers export optional `title`/`description`, a JSON Schema `form` (`{ title, type: 'object', properties, required? }`), and `optionsToEQL`. Account-scoped discovery: MCP `searchOptions` / `PersonWorker.searchOptions` / `GET /data/search/options`.
+Handlers live on `segmentDefinitionClauses` and are listed from `search.people.segmentDefinitionClauses`. Each has optional `title`/`description`, a JSON Schema `form` (`{ title, type: 'object', properties, required? }`), and `optionsToEQL`. People-search discovery: MCP `search` `command: "list"` / `GET /data/search`. Every clause, including ones not opted into people search: MCP `segmentDefinitionClauses` / `GET /data/segment-definition/clauses`.
 
 ## Settings (warehouse configuration)
 

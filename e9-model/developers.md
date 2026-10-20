@@ -28,7 +28,7 @@ await model.summarizePeople({ emails: 'a@example.com' });
 | `runPeople` | Result **file** (csv) | Test the person transform |
 | `runTransactions` | Result **file** (csv) | Test the transaction transform. Pass `person_filename` if there is no `transforms.transaction` |
 | `run` | Files **and** `{prefix}_*` tables + stats | Production / account load. One timeline pass scores people and transactions, spills csv incrementally, then loads `{prefix}_*` (does not keep result rows in heap). Installs the plugin row, then deploys tables from `metadata.prefix` (not the plugin counter prefix). `replaceModelStats` rebuilds lifetime and by-date stats. Returns `people` / `transactions` / `revenue` totals |
-| `runMany({ models })` | Same as `run`, once per path | Comma-delimited model paths, run in series; returns `{ results }` |
+| `runMany({ models })` | Same as `run`, once per path | Comma-delimited model paths, run in series. Returns `{ people, models, results }`: `people` is the largest per-model people total (models score the same people, so the counts are not added) and `models` is the comma-delimited paths that finished |
 | `summarizeSourceCodes({ model })` | — | Read `{prefix}_person_stats` and `{prefix}_transaction_stats` (rollup by source code). Alias: `summarize` |
 | `summarizePeople({ emails / person_ids })` | — | UI inspect: timeline + stored rows from every available `model_*` table. Does **not** run models |
 | `inspectPerson({ emails / person_ids })` | — | Conductor / MCP `timelinePerson`: **current** `timeline` / `model_*` only. Never `timeline_v3*` |
