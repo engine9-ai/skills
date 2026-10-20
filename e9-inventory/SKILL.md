@@ -216,7 +216,7 @@ The account cache is gzipped JSON. Bundle export still writes uncompressed JSON5
 | `table_records`, `file_records`, `records` | Plan totals (`file_records` omitted when files are omitted). |
 | `statistics` | Monthly warehouse statistics (see below). Omitted when `--statistics=false`, `--sample=true`, or during bundle export. |
 | `sample` | `true` on QA sample plans/exports. |
-| `sample_table_limit` / `sample_file_limit` | Row caps used for the sample (tables/person-search vs idv1 copies). |
+| `sample_table_limit` / `sample_file_limit` | Row caps used for the sample (tables/segment definition exports vs idv1 copies). |
 
 Empty `transforms: []` arrays are omitted from serialized output.
 

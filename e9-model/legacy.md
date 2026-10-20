@@ -1,8 +1,8 @@
 # Legacy models
 
-Legacy models are the old-identity scores: `person_model_source_code` (`model_id` + `source_code_id`) and `transaction_model_pivot`. Use this file when the user explicitly asked for legacy models — a legacy-vs-current person search, a Legacy tab, or a pivot comparison. Current `{prefix}_*` models and their person-search forms are in [SKILL.md](SKILL.md#person-search).
+Legacy models are the old-identity scores: `person_model_source_code` (`model_id` + `source_code_id`) and `transaction_model_pivot`. Use this file when the user explicitly asked for legacy models — a legacy-vs-current segment definition, a Legacy tab, or a pivot comparison. Current `{prefix}_*` models and their clause forms are in [SKILL.md](SKILL.md#model-segment-definition-clauses).
 
-Rule: Do not open this file, recommend a legacy search, pass `legacy: true`, or call `timelinePersonLegacy` unless the user explicitly asked for legacy. `search` `command: "list"` may still list `@engine9/plugins/models/legacy` when that plugin is installed; leave it out of the UI until legacy is requested.
+Rule: Do not open this file, recommend a legacy clause, pass `legacy: true`, or call `timelinePersonLegacy` unless the user explicitly asked for legacy. MCP `segmentDefinitionClauses` may still list `@engine9/plugins/models/legacy` when that plugin is installed; leave it out of the UI until legacy is requested.
 
 ## Quick reference
 
@@ -10,15 +10,15 @@ Rule: Do not open this file, recommend a legacy search, pass `legacy: true`, or 
 | --- | --- |
 | People in a legacy model for a source code | `@engine9/plugins/models/legacy:segment_definition_clause:personSourceCode` |
 | Those people, and not in the matching current model | That clause, plus `exclude: true` on the current `personSourceCode` path |
-| UI catalog | MCP `search` `command: "list"` / `GET /data/search` — render `form`, submit the clause on `segmentDefinitionClauses` for people search, or inside a segment definition for preview |
+| UI catalog | MCP `segmentDefinitionClauses` / `GET /data/segment-definition/clauses` — render `form`, put the clause in a segment definition, preview with `segment` `command: "preview"` |
 | Legacy person / timeline inspect | MCP `timelinePersonLegacy` |
 | Pivot vs current stats | `timelinePerson` `compareSourceCodesLegacy` (opt-in) |
 
-## Person search
+## Legacy segment definition clause
 
-Package `@engine9/plugins/models/legacy` exports one handler. It reads `person_model_source_code` and returns current `person.id` values. It is person-level credit, the same question as current `personSourceCode`, on the old identity.
+Package `@engine9/plugins/models/legacy` exports one segment definition clause. It reads `person_model_source_code` and returns current `person.id` values. It is person-level credit, the same question as current `personSourceCode`, on the old identity.
 
-The handler appears in `search` `command: "list"` only after `@engine9/plugins/models/legacy` is installed. The UI renders the catalog entry as returned:
+The clause appears in MCP `segmentDefinitionClauses` only after `@engine9/plugins/models/legacy` is installed. The UI renders the catalog entry as returned:
 
 | Field | Value |
 | --- | --- |
@@ -28,7 +28,7 @@ The handler appears in `search` `command: "list"` only after `@engine9/plugins/m
 | `form.properties.sourceCode` | string, required. Exact code, or `LIKE` when the value contains `%` |
 | `form.required` | `["modelId", "sourceCode"]` |
 
-| `modelId` | Name | Current person search to exclude |
+| `modelId` | Name | Current model clause to exclude |
 | --- | --- | --- |
 | `1` | First Touch | `@engine9/plugins/models/first_touch:segment_definition_clause:personSourceCode` |
 | `2` | CRM Origin | `@engine9/plugins/models/crm_origin:segment_definition_clause:personSourceCode` |
@@ -125,8 +125,8 @@ Future deployments drop the pivot table and `timelinePersonLegacy`.
 
 ## Related documentation
 
-- Current models and current person-search forms: [SKILL.md](SKILL.md)
+- Current models and their clause forms: [SKILL.md](SKILL.md#model-segment-definition-clauses)
 - Running `ModelWorker`: [developers.md](developers.md)
 - Current table DDL: [schema.md](schema.md)
-- Package contract for the legacy search plugin: `plugins/models/legacy/README.md`
-- MCP `search` / `searchOptions`: [e9-mcp](../e9-mcp/SKILL.md#search)
+- Package contract for the legacy clause plugin: `plugins/models/legacy/README.md`
+- MCP `segmentDefinitionClauses` and `segment` preview: [e9-mcp](../e9-mcp/SKILL.md#segmentdefinitionclauses)

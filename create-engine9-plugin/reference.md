@@ -75,7 +75,7 @@ The middle segment must be literally `transforms` or resolution fails.
 
 Example from `person_email/segments.js`: `@engine9/schemas/person_email:segment_definition_clause:emails`.
 
-Handlers live on `segmentDefinitionClauses` and are listed from `search.people.segmentDefinitionClauses`. Each has optional `title`/`description`, a JSON Schema `form` (`{ title, type: 'object', properties, required? }`), and `optionsToEQL`. People-search discovery: MCP `search` `command: "list"` / `GET /data/search`. Every clause, including ones not opted into people search: MCP `segmentDefinitionClauses` / `GET /data/segment-definition/clauses`.
+Handlers live on `segmentDefinitionClauses`. Each has optional `title`/`description`, a JSON Schema `form` (`{ title, type: 'object', properties, required? }`), and `optionsToEQL`. Discovery: MCP `segmentDefinitionClauses` / `GET /data/segment-definition/clauses`.
 
 ## Settings (warehouse configuration)
 

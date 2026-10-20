@@ -1,11 +1,11 @@
 ---
 name: e9-export
-description: "Read and interpret engine9 export packages, including inventory.json5, warehouse Parquet tables, input-store idv1 files, metadata.json, person-search CSVs, entry types, joins, and export diagnostics. Use when consuming an export, determining what it contains, joining person, transaction, message, and timeline data, or validating package completeness."
+description: "Read and interpret engine9 export packages, including inventory.json5, warehouse Parquet tables, input-store idv1 files, metadata.json, segment definition export CSVs, entry types, joins, and export diagnostics. Use when consuming an export, determining what it contains, joining person, transaction, message, and timeline data, or validating package completeness."
 ---
 
 # engine9 exports
 
-An **export** is a self-contained snapshot of one account’s warehouse data; a receiver gets files, not a live database. Typical contents are warehouse table Parquet, idv1 file copies with each store’s `metadata.json`, and optional person-search CSVs. Use this skill to inspect, consume, join, or validate those files; use the export-building documentation when creating or running a package.
+An **export** is a self-contained snapshot of one account’s warehouse data; a receiver gets files, not a live database. Typical contents are warehouse table Parquet, idv1 file copies with each store’s `metadata.json`, and optional segment definition export CSVs. Use this skill to inspect, consume, join, or validate those files; use the export-building documentation when creating or running a package.
 
 ## Quick reference
 
@@ -17,7 +17,7 @@ An **export** is a self-contained snapshot of one account’s warehouse data; a 
 | Inspect a named audience extract | `{export_id}.{export_name}.export.csv` in `export_dir`, and its metadata sidecar |
 | Query an export in a local DuckDB (no engine9 install) | [duckdb.md](duckdb.md): builds `{export_root}/engine9.duckdb`, with participant, opt-out, and transaction/click lists |
 | Create or debug an export | Export building documentation |
-| Limit by start/end date | [Start and end dates](building.md#start-and-end-dates) — tables, person-search, and input stores differ |
+| Limit by start/end date | [Start and end dates](building.md#start-and-end-dates) — tables, segment definition exports, and input stores differ |
 
 Rule: `inventory.json5` is authoritative. Do not infer artifact locations from the default directory structure; use its paths and `relative_path` values.
 
@@ -34,7 +34,7 @@ Start with **`inventory.json5`**. Bundle export writes it **last**. It is the ca
 | `tables/{table}.parquet` | One warehouse table dump |
 | `{input_type}/{input_id}/*.idv1.parquet` | Activity rows for one input (`message`, `person`, `timeline`, …) |
 | `{input_type}/{input_id}/metadata.json` | Descriptor for that input store |
-| `{export_id}.{export_name}.export.csv` + `.metadata.json5` | Named person-search extract, written in `export_dir` |
+| `{export_id}.{export_name}.export.csv` + `.metadata.json5` | Named segment definition export, written in `export_dir` |
 | `inventory.json5` | Catalog of what was written (paths, counts, skipped), written after artifacts |
 
 **Not included**
@@ -223,7 +223,7 @@ Rule: Plugin scope for remotes is not a column on `person_remote`. Join `person_
 
 A message input’s `input.id` is the handle for that send. Opens and clicks for that send live in stores whose `metadata.json` `input_id` (or `entry_types`) points at that activity; they share `person_id` with `person` / `transaction`.
 
-### Read person-search CSVs
+### Read segment definition export CSVs
 
 A named search export is one CSV plus a sidecar:
 

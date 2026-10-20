@@ -10,7 +10,7 @@ e9 exportworker <method> -a <account_id> --<option>=<value>
 
 Rule: If MCP does not find that account, stop. Do not open `accounts.d`, `account-config.json`, `frakture-account-config.json`, or any other catalog to discover an id, and do not run this CLI as that lookup.
 
-Related: warehouse inventory [e9-inventory](../e9-inventory/SKILL.md); person-search remotes [e9-person-remote](../e9-person-remote/SKILL.md); identity [e9-person-id](../e9-person-id/SKILL.md); timeline files [e9-timeline](../e9-timeline/SKILL.md).
+Related: warehouse inventory [e9-inventory](../e9-inventory/SKILL.md); export remotes [e9-person-remote](../e9-person-remote/SKILL.md); identity [e9-person-id](../e9-person-id/SKILL.md); timeline files [e9-timeline](../e9-timeline/SKILL.md).
 
 Naming: export roots, worker options, and universe entries are canonical
 `snake_case`; JavaScript implementation variables remain camelCase. Nested
@@ -23,7 +23,7 @@ to snake_case, and conflicting dual spellings are rejected.
 | Method | What it does |
 |--------|----------------|
 | `inventory` | Delegates to InventoryWorker: stats `{account root}/cache/inventory.json.gz` (`ready: true` if present). Prefer `inventoryworker`. Refresh the **account** cache with `e9 inventoryworker buildInventorySummaryFile` (no definition). Export-scoped plans use `--definition_path=…` and write `cache/inventory-plans/` instead. |
-| `export` | Unified export: infers mode from `definition_path` and options (bundle dump, one person-search CSV, or tables-only). Bundle runs write artifacts first, then `inventory.json5` (catalog of what was written). Does not write the account inventory cache. |
+| `export` | Unified export: infers mode from `definition_path` and options (bundle dump, one segment definition export CSV, or tables-only). Bundle runs write artifacts first, then `inventory.json5` (catalog of what was written). Does not write the account inventory cache. |
 
 `exportAll` and `exportTables` were removed; both error with a message to use `export`.
 
@@ -32,7 +32,7 @@ to snake_case, and conflicting dual spellings are rejected.
 | Shape | Meaning |
 |-------|---------|
 | `engine9-accounts/.../export` | Bundle plugin (canonically a top-level `universe`). No `:exports:` required. Runs bundle tables/files plus named plugin exports. |
-| `engine9-accounts/.../file.plugin.js:exports:<name>` | One named person-search export. |
+| `engine9-accounts/.../file.plugin.js:exports:<name>` | One named segment definition export. |
 | Path to a `.json5` / `.json` file | Standalone export definition (`search` and/or bundle keys). |
 
 Without `definition_path`, pass `--tables` (and optionally `--extra_tables` / `--exclude_tables`) for a tables-only dump.
@@ -125,7 +125,7 @@ e9 exportworker export -a <account_id> \
 
 Optional: `--limit=N`, `--sample=true` / `--sample=false`, `--export_id=<uuid>`, `--export_dir=<path-or-uri>`, `--credentials=<path-or-uri>`. Date windows are below — `--start` / `--end` do not mean the same thing on every export type.
 
-`--sample=true` is a QA dump: 100 rows per warehouse table and person-search CSV, 10 rows per sampled `.idv1.parquet`, one parquet per `(input_type, filename)` plus that store’s `metadata.json`. The destination last segment gets `_sample` so a sample cannot overwrite a full export (`exports/{export_id}_sample/{date}`, or `{export_dir}_sample`). `--sample=false` (default) is a full run. `--limit=N` without `--sample=true` still only caps SQL tables and person-search (full idv1 copies).
+`--sample=true` is a QA dump: 100 rows per warehouse table and segment definition export CSV, 10 rows per sampled `.idv1.parquet`, one parquet per `(input_type, filename)` plus that store’s `metadata.json`. The destination last segment gets `_sample` so a sample cannot overwrite a full export (`exports/{export_id}_sample/{date}`, or `{export_dir}_sample`). `--sample=false` (default) is a full run. `--limit=N` without `--sample=true` still only caps SQL tables and person-search (full idv1 copies).
 
 `--export_dir` is the only destination when set. Use a local directory, `temp` (a per-run folder under the OS temp directory, `{os.tmpdir()}/{account_id}/exports/{export_id}`, with no copy to the account store), or an object-store URI (`s3://`, `r2://`, `gs://` / `gcs://`, `gdrive://`). Omit it to use `{store_path}/{account_id}/exports/{export_id}/{date}/`. The bucket may be customer-owned.
 
@@ -146,7 +146,7 @@ Supported tokens: `{{account_id}}`, `{{export_id}}`, `{{date}}`, `{{datetime_pre
 | Export type | Where the window is set | What it filters |
 |-------------|-------------------------|-----------------|
 | Warehouse tables (`type: 'table'`, or `--tables`) | CLI `--start` / `--end` only | Rows on the first matching date column, when the table has one |
-| Person-search (`search` + row transforms) | Default in the definition; CLI `--start` / `--end` override it | Whatever the definition's EQL and transform options reference |
+| Segment definition export (`definition` + row transforms) | Default in the definition; CLI `--start` / `--end` override it | Whatever the definition's EQL and transform options reference |
 | Input-store copies (`type: 'inputs'`) | EQL on that universe entry | Which stores are selected. Copied `.idv1.parquet` files are not row-filtered |
 
 Rule: On a bundle, `--start` / `--end` filter warehouse table rows that have a recognized date column. idv1 copies stay whole.
@@ -163,7 +163,7 @@ Tables with none of those columns are exported in full. `publish_date` is not in
 e9 exportworker export -a <account_id> --tables=transaction --start=-3d
 ```
 
-### Person-search exports
+### Segment definition exports
 
 CLI `--start` / `--end` become `overrides.start` / `overrides.end`. The definition must mention `overrides` or the flags are ignored. Put the default in the template; a caller replaces it with `--start=` / `--end=`.
 
@@ -193,7 +193,7 @@ e9 exportworker export -a <account_id> \
   --start=-3d --end=-1d
 ```
 
-On a bundle run, those flags are forwarded to every named person-search export except one named `people`. A `people` snapshot does not see the bundle `--start` / `--end`; its templates keep the default written in that definition.
+On a bundle run, those flags are forwarded to every named segment definition export except one named `people`. A `people` snapshot does not see the bundle `--start` / `--end`; its templates keep the default written in that definition.
 
 ### Input-store copies
 
@@ -217,9 +217,9 @@ To keep a rolling set of stores, put the window in that `type: 'inputs'` entry's
 
 `global_message` and `message` both resolve to message input ids. `entry_types` on the same entry still applies after the EQL picks ids.
 
-To export timeline **rows** in a window (not whole stores), use a person-search whose EQL filters `timeline.ts`, not an input-store copy.
+To export timeline **rows** in a window (not whole stores), use a segment definition export whose EQL filters `timeline.ts`, not an input-store copy.
 
-## Person-search export
+## Segment definition export
 
 A searched export is a definition with top-level `search` (EQL) and top-level `transforms` for row/column mapping. These are not `scope: 'file'` universe transforms:
 
@@ -244,7 +244,7 @@ The definition supplies the default window and must reference `overrides.start` 
 
 ### Timeline rows from input files
 
-When the activity lives in idv1 files and is not loaded into warehouse `timeline`, put an input `universe` on the person-search export. The export loads those stores into a query engine and runs the search (and `sql.query` bindings whose table is `timeline`) against that, joined to the warehouse `input` rows for the same ids.
+When the activity lives in idv1 files and is not loaded into warehouse `timeline`, put an input `universe` on the segment definition export. The export loads those stores into a query engine and runs the search (and `sql.query` bindings whose table is `timeline`) against that, joined to the warehouse `input` rows for the same ids.
 
 ```
 universe: [
@@ -296,7 +296,7 @@ What those files mean for a receiver: [SKILL.md](SKILL.md).
 
 Bundle `export` and `inventory.json5` include `export_dir`: the export root path (local or object-store URI). Strip it from any absolute output `filename` to recover the relative path under that root. Input file and directory entries still carry `source_directory` for the **input-store** root the file was copied from (not the export root).
 
-Rule: Bundle export writes tables, idv1 copies, and named person-search files first, then `inventory.json5`. Treat that file as the completion catalog: if it is missing, the run did not finish.
+Rule: Bundle export writes tables, idv1 copies, and named segment definition export files first, then `inventory.json5`. Treat that file as the completion catalog: if it is missing, the run did not finish.
 
 | Path | Contents |
 |------|----------|
@@ -305,7 +305,7 @@ Rule: Bundle export writes tables, idv1 copies, and named person-search files fi
 | `{input_type}/{input_id}/metadata.json` | Input-store descriptor (`input_id`, `input_type`, `entry_types`, listed files) |
 | Definition-owned `relative_path` | Custom universe artifact destination below `export_dir` |
 | `inventory.json5` | Bundle export: catalog of what was written (paths, counts, skipped), written **last**. Monthly statistics: [e9-inventory](../e9-inventory/SKILL.md). |
-| `{export_id}.{export_name}.export.csv` + metadata | Default named person-search output, in `export_dir` |
+| `{export_id}.{export_name}.export.csv` + metadata | Default named segment definition export output, in `export_dir` |
 
 `directories[].files` is the **file list** (name, filename, records, source_directory), not a count.
 
@@ -329,7 +329,7 @@ Export pipeline:
 - [ ] D: file records are useful (not metadata zeros)
 - [ ] E: planned `relative_path` and transforms are correct and collision-free
 - [ ] F: export wrote every planned artifact under `export_dir`, then `inventory.json5`
-- [ ] G: person-search file has rows (search, remotes, dates)
+- [ ] G: segment definition export file has rows (definition, remotes, dates)
 ```
 
 ### A) Path
@@ -360,7 +360,7 @@ Pre-flight plans live in `cache/inventory-plans/`. After a completed bundle expo
 
 Bundle `export` returns `export_dir` (the resolved export root). Every file listed by `inventory.json5` should exist at its `relative_path` under that root. Missing `inventory.json5` means the run did not finish. Missing copies listed in the catalog: listing found no idv1s (C), or a file copy was skipped (logged). A transform failure aborts before `inventory.json5` is written.
 
-### G) Person-search empty
+### G) Segment definition export empty
 
 `search` too tight (`start`/`end`, plugin filter). Confirm the definition actually references `overrides.start` / `overrides.end`, and that `end` is exclusive. Input-store copies ignore those flags — see [Start and end dates](#start-and-end-dates). “Remotes for plugin X” with no rows → [e9-person-remote](../e9-person-remote/SKILL.md). `limit` on a bundle export applies per named export **and** per bundle table.
 

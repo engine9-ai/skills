@@ -210,9 +210,9 @@ If a path, method, or option is not present in MCP responses, report that to the
 | List plugin settings (types, descriptions, current values) grouped by plugin | `plugin` with `command: "settings"` |
 | Install a plugin on one account or a parent’s children | `plugin` `install` — [e9-plugin](../e9-plugin/SKILL.md). Do not use `task` |
 | Search people by email, phone, name, or id | `search` |
-| Search people in or out of a current model by source code | `search` `command: "people"` with `segmentDefinitionClauses` — [e9-model — Person search](../e9-model/SKILL.md#person-search) |
-| Search people in a legacy model and out of the current model | [e9-model/legacy.md](../e9-model/legacy.md) — only when the user explicitly asked for legacy |
-| List people-search forms for an account | `search` with `command: "list"` |
+| People in or out of a current model by source code | A segment definition with the model's clauses, previewed with `segment` `command: "preview"` — [e9-model — Model segment definition clauses](../e9-model/SKILL.md#model-segment-definition-clauses) |
+| People in a legacy model and out of the current model | [e9-model/legacy.md](../e9-model/legacy.md) — only when the user explicitly asked for legacy |
+| List the searches available on an account | `search` with `command: "list"` |
 | Author a segment definition | `segmentDefinitionClauses`, then `segment` `command: "preview"` |
 | Person / source-filtered current timeline + models | `timelinePerson` (`command: inspect`) |
 | Account / person **legacy** `timeline_v3*` inspect | `timelinePersonLegacy` |
@@ -387,12 +387,13 @@ HTTP: `GET /data/settings`, `POST /data/settings`. Fleet install: [e9-plugin](..
 
 ### `search`
 
-Generic search. `command` defaults to `people`: quick lookup by email, phone, name, or person id, plus optional `segmentDefinitionClauses` the plugin listed on `search.people`. Prefer this over ad-hoc SQL or `task` when looking up people. Returns person summaries with related records; each related subsection (`emails`, `phones`, `addresses`, `person_remote`, `transactions`) includes a total count and up to 100 sample records. A segment definition tree is not a search request. `command: "list"` returns the searches plugins export. Any other command throws.
+Generic search. `command` defaults to `people`: quick lookup by email, phone, name, or person id. Prefer this over ad-hoc SQL or `task` when looking up people. Returns person summaries with related records; each related subsection (`emails`, `phones`, `addresses`, `person_remote`, `transactions`) includes a total count and up to 100 sample records. `command: "list"` returns the available searches. Any other command throws.
+
+Rule: A set of people built from segment definition clauses is a segment definition, not a search. Preview it with [`segment`](#segment) `command: "preview"`. `search` rejects `segmentDefinitionClauses`, `definition`, and definition trees.
 
 - Required: `account_id`
 - Optional: `command` — `people` (default) or `list`
 - For `people`, filters (string or array each): `emails`, `person_ids`, `phones`, `given_names`, `last_names`
-- Optional: `segmentDefinitionClauses` — array of `{ path, options, exclude? }` from `searches.people`, e.g. `{ path: "@engine9/schemas/person_email:segment_definition_clause:emails", options: { emailMatch: "a@" } }` (merged with quick lookup using AND)
 - Optional: `limit` (max 1000, default 10)
 - Returns: `{ ok: true, result }` where `result` is the `PersonWorker.search` payload
 
@@ -402,34 +403,19 @@ Example — email lookup:
 { "account_id": "test", "emails": ["foo@bar.com"], "limit": 10 }
 ```
 
-Example — opted-in clause:
-
-```json
-{
-  "account_id": "test",
-  "segmentDefinitionClauses": [
-    {
-      "path": "@engine9/schemas/person_email:segment_definition_clause:emails",
-      "options": { "subscriptionStatus": "Subscribed" }
-    }
-  ],
-  "limit": 10
-}
-```
-
 Example — list searches:
 
 ```json
 { "account_id": "test", "command": "list" }
 ```
 
-`result.searches.people.standard` is quick lookup. `result.searches.people.segmentDefinitionClauses` is the opted-in person predicates (`path`, `title`, `form`, `plugin.instances`).
+`result.searches.people.standard` is the quick lookup form.
 
 For `/e9 search …` token parsing (emails vs person_ids vs names), see [e9-cli — `/e9 search` parsing rules](../e9-cli/SKILL.md#e9-search-parsing-rules).
 
 ### Model source-code membership
 
-People in or out of a **current** model for a source code use the installed model's segment definition clauses, not ad-hoc SQL. Full paths, forms, and include/exclude: [e9-model — Person search](../e9-model/SKILL.md#person-search). Submit the clause on `search` `segmentDefinitionClauses`, or inside a segment definition previewed with `segment` `command: "preview"`.
+People in or out of a **current** model for a source code use the installed model's segment definition clauses, not ad-hoc SQL. Full paths, forms, and include/exclude: [e9-model — Model segment definition clauses](../e9-model/SKILL.md#model-segment-definition-clauses). Put the clauses in a segment definition and preview it with `segment` `command: "preview"`.
 
 | Intent | Clause |
 | --- | --- |
@@ -439,11 +425,11 @@ People in or out of a **current** model for a source code use the installed mode
 
 `<model>` is `first_touch`, `crm_origin`, or `last_acquisition`. `sourceCode` containing `%` is `LIKE`. `exclude` is set on the clause; it is not a form property.
 
-Rule: People in a **legacy** model for a source code, and out of the matching current model, are [e9-model/legacy.md](../e9-model/legacy.md). Read that file only when the user explicitly asked for legacy models. Do not add `@engine9/plugins/models/legacy:segment_definition_clause:personSourceCode` otherwise, even if `command: "list"` includes it.
+Rule: People in a **legacy** model for a source code, and out of the matching current model, are [e9-model/legacy.md](../e9-model/legacy.md). Read that file only when the user explicitly asked for legacy models. Do not add `@engine9/plugins/models/legacy:segment_definition_clause:personSourceCode` otherwise, even if `segmentDefinitionClauses` lists it.
 
 ### `segmentDefinitionClauses`
 
-Every segment definition clause installed plugins publish, including clauses not listed on `search.people`. Use this to author a segment definition. People search only accepts clauses that `command: "list"` shows under `searches.people`.
+Every segment definition clause installed plugins publish. Use this to author a segment definition, then preview it with `segment` `command: "preview"`.
 
 - Required: `account_id`
 - Returns: `{ ok: true, account_id, segmentDefinitionClauses, errors }`

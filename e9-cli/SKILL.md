@@ -1,11 +1,11 @@
 ---
 name: e9-cli
-description: Connect Cursor to engine9 MCP — log in first via mcp_auth, set account scope with /e9a, and handle /e9 command-style interactions including plugin install, person search, and task scheduling.
+description: Connect Cursor to engine9 MCP — log in first via mcp_auth, set account scope with /e9a, and handle /e9 command-style interactions including plugin install, people lookup, and task scheduling.
 ---
 
 # engine9 CLI
 
-Use this skill to configure or troubleshoot an engine9 MCP connection in Cursor or another MCP client. It also defines `/e9` and `/e9a` command behavior, including account scope, plugin install, person search, reports, segments, API keys, and task scheduling.
+Use this skill to configure or troubleshoot an engine9 MCP connection in Cursor or another MCP client. It also defines `/e9` and `/e9a` command behavior, including account scope, plugin install, people lookup, reports, segments, API keys, and task scheduling.
 
 ## Quick reference
 
@@ -269,7 +269,7 @@ For tokenized arguments after `search`:
 
 When multiple values exist for a filter, pass them as arrays.
 
-People in or out of a current model by source code are not token filters. Call MCP `search` with `command: "people"` and `segmentDefinitionClauses` from `search` `command: "list"`. Paths and forms: [e9-model — Person search](../e9-model/SKILL.md#person-search). A full segment definition tree is `segment` `command: "preview"`, not `search`. People in a legacy model for a source code and out of the matching current model: [e9-model/legacy.md](../e9-model/legacy.md), and only when the user explicitly asked for legacy.
+People in or out of a current model by source code are not token filters and not a search. Build a segment definition from the model's clauses (MCP `segmentDefinitionClauses`) and preview it with `segment` `command: "preview"`. Paths and forms: [e9-model — Model segment definition clauses](../e9-model/SKILL.md#model-segment-definition-clauses). People in a legacy model for a source code and out of the matching current model: [e9-model/legacy.md](../e9-model/legacy.md), and only when the user explicitly asked for legacy.
 
 Example mapping for `/e9 search foo@bar.com 12345`:
 

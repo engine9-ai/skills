@@ -12,9 +12,10 @@ description: >-
   acquisition_date, SOURCE_CODE_OVERRIDE) that every model sorts by. Use when
   working with ModelWorker, model_*_person, model_*_transaction, lifetime value,
   LTV, acquisition ROI, first touch, CRM origin, reading/running a model, or
-  a person search for people in or out of a current model by source code
-  (search command list, personSourceCode / transactionSourceCode). Legacy model
-  search is legacy.md and is used only when the user explicitly asks for legacy.
+  a segment definition for people in or out of a current model by source code
+  (segmentDefinitionClauses, personSourceCode / transactionSourceCode). Legacy
+  model clauses are legacy.md and are used only when the user explicitly asks
+  for legacy.
 ---
 
 # engine9 models
@@ -22,8 +23,8 @@ description: >-
 An engine9 model reads a person's timeline and assigns person-level source-code
 credit for questions such as lifetime value and acquisition ROI. Use this skill
 to understand shipped models, inspect model output, diagnose a person's result,
-run a model, or search people in or out of a current model by source code. It
-assumes no prior engine9 knowledge. Legacy model search is
+run a model, or select people in or out of a current model by source code. It
+assumes no prior engine9 knowledge. Legacy model clauses are
 [legacy.md](legacy.md), and only when the user explicitly asked for legacy.
 
 ## Quick reference
@@ -35,7 +36,7 @@ assumes no prior engine9 knowledge. Legacy model search is
 | Inspect output tables or query results | [File format](#file-format) and [Examples](#examples) |
 | Investigate one person's credit | [Troubleshooting](#troubleshooting) |
 | Run a model | [Workflow](#workflow) |
-| Search people in or out of a current model by source code | [Person search](#person-search) |
+| Select people in or out of a current model by source code | [Model segment definition clauses](#model-segment-definition-clauses) |
 | Legacy model membership (only if the user asked) | [legacy.md](legacy.md) |
 
 ## Concepts
@@ -356,9 +357,9 @@ when the user explicitly asked for legacy.
 | **prefix** | A model's table stem, e.g. `model_first_touch`. |
 | **reason** | Why the model chose what it chose, stored per row. |
 
-## Person search
+## Model segment definition clauses
 
-Each current model plugin exports two segment definition clauses and lists both on `search.people`. Installing the model installs both. A people-search UI loads MCP `search` with `command: "list"` (`searches.people.segmentDefinitionClauses`, also `GET /data/search`) and submits those clauses as `segmentDefinitionClauses` on `command: "people"`. A segment definition tree (`{ and: [{ path, options, exclude? }] }`) is previewed with MCP `segment` `command: "preview"`, not with `search`. Handlers are listed only for plugins installed on that account.
+Each current model plugin exports two segment definition clauses. Installing the model installs both. A UI loads them from MCP `segmentDefinitionClauses` (`GET /data/segment-definition/clauses`), builds a segment definition (`{ and: [{ path, options, exclude? }] }`), and previews it with MCP `segment` `command: "preview"` (`POST /data/segment-definition/preview`). The catalog lists clauses only for plugins installed on that account.
 
 Rule: Build the form from the catalog entry (`path`, `title`, `form`).
 `form` is JSON Schema `{ type: "object", properties, required }`. `options`
@@ -426,14 +427,14 @@ Rule: Pick the handler that matches the question. Person credit uses
 `personSourceCode`. Transaction credit uses `transactionSourceCode`. Excluding
 one does not exclude the other.
 
-Account-specific models that export `createModelSearches` show up the same way:
+Account-specific models that export `createModelSegmentDefinitionClauses` show up the same way:
 `<package>:segment_definition_clause:personSourceCode` and `<package>:segment_definition_clause:transactionSourceCode`,
 with the same `sourceCode` form.
 
 Rule: Legacy membership — people in `person_model_source_code` for a source
 code, including people in a legacy model and out of the matching current model
 — is [legacy.md](legacy.md). Read it only when the user explicitly asked for
-legacy models. Do not add `@engine9/plugins/models/legacy` to a search otherwise.
+legacy models. Do not add `@engine9/plugins/models/legacy` to a definition otherwise.
 
 ## Related documentation
 

@@ -193,7 +193,7 @@ Reports are composed dashboards owned by native report plugins at `@engine9/plug
 | `schema.js`            | Default export `{ tables: [...] }`                    |
 | `transforms/inbound/`  | Normalize, identity, and upsert steps                 |
 | `transforms/outbound/` | Enrichment and output steps                           |
-| `search.js`            | Optional UI-to-EQL handlers                           |
+| `segmentDefinitionClauses.js` | Optional segment definition clauses (UI form to EQL) |
 | `segments.js`          | Optional saved-audience definitions                   |
 | `metrics.js`           | Optional aggregate cards                              |
 | `ui.console.json5`     | Optional console UI configuration                     |
@@ -250,19 +250,14 @@ export const tables = [
 export default { tables };
 ```
 
-### Segment definition clauses and search
+### Segment definition clauses
 
-Publish each person predicate once on `segmentDefinitionClauses`. `search` is keyed by command name. `people` is the command this change implements. List the handler keys that people search may use:
+Publish each person predicate once on `segmentDefinitionClauses`, in `segmentDefinitionClauses.js`, and put it on the default export:
 
 ```javascript
 const emails = { title: 'Emails', form, optionsToEQL }
 export const segmentDefinitionClauses = { emails }
-export const search = {
-  people: {
-    title: 'People',
-    segmentDefinitionClauses: ['emails']
-  }
-}
+export default { segmentDefinitionClauses }
 ```
 
 | Member                         | Purpose                           |
@@ -272,11 +267,11 @@ export const search = {
 | `optionsToEQL(options)`        | Returns `{ text, eql }`           |
 | `optionsToEQLContext(options)` | Optional pre-query lookup context |
 
-A flat map of handlers on `search` throws. Canonical forms use `{ title, type: 'object', properties, required? }`. EQL may contain `table`, `columns`, `conditions`, and `joins`; conditions may be structured (`EQUALS`, `LIKE`) or raw `{ eql: '...' }` fragments.
+Clauses on a `search` export throw. Canonical forms use `{ title, type: 'object', properties, required? }`. EQL may contain `table`, `columns`, `conditions`, and `joins`; conditions may be structured (`EQUALS`, `LIKE`) or raw `{ eql: '...' }` fragments.
 
-People search is MCP `search` with `command: "people"` (the default) or `POST /data/search`. Quick lookup is `emails`, `phones`, `given_names`, `last_names`, `person_ids`. Opted-in clauses go in `segmentDefinitionClauses` as an array of `{ path, options, exclude? }`. `command: "list"` and `GET /data/search` return `searches.people`. Authoring a full segment definition uses MCP `segmentDefinitionClauses` (`GET /data/segment-definition/clauses`) and previews the tree with `segment` `command: "preview"`. Set `exclude: true` on a clause for people outside that handler's set; `exclude` is not a form field. A path is `<plugin>:segment_definition_clause:<handler>`.
+Clauses are discovered with MCP `segmentDefinitionClauses` (`GET /data/segment-definition/clauses`). A segment definition combines them and is previewed with `segment` `command: "preview"` (`POST /data/segment-definition/preview`). Set `exclude: true` on a clause for people outside that handler's set; `exclude` is not a form field. A path is `<plugin>:segment_definition_clause:<handler>`. MCP `search` (`POST /data/search`) is quick lookup by email, phone, name, or person id, and does not accept clauses.
 
-Current model membership (`personSourceCode` / `transactionSourceCode`, include and exclude) is [e9-model — Person search](../e9-model/SKILL.md#person-search). People in a legacy model for a source code and out of the matching current model are [e9-model/legacy.md](../e9-model/legacy.md). Read that file only when the user explicitly asked for legacy models.
+Current model membership (`personSourceCode` / `transactionSourceCode`, include and exclude) is [e9-model — Model segment definition clauses](../e9-model/SKILL.md#model-segment-definition-clauses). People in a legacy model for a source code and out of the matching current model are [e9-model/legacy.md](../e9-model/legacy.md). Read that file only when the user explicitly asked for legacy models.
 
 ### Segment definition
 
@@ -549,9 +544,9 @@ Thin, schema-only schema plugins are also valid. `message/index.js` exports only
 | Second install creates or reuses the wrong row  | Review `metadata.unique`, schema plugin defaults, and `options.unique`                                                            |
 | Installed transform is absent                   | Confirm `metadata.inbound` names an exported transform and its `type` matches the slot                                         |
 | Upsert fails on duplicate keys                  | Merge rows by the schema's unique key with `mergeIntoQueue`                                                                    |
-| Search does not appear in discovery             | Confirm the plugin is installed and the handler uses a canonical form                                                          |
+| Clause does not appear in discovery             | Confirm the plugin is installed, the clause is on `segmentDefinitionClauses`, and it uses a canonical form                    |
 | Settings do not appear in MCP `plugin` settings | Confirm the plugin is installed, `settings` is on the default export or sibling `settings.js`, and the setting is not `hidden` |
-| Segment membership is unexpectedly broad        | Inspect `universe`, search path, and optional `pluginId` scope                                                                 |
+| Segment membership is unexpectedly broad        | Inspect `universe`, clause path, and optional `pluginId` scope                                                                 |
 | Schema plugin report is not available           | Move it to a native `@engine9/plugins/reports/<area>` package                                                                  |
 | Package cannot resolve                          | Use the package path and inspect resolver/registration rules; do not add a prefix                                              |
 | Stack installation conflicts                    | Inspect installed stack `exclude` metadata and utilities/limited-pii `exclude_pii`                                                         |
@@ -573,8 +568,8 @@ Thin, schema-only schema plugins are also valid. `message/index.js` exports only
 - `person_email/transforms/inbound/extract_identifiers.js`
 - `person/transforms/simpleMap.js`
 - `person_remote/index.js`
-- `person_email/search.js`, `person/index.js`, and `channels/email/search.js`
-- `segment/search.js`
+- `person_email/segmentDefinitionClauses.js`, `person/index.js`, and `channels/email/segmentDefinitionClauses.js`
+- `segment/segmentDefinitionClauses.js`
 - `person_email/segments.js`, `transaction/core/segments.js`, and `channels/email/segments.js`
 - `person/metrics.js` and `source_code/metrics.js`
 - `plugins/reports/people/reports/subscription_status.js`

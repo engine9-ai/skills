@@ -209,10 +209,10 @@ lifetime `_stats` tables, and the two `_stats_by_date` tables. Do not rely on
 `plugin.table_prefix` — that gets a per-install counter.
 
 Plugin identity: `@engine9/plugins/models/my_model`, or `engine9-accounts/...`
-for an account-specific model. Export `search` from
-`createModelSearches({ prefix, label })` so the UI catalog includes
-`personSourceCode` and `transactionSourceCode`. Form contract:
-[SKILL.md — Person search](SKILL.md#person-search).
+for an account-specific model. Export `segmentDefinitionClauses` from
+`createModelSegmentDefinitionClauses({ prefix, label })` so the clause catalog
+includes `personSourceCode` and `transactionSourceCode`. Form contract:
+[SKILL.md — Model segment definition clauses](SKILL.md#model-segment-definition-clauses).
 
 **Person transform.** Input `batch[]` is `{ person_id, timelineEntries }`.
 Entries already carry `entry_type` and dictionary labels when the source
@@ -333,14 +333,14 @@ legacy models.
 
 ## Legacy models
 
-Old-identity scores, the legacy person-search handler, and pivot comparisons
+Old-identity scores, the legacy segment definition clause, and pivot comparisons
 are in [legacy.md](legacy.md). Read that file only when the user explicitly
 asked for legacy models. Keep those reads out of the current `{prefix}_*` path.
 `person_id_int` is not `person.id`.
 
 ## Additional resources
 
-- Concepts, LTV / ROI reads, attribution boundary, current person search: [SKILL.md](SKILL.md)
+- Concepts, LTV / ROI reads, attribution boundary, current model clauses: [SKILL.md](SKILL.md)
 - Legacy models (only when the user explicitly asked): [legacy.md](legacy.md)
 - Table DDL and payload shapes: [schema.md](schema.md)
 - Timeline entries and loading: [e9-timeline](../e9-timeline/SKILL.md)
