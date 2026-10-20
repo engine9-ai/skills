@@ -98,7 +98,7 @@ When diagnosing timeline or model results, read `sql` first. Do not re-invent th
 
 ### Hard stop — do not continue
 
-When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `search`, `eql`, `sql`, `analyze`, `segment`, `inventory`, `timelinePerson`, `timelinePersonLegacy`, `chat`, `file`, `apiKey`, `report`, `legacyReportFolder`, `plugin`, etc.).
+When **any** of these is true, **stop the current workflow immediately** and report the error to the user. Do **not** call further account-scoped tools (`task`, `lookup`, `eql`, `sql`, `analyze`, `segment`, `inventory`, `timelinePerson`, `timelinePersonLegacy`, `chat`, `file`, `apiKey`, `report`, `legacyReportFolder`, `plugin`, etc.).
 
 **Exception — fleet plugin install:** a per-account MCP `plugin` `install` failure (`Cannot connect to the … database`, `Not authorized for account`, unmet dependencies) is a **skip** for that `account_id` only. Continue remaining accounts and report successes and failures. Session-level auth failure and `getPluginMetadata` still stop the whole job. See [e9-plugin](../e9-plugin/SKILL.md).
 
@@ -209,10 +209,10 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Set an account's default warehouse | `account` `command: "setDefaultWarehouse"` with `remote_plugin_id` (`plugin.remote_plugin_id`). The JSON API body is `bot_id`; the account stores `default_warehouse_bot_id`. Do not send `bot_id` or `default_warehouse_bot_id` |
 | List plugin settings (types, descriptions, current values) grouped by plugin | `plugin` with `command: "settings"` |
 | Install a plugin on one account or a parent’s children | `plugin` `install` — [e9-plugin](../e9-plugin/SKILL.md). Do not use `task` |
-| Search people by email, phone, name, or id | `search` |
+| Look up people by email, phone, name, or id | `lookup` |
 | People in or out of a current model by source code | A segment definition with the model's clauses, previewed with `segment` `command: "preview"` — [e9-model — Model segment definition clauses](../e9-model/SKILL.md#model-segment-definition-clauses) |
 | People in a legacy model and out of the current model | [e9-model/legacy.md](../e9-model/legacy.md) — only when the user explicitly asked for legacy |
-| List the searches available on an account | `search` with `command: "list"` |
+| List the lookups available on an account | `lookup` with `command: "list"` |
 | Author a segment definition | `segmentDefinitionClauses`, then `segment` `command: "preview"` |
 | Person / source-filtered current timeline + models | `timelinePerson` (`command: inspect`) |
 | Account / person **legacy** `timeline_v3*` inspect | `timelinePersonLegacy` |
@@ -385,17 +385,17 @@ Example — update a declared setting:
 
 HTTP: `GET /data/settings`, `POST /data/settings`. Fleet install: [e9-plugin](../e9-plugin/SKILL.md). Authoring: [create-engine9-plugin](../create-engine9-plugin/SKILL.md#settings).
 
-### `search`
+### `lookup`
 
-Generic search. `command` defaults to `people`: quick lookup by email, phone, name, or person id. Prefer this over ad-hoc SQL or `task` when looking up people. Returns person summaries with related records; each related subsection (`emails`, `phones`, `addresses`, `person_remote`, `transactions`) includes a total count and up to 100 sample records. `command: "list"` returns the available searches. Any other command throws.
+Look up people you can already identify. `command` defaults to `people`: match by email, phone, name, or person id. Prefer this over ad-hoc SQL or `task` when looking up people. Returns person summaries with related records; each related subsection (`emails`, `phones`, `addresses`, `person_remote`, `transactions`) includes a total count and up to 100 sample records. `command: "list"` returns the available lookups. Any other command throws.
 
-Rule: A set of people built from segment definition clauses is a segment definition, not a search. Preview it with [`segment`](#segment) `command: "preview"`. `search` rejects `segmentDefinitionClauses`, `definition`, and definition trees.
+Rule: A set of people built from segment definition clauses is a segment definition, not a lookup. Preview it with [`segment`](#segment) `command: "preview"`. `lookup` rejects `segmentDefinitionClauses`, `definition`, and definition trees.
 
 - Required: `account_id`
 - Optional: `command` — `people` (default) or `list`
 - For `people`, filters (string or array each): `emails`, `person_ids`, `phones`, `given_names`, `last_names`
 - Optional: `limit` (max 1000, default 10)
-- Returns: `{ ok: true, result }` where `result` is the `PersonWorker.search` payload
+- Returns: `{ ok: true, result }` where `result` is the `PersonWorker.lookup` payload
 
 Example — email lookup:
 
@@ -403,15 +403,15 @@ Example — email lookup:
 { "account_id": "test", "emails": ["foo@bar.com"], "limit": 10 }
 ```
 
-Example — list searches:
+Example — list lookups:
 
 ```json
 { "account_id": "test", "command": "list" }
 ```
 
-`result.searches.people.standard` is the quick lookup form.
+`result.lookups.people.standard` is the people lookup form.
 
-For `/e9 search …` token parsing (emails vs person_ids vs names), see [e9-cli — `/e9 search` parsing rules](../e9-cli/SKILL.md#e9-search-parsing-rules).
+For `/e9 lookup …` token parsing (emails vs person_ids vs names), see [e9-cli — `/e9 lookup` parsing rules](../e9-cli/SKILL.md#e9-lookup-parsing-rules).
 
 ### Model source-code membership
 
@@ -955,7 +955,7 @@ When the user asks for **all accounts**, **parent** children, or other multi-acc
 - Do **not** call `account` plugins (or any account-DB worker) once per child to “check access”.
 - Do **not** use the first id in a parent/all list as a required DB-connected `account_id` before the remote list.
 - Drive the request with remote multi-account filters (`parent_account_id`, `account_ids`, etc.) and status filters. Use Prefect `state_type` values only (`FAILED`, `RUNNING`, `COMPLETED`, `PAUSED`, …). Legacy Mongo tokens (`complete`, `error`, `in_progress`) are **rejected with 422**. Account database connectivity is not a prerequisite for remote-legacy flow-run list reads.
-- The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `search`, `timelinePerson`, `timelinePersonLegacy`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
+- The hard-stop on `Cannot connect to the … database` still applies to tools that truly need that account DB (`sql`, `eql`, `lookup`, `timelinePerson`, `timelinePersonLegacy`, single-account plugin schedule path resolution). It must **not** block multi-account remote flow-run listing.
 - Listing is one request. **Counting or metrics** for those runs is also one request (`task` `action: "count"` / `"metrics"` — same `parent_account_id` / `account_ids`). **Archiving or bulk-retrying** those runs is also one request: reuse the same `parent_account_id` / `account_ids` and send every `flow_run_id` together ([bulk archive](#bulk-archive--retry-of-flow-runs)). Do **not** fan out one MCP call per child.
 
 ### `task` action `list` — remote flow runs
@@ -1098,7 +1098,7 @@ After [Step 0 — Log in](#step-0--log-in-always-first):
 
 1. Call `user` to confirm signed-in identity and account access.
 2. If account id is unknown, call `account` with `command: "search"` and the known filters (prefix/parent/plugin). If `count` is `0`, **stop** — do not read compiled catalogs. Otherwise set scope via `/e9a <account_id>` or call `account` plugins to cache methods.
-3. Call `search` with a known email to validate account-scoped data access.
+3. Call `lookup` with a known email to validate account-scoped data access.
 4. For parent/all **remote flow-run** requests, skip step 2–3 per-child probes — use multi-account remote filters only.
 
 ## Related documentation

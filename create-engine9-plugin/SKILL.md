@@ -288,7 +288,7 @@ Rule: A fixed list is not a source. Put region codes, statuses, and other known 
 
 An unknown `resolveOptionsUsing` value appears in the catalog's `errors` for that clause path.
 
-Clauses are discovered with MCP `segmentDefinitionClauses` (`GET /data/segment-definition/clauses`). A segment definition combines them and is previewed with `segment` `command: "preview"` (`POST /data/segment-definition/preview`). Set `exclude: true` on a clause for people outside that handler's set; `exclude` is not a form field. A path is `<plugin>:segment_definition_clause:<handler>`. MCP `search` (`POST /data/search`) is quick lookup by email, phone, name, or person id, and does not accept clauses.
+Clauses are discovered with MCP `segmentDefinitionClauses` (`GET /data/segment-definition/clauses`). A segment definition combines them and is previewed with `segment` `command: "preview"` (`POST /data/segment-definition/preview`). Set `exclude: true` on a clause for people outside that handler's set; `exclude` is not a form field. A path is `<plugin>:segment_definition_clause:<handler>`. MCP `lookup` (`POST /data/lookup`) finds people by email, phone, name, or person id, and does not accept clauses.
 
 Current model membership (`personSourceCode` / `transactionSourceCode`, include and exclude) is [e9-model — Model segment definition clauses](../e9-model/SKILL.md#model-segment-definition-clauses). People in a legacy model for a source code and out of the matching current model are [e9-model/legacy.md](../e9-model/legacy.md). Read that file only when the user explicitly asked for legacy models.
 
@@ -330,7 +330,7 @@ Submodules share their plugin's row, so setting names are plugin-wide. A submodu
 
 Rule: Code that reads a catalog-declared setting applies the declared default itself when no `setting` row exists. Nothing inserts catalog defaults into the warehouse.
 
-Account-scoped discovery uses the same aggregate path as inbound weaving, `search` `command: "list"`, and report list:
+Account-scoped discovery uses the same aggregate path as inbound weaving, `segmentDefinitionClauses`, and report list:
 
 | Surface | Call                                                                                        |
 | ------- | ------------------------------------------------------------------------------------------- |

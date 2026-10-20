@@ -15,11 +15,11 @@ Use this skill to configure or troubleshoot an engine9 MCP connection in Cursor 
 | Select one account | `/e9a <account_id>` |
 | Select children of a parent | `/e9a parent <parent_account_id>` |
 | Install a plugin | `/e9 plugin install <path>` — [e9-plugin](../e9-plugin/SKILL.md) |
-| Search people | `/e9 search <terms>` |
+| Look up people | `/e9 lookup <terms>` |
 | Run an on-demand method | `/e9 task <plugin-path-or-alias> <method> [options...]` |
 | Configure Cursor | Add the server to `~/.cursor/mcp.json` and permissions to `~/.cursor/permissions.json` |
 
-**Rule:** On any MCP tool error, follow [e9-mcp — MCP tool errors — stop immediately](../e9-mcp/SKILL.md#mcp-tool-errors--stop-immediately); do not call downstream account-scoped tools after a failed `account`, `task`, `search`, or similar call.
+**Rule:** On any MCP tool error, follow [e9-mcp — MCP tool errors — stop immediately](../e9-mcp/SKILL.md#mcp-tool-errors--stop-immediately); do not call downstream account-scoped tools after a failed `account`, `task`, `lookup`, or similar call.
 
 **Rule:** If an account or parent cannot be found, stop. Do not resolve it by any other mechanism. A miss is MCP `account` search `count: 0`, an empty `user.accounts`, or plugins reporting the account unknown or unauthorized. Tell the user and end the turn. Do not search again with a different filter, a guessed id, or `include_disabled`. Do not read `accounts.d`, `accounts.compiled.json5`, `account-config.json`, `frakture-account-config.json`, `.e9_parameters`, or any other file, and do not run the `e9` CLI or a shell search to find the id.
 
@@ -64,7 +64,7 @@ When handling `/e9` or `/e9a` requests, **do not read local workspace code** to 
 1. Cursor MCP config (`mcp.json`, `permissions.json`)
 2. Auth expectations (OAuth vs `localdev` bearer)
 3. `/e9a` account scope and plugin cache
-4. `/e9` session behavior, search parsing, and task scheduling
+4. `/e9` session behavior, lookup parsing, and task scheduling
 
 ## Server endpoint and startup
 
@@ -119,7 +119,7 @@ Or allow a subset:
 
 ```json
 {
-  "mcpAllowlist": ["engine9.ai:ok", "engine9.ai:user", "engine9.ai:account", "engine9.ai:search", "engine9.ai:task"]
+  "mcpAllowlist": ["engine9.ai:ok", "engine9.ai:user", "engine9.ai:account", "engine9.ai:lookup", "engine9.ai:task"]
 }
 ```
 
@@ -192,7 +192,7 @@ Supported forms:
 - `/e9 plugin listAvailable` — MCP `plugin` `command: listAvailable`
 - `/e9 plugin install <path>` — MCP `plugin` `command: install` on session account(s); see [e9-plugin](../e9-plugin/SKILL.md)
 - `/e9 plugin settings [path]` — MCP `plugin` `command: settings`
-- `/e9 search foo@bar.com`
+- `/e9 lookup foo@bar.com` — MCP `lookup`
 - `/e9 segment list` — MCP `segment` with `command: list`
 - `/e9 segment build <segment_id|definition_path>` — MCP `segment` with `command: build`
 - `/e9 report list` — MCP `report` with `command: list`
@@ -204,7 +204,7 @@ Account/domain create and secrets: use **e9-account** (`cloud-services/e9-accoun
 
 ### Session and account requirements
 
-- Every MCP call that is account-scoped MUST include `account_id` **when the op is single-account** (search, sql, eql, plugin schedule, etc.).
+- Every MCP call that is account-scoped MUST include `account_id` **when the op is single-account** (lookup, sql, eql, plugin schedule, etc.).
 - If `account_id` is already known in **this chat session** (`engine9.account_id` from `/e9a` or an explicit user statement), reuse it.
 - If scope is missing, **ask the user** (single id, `/e9a parent …`, or `/e9a all`) before running scoped tools. Stop and wait — do not proceed with a guessed id.
 - Do not guess `account_id`. If MCP did not return it, stop. Do not resolve it from `.e9_parameters`, `.e9_cli_history`, `accounts.d/`, `accounts.compiled.json5`, or any other file.
@@ -228,10 +228,10 @@ Use this for requests like “list current errored tasks”, cross-account job s
    - Confirm signed in via MCP `user`.
    - Confirm active `account_id` (from session or user); if missing, suggest `/e9a <account_id>`.
    - If `engine9.plugins` is not cached for that account, call MCP `account` or suggest `/e9a`.
-2. `/e9 search ...`:
+2. `/e9 lookup ...`:
    - Ensure active `account_id` exists (or request it / suggest `/e9a`).
-   - Parse search terms into MCP `search` arguments.
-   - Call `search` with mapped filters and `account_id`.
+   - Parse lookup terms into MCP `lookup` arguments.
+   - Call `lookup` with mapped filters and `account_id`.
 3. `/e9 task ...`:
    - **Multi-step flow** (user asks to deploy/schedule a flow such as identity rebuild): use MCP `task` with `flow_id` (e.g. `identity-rebuild`) — see [e9-tasks-api/deploy-flow.md](../e9-tasks-api/deploy-flow.md). Do not expand steps into on-demand path/method calls. If MCP returns flow-not-found and you have a local `engine9/server` checkout with the flow file, fall back to `e9 task runFlow -a <account> --flow=rebuild/identity-rebuild.flow.json5`.
    - **On-demand method**: require `engine9.account_id` and (for non-`e9workers` paths) `engine9.plugins` (run `/e9a` first if missing).
@@ -259,9 +259,9 @@ Use this for requests like “list current errored tasks”, cross-account job s
    - `listAvailable` / `settings`: session `account_id`.
    - `install <path>`: resolve path from `listAvailable`; if `engine9.account_ids` is a parent/all list, install on **each** id (parallel batches). Do not call `account` plugins first.
 
-## `/e9 search` parsing rules
+## `/e9 lookup` parsing rules
 
-For tokenized arguments after `search`:
+For tokenized arguments after `lookup`:
 
 - Tokens containing `@` MUST be treated as email inputs and mapped to `emails`.
 - Tokens that are straight integers (digits only, e.g. `12345`) MUST be treated as `person_ids`.
@@ -269,9 +269,9 @@ For tokenized arguments after `search`:
 
 When multiple values exist for a filter, pass them as arrays.
 
-People in or out of a current model by source code are not token filters and not a search. Build a segment definition from the model's clauses (MCP `segmentDefinitionClauses`) and preview it with `segment` `command: "preview"`. Paths and forms: [e9-model — Model segment definition clauses](../e9-model/SKILL.md#model-segment-definition-clauses). People in a legacy model for a source code and out of the matching current model: [e9-model/legacy.md](../e9-model/legacy.md), and only when the user explicitly asked for legacy.
+People in or out of a current model by source code are not token filters and not a lookup. Build a segment definition from the model's clauses (MCP `segmentDefinitionClauses`) and preview it with `segment` `command: "preview"`. Paths and forms: [e9-model — Model segment definition clauses](../e9-model/SKILL.md#model-segment-definition-clauses). People in a legacy model for a source code and out of the matching current model: [e9-model/legacy.md](../e9-model/legacy.md), and only when the user explicitly asked for legacy.
 
-Example mapping for `/e9 search foo@bar.com 12345`:
+Example mapping for `/e9 lookup foo@bar.com 12345`:
 
 ```json
 {

@@ -58,7 +58,7 @@ People credited to a source code by the legacy model, who are not credited to th
 }
 ```
 
-Submit that object as MCP `search` `search` (or `POST /data/search`). Swap `modelId` and the excluded path together using the table above (`2` with `crm_origin`, `8` with `last_acquisition`). A code containing `%` is `LIKE` on both clauses.
+Preview that definition with MCP `segment` `command: "preview"` (`POST /data/segment-definition/preview`). Swap `modelId` and the excluded path together using the table above (`2` with `crm_origin`, `8` with `last_acquisition`). A code containing `%` is `LIKE` on both clauses.
 
 Catalog entry the UI binds the legacy control to:
 
