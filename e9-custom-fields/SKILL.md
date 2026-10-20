@@ -150,7 +150,10 @@ Rule: Offer the backdate; do not schedule it without confirmation. A full-histor
 | Symptom | Action |
 | --- | --- |
 | `account` `plugins` is empty but `sql` shows `<prefix>_person` tables | Legacy Frakture-only account. Hard stop at step B; report it |
+| engine9 was just deployed and only core `@engine9/schemas/*` rows exist | Vendor plugin rows (with `remote_plugin_id` set to the Frakture bot id) can be added after the deploy. Re-check `plugin` `settings` before reporting a hard stop |
+| The dataflow job already passes `custom_fields` as a method option | Copy those fields into the setting (append) when the user asks, then omit `custom_fields` on backfill jobs so the setting is the only source |
 | Setting exists but the value is a string | Split on commas, trim, then append and write back an array |
+| Log reads the setting (`select name, value from setting … name='<setting>'`) and then says `No custom_fields, not getting custom fields` | The plugin read the setting but did not apply it (for example, a JSON string value that is never parsed). The load will not populate the columns. Report it as a plugin bug; passing `custom_fields` as a method option on that job is the workaround, with the user's approval |
 | New fields missing after the next pull | Confirm the stored setting value; check the pull's log; check whether the target table needs the column (step F) |
 | `setSetting` validation error | Match the declared `type` (`array`); send JSON, not a quoted list |
 
