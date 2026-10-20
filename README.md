@@ -7,6 +7,7 @@ This directory contains public skills for working with engine9 deployments, data
 | Task | Skill |
 | --- | --- |
 | Install a plugin on accounts | [Plugin install](e9-plugin/SKILL.md) |
+| Add custom fields to a plugin's people or transaction pull | [Custom fields](e9-custom-fields/SKILL.md) |
 | Upgrade databases after a core or schemas release | [Upgrades](e9-upgrade/SKILL.md) |
 | Build a schema plugin or plugin | [Create plugin or schema plugin](create-engine9-plugin/SKILL.md) |
 | Connect Cursor and choose account scope | [CLI](e9-cli/SKILL.md) |
@@ -39,6 +40,7 @@ When using an engine9 MCP server, discover plugins, methods, and tool parameters
 | Skill | Path | Use when |
 | --- | --- | --- |
 | Plugin install | [e9-plugin/SKILL.md](e9-plugin/SKILL.md) | Deploy a package path onto one account or all children of a parent via MCP `plugin` |
+| Custom fields | [e9-custom-fields/SKILL.md](e9-custom-fields/SKILL.md) | Append vendor custom fields to `people_custom_fields` / `transaction_custom_fields`; hard stop when the setting does not exist |
 | Create plugin or schema plugin | [create-engine9-plugin/SKILL.md](create-engine9-plugin/SKILL.md) | Implement `@engine9/schemas/*` packages and `@engine9/plugins/*` native plugins |
 | CLI and account scope | [e9-cli/SKILL.md](e9-cli/SKILL.md) | Connect Cursor to engine9 MCP, choose account scope, search, or schedule tasks |
 | MCP tools | [e9-mcp/SKILL.md](e9-mcp/SKILL.md) | Select native MCP tools, discover accounts, install plugins, or use task fallback |

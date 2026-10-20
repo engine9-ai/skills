@@ -159,3 +159,4 @@ Natural language ("install `<path>` on all `<parent>` clients") is the same work
 - [CLI / account scope](../e9-cli/SKILL.md)
 - [Author a plugin or schema plugin](../create-engine9-plugin/SKILL.md)
 - [Plugin settings authoring](../create-engine9-plugin/SKILL.md#settings)
+- [Add custom fields to a pull](../e9-custom-fields/SKILL.md)

@@ -315,7 +315,7 @@ The plugin catalog is the set of JSON/JSON5 files the server reads from `ENGINE9
 
 Each declaration is `{ name, type?, default?, values?, description?, label?, required?, secret?, hidden?, section? }` (an array, or a name→def object). On `PluginWorker.install`, each package-declared name is inserted into `setting` for that plugin row when it is missing. Reinstall does not overwrite an existing value. Plugins with no `metadata.prefix` get an empty `table_prefix` (settings-only packages, and third-party schemas that self-scope table names).
 
-Submodules share their plugin's row, so setting names are plugin-wide. A submodule declaration gets `section: '<Name>'` unless it sets its own `section`, which groups it in UIs. If two declarations use the same name, the first one wins (plugin-level, then submodules in name order); give submodule settings distinct names such as `transaction_custom_fields`.
+Submodules share their plugin's row, so setting names are plugin-wide. A submodule declaration gets `section: '<Name>'` unless it sets its own `section`, which groups it in UIs. A name declared twice — on the plugin and a submodule, or on two submodules — is an error. `listSettings` puts that plugin in `errors` and omits its declarations; `setSetting` throws. Use distinct names such as `people_custom_fields` and `transaction_custom_fields`.
 
 | Field                   | Purpose                                                                            |
 | ----------------------- | ---------------------------------------------------------------------------------- |
