@@ -28,7 +28,7 @@ A plugin's people or transaction pull brings in standard fields plus any vendor 
 | Append the fields | `plugin` `{ "command": "setSetting", "plugin_id": "<uuid>", "name": "<setting>", "value": [...] }` |
 | Find existing tables (optional) | `sql` `{ "command": "tables", "filter": "^<table_prefix>(person\|transaction)" }` |
 | Add columns (optional, after asking) | `sql` `ALTER TABLE <table> ADD COLUMN <field> varchar(255)` |
-| Backdate (optional, after asking) | `task` with the submodule's load method and a wide `start` |
+| Backdate (optional, after asking) | `task` with the submodule's `load` method (not `timeWalk`) and a bounded `start` / `end` |
 
 | Submodule | Setting |
 | --- | --- |
@@ -131,19 +131,25 @@ Rule: DDL needs the admin role. Show the exact statements and get confirmation b
 
 ### G. Backdate (optional)
 
-The setting only affects future pulls. To fill history, offer to schedule the submodule's load method with a wide window. Check its options first with `task` `describe` (`start` / `end`, `interval`, `table`).
+The setting only affects future pulls. To fill history, offer to schedule the submodule's `load` method with a bounded window. Check its options first with `task` `describe` (`start` / `end`, `interval`, `table`). Use `load` with a bounded `start` / `end` / `interval` (for example `start: "now"`, `end: "2010-01-01"`, `interval: "3M"`) rather than `start: "none"`.
+
+Rule: Prefer the submodule's `load` method over a `timeWalk` method. Use `timeWalk` only when `task` `describe` shows the submodule has no `load` method, and tell the user why.
 
 ```json
 {
   "account_id": "<account_id>",
-  "path": "<plugin path>:People",
-  "method": "loadPeople",
+  "path": "<plugin path>:Gifts",
+  "method": "load",
   "plugin_id": "<plugin uuid>",
-  "options": { "start": "none" }
+  "options": { "start": "now", "end": "2020-01-01", "interval": "3M" }
 }
 ```
 
-Rule: Offer the backdate; do not schedule it without confirmation. A full-history pull can be large and hit vendor rate limits.
+Rule: Offer the backdate; do not schedule it without confirmation. A wide pull can be large and hit vendor rate limits.
+
+Rule: Cap the backfill `end` at **2010-01-01** unless the user explicitly asks to go further. Do not walk to the account's earliest transaction, `1900-01-01`, or `start: "none"` without that explicit request. Frakture `load` also rejects more than **500** intervals — stay under that limit (for example, `3M` from now to 2010 is fine; `3M` to 1900 is not).
+
+Rule: When splitting is required to stay under 500 intervals, still respect the 2010 cap unless the user waived it.
 
 ## Troubleshooting
 

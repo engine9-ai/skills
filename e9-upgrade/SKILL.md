@@ -28,6 +28,7 @@ A deploy changes code, never the database. After a new `@engine9/core` or `@engi
 
 | Release | Guide |
 | --- | --- |
+| 1.11.2 | `setting.value` widens from `varchar(255)` to `text` so JSON plugin settings are not truncated |
 | 1.10.1 | Person names are copied from `person` to `person_name`; the `person` columns stay until the opt-in `--drop-name-columns` |
 | 1.9.1 | Package rename `@engine9/interfaces` → `@engine9/schemas` (manual runbook, predates `e9core upgrade`) |
 
