@@ -7,7 +7,8 @@ description: >-
   name, integration), DNS TXT proof of control (_delegate.<host>), registration
   and the authorize smoke test, per-request sign-in branding (brand_name,
   brand_color, brand_logo, brand_wordmark, brand_background, brand_text,
-  brand_card, brand_card_text, brand_font, brand_google), disabling, and
+  brand_card, brand_card_text, brand_font, brand_google), per-request sign-in
+  providers (login_providers: google, facebook), disabling, and
   revoking Grants after a compromise or change of owner. Use when someone asks
   to add or remove a domain on Delegate, to brand the Delegate sign-in page or
   email, or when a site gets 400 invalid_domain.
@@ -136,6 +137,7 @@ Tell the site:
 - Add a **Change your Delegate information** button (an authorize request with `prompt=select`) wherever a signed-in person could get stuck: next to Log out, on access-denied messages, and on the login page.
 - Keep the `_delegate` TXT record in place.
 - Send branding on each request, as described below.
+- To offer Facebook as well as Google, send `login_providers` on each request (see Sign-in providers below).
 
 ## Branding
 
@@ -155,7 +157,7 @@ the `/login` page only.
 | `card` | `brand_card` | Card color, in place of the tint |
 | `cardText` | `brand_card_text` | Text on the card. Ignored below 4.5:1 contrast, and ignored without `card` |
 | `font` | `brand_font` | `system`, `sans`, `serif`, `rounded`, `mono`, or a Google Fonts family (letters, digits, spaces, up to 40 characters) |
-| `google` | `brand_google` | `standard` (Google's white button), `brand` (brand color, "Continue with Google"), or `skip` (go straight to Google when it is the only choice; acts as `brand` in a popup) |
+| `google` | `brand_google` | `standard` (Google's white button), `brand` (brand color, "Continue with Google"), or `skip` (go straight to Google when it is the only choice, with no Facebook in `login_providers`; acts as `brand` in a popup) |
 
 Before replying, check the requester's values the way Delegate will:
 
@@ -223,6 +225,35 @@ Rule: Delegate cannot recall Identity Tokens it has already issued. They stay va
 
 Email the contact on file about every disable or revoke.
 
+## Sign-in providers
+
+Rule: Providers are chosen per request, not per Domain. Delegate stores none of it. A request can choose among the providers Delegate's operator has enabled (`ENABLED_PROVIDERS`); it cannot turn one on. Unknown values are dropped, and the default is Google only.
+
+| `@engine9/id` key | Wire parameter | Rule |
+| --- | --- | --- |
+| `loginProviders` | `login_providers` | Comma list in button order from `google` and `facebook`. Default `google` |
+
+Rule: A Facebook sign-in counts as Level 3, but its email is never marked verified, and Facebook may return no email. Sites that check the token's `auth.provider` must accept `google.com` and `facebook.com`.
+
+Rule: One User per email address. If a Facebook email already belongs to a Google User, Delegate asks the person to continue with Google once, then adds Facebook to that User. Both buttons then reach the same Domain UNID.
+
+`@engine9/id`, for every request or one request:
+
+```js
+const id = createEngine9Id({ domain: 'www.example.org', loginProviders: ['google', 'facebook'] });
+await id.requestIdentity({ minLevel: 1, loginProviders: ['google', 'facebook'] });
+```
+
+`@engine9/core` on a server:
+
+```js
+const url = auth.identityUrl({ returnTo, loginProviders: ['google', 'facebook'] });
+```
+
+Anything else: add `&login_providers=google,facebook` to the authorize URL.
+
+If Facebook does not appear, Delegate's operator has not added `facebook.com` to `ENABLED_PROVIDERS`, or the Facebook provider is not set up in Firebase and Meta.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -230,6 +261,7 @@ Email the contact on file about every disable or revoke.
 | `400 {"error":"invalid_domain"}` | The host is not registered, the request used a different host (`www` versus apex), or the Domain is disabled | Register the exact host. A deny can be cached for up to 10 minutes after an earlier failed try |
 | `return_to` on another host fails | `return_to` must be on the `domain` host | Use a callback on the same host |
 | Plain `http` page | Delegate refuses `http` except on `localhost` | Serve the site over `https` |
+| Facebook button missing | `facebook.com` is not in Delegate's `ENABLED_PROVIDERS`, the request lacks `login_providers=…facebook`, or the Domain is not registered (unregistered hosts get Google only) | Ask the operator to enable it; send `login_providers` |
 | Logo or font missing | The value failed validation and was dropped | Host the logo on the Domain over `https`; use a plain Google Fonts family name |
 | Returning Users get no consent page after the Domain changed hands | Their Grants still cover the request | Run `--revoke-grants` |
 

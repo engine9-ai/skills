@@ -23,7 +23,7 @@ Use this skill to configure or troubleshoot an engine9 MCP connection in Cursor 
 
 **Rule:** If an account or parent cannot be found, stop. Do not resolve it by any other mechanism. A miss is MCP `account` search `count: 0`, an empty `user.accounts`, or plugins reporting the account unknown or unauthorized. Tell the user and end the turn. Do not search again with a different filter, a guessed id, or `include_disabled`. Do not read `accounts.d`, `accounts.compiled.json5`, `account-config.json`, `frakture-account-config.json`, `.e9_parameters`, or any other file, and do not run the `e9` CLI or a shell search to find the id.
 
-Operators are read-only in SQL and schedule published flows; on-demand tasks, keys, and plugin changes need the admin role.
+Access has two tiers: a superadmin (a file on the server) can open every account, and an admin (a member of an account's `admin` role segment) can open that account. Either can do everything in an account they can open. Manage an account's admins with `account` `listAdmins` / `addAdmin` / `removeAdmin`.
 
 ## Step 0 — Log in (always first)
 

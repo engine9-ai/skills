@@ -16,6 +16,7 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 | Discover accounts or installed plugins | `account` |
 | Child-account history for billing (signup, disabled, active months) | `account` search with `history: true` |
 | Set an account's default warehouse | `account` `command: setDefaultWarehouse` with `remote_plugin_id` |
+| List, add, or remove an account's admins | `account` `command: listAdmins` / `addAdmin` / `removeAdmin` with `account_id` and `email` / `emails` |
 | Use a purpose-built operation | The matching native MCP tool |
 | Run an on-demand worker method | `task` with `path` + `method` |
 | Run a predefined flow | `task` with `flow_id` |
@@ -29,7 +30,7 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 
 **Rule:** If an account or parent cannot be found, stop. Do not resolve it by any other mechanism. A miss is MCP `account` search `count: 0`, an empty `user.accounts`, or plugins reporting the account unknown or unauthorized. Tell the user MCP did not find it, and end the turn. Do not call `user` or `account` again with a different filter, a guessed id, or `include_disabled`. Do not read `accounts.d`, `accounts.compiled.json5`, `account-config.json`, `frakture-account-config.json`, `.e9_parameters`, or any other file. Do not run the `e9` CLI, a shell search, or a worker to discover the id. Another skill that says `-a` comes from `accounts.d` does not apply after this miss.
 
-**Roles:** Operators are read-only in SQL (SELECT/WITH) and schedule published flows (`flow_id` / `flow_path`); on-demand `path`+`method`, API keys, plugin install/settings, enabling or disabling a remote dataflow (`task` `setDisabled`), setting its cron (`task` `setSchedule`), and legacy report-folder writes (`ensureChild`, `setVisibility`) need the admin role (`user.accounts[id].level`).
+**Roles:** Two tiers. A **superadmin** (a verified email on the server's superadmins file) can open every account. An **admin** is a member of an account's `admin` role segment in that account's own database and can open that account only. `user.accounts[id].level` is `superadmin` or `admin`. Either may do everything in an account they can open: SQL, on-demand `path`+`method` tasks, API keys, plugin install/settings, remote dataflow changes, and legacy report-folder writes. There is no read-only operator role. For a non-superadmin, `user` and `account` search check each enabled account's admin role, so the first call can be slow.
 
 ## Step 0 — Log in (always first)
 
@@ -253,7 +254,7 @@ Returns server status, current time, and whether the request is authenticated. N
 
 ### `user`
 
-Returns the current authenticated user: uid, email, admin flag, and a **flat** account access map. Each `accounts[account_id]` entry shares listing fields with `account` search: `name`, `type`, `parent_ids`, `disabled`, `tags`, plus auth `level`. **No nested children** — rebuild hierarchy from `parent_ids` on the client. **Prefer this** over `task` for identity and full account-list questions. See [How MCP lists accounts](../../server/api/mcp/accounts.md).
+Returns the current authenticated user: uid, email, `isSuperadmin`, and a **flat** account access map. Each `accounts[account_id]` entry shares listing fields with `account` search: `name`, `type`, `parent_ids`, `disabled`, `tags`, plus auth `level`. **No nested children** — rebuild hierarchy from `parent_ids` on the client. **Prefer this** over `task` for identity and full account-list questions. See [How MCP lists accounts](../../server/api/mcp/accounts.md).
 
 ### `account`
 
@@ -266,6 +267,12 @@ Three commands:
 
 ```json
 { "command": "setDefaultWarehouse", "account_id": "<account_id>", "remote_plugin_id": "frakturedb_hxq" }
+```
+
+**`command: listAdmins` / `addAdmin` / `removeAdmin`** — read or change who holds the account's `admin` role (a segment in the account database). `listAdmins` returns `{ ok, command, account_id, admins: [{ person_id, emails }] }`. `addAdmin` and `removeAdmin` take `email` or `emails`. The person must already exist in the account; `addAdmin` returns `{ added, already, unknown }` and `removeAdmin` returns `{ removed, notAdmin }`. You cannot remove yourself unless you are a superadmin. Superadmins are not changed here; they are a file on the server.
+
+```json
+{ "command": "addAdmin", "account_id": "<account_id>", "email": "owner@example.org" }
 ```
 
 **`command: plugins`** (default when `account_id` is set) — list plugins installed on one account with marketplace metadata merged onto each plugin.
