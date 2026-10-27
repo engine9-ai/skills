@@ -156,6 +156,7 @@ Natural language ("install `<path>` on all `<parent>` clients") is the same work
 ## Related documentation
 
 - [MCP tools](../e9-mcp/SKILL.md)
+- [PII-free accounts (`exclude_pii`)](../e9-pii-free/SKILL.md)
 - [CLI / account scope](../e9-cli/SKILL.md)
 - [Author a plugin or schema plugin](../create-engine9-plugin/SKILL.md)
 - [Plugin settings authoring](../create-engine9-plugin/SKILL.md#settings)

@@ -26,6 +26,7 @@ page and email, and how to disable a Domain safely.
 
 | Item | Value |
 | --- | --- |
+| Delegate host | `https://delegate.network` is the default. `https://delegate.engine9.ai` still answers and signs tokens with `iss: https://delegate.engine9.ai` |
 | Domain | Exact `host` or `host:port`. `example.org` and `www.example.org` are two Domains. No wildcards |
 | Required from the requester | Exact host(s), **contact email** (any address), organization name, integration |
 | Ownership proof | DNS TXT `_delegate.<host>` = `delegate-verification=<random>`; kept in place afterward |
@@ -46,6 +47,21 @@ page and email, and how to disable a Domain safely.
 | Branding | `brand_*` query parameters on `/identity/authorize` and `/identity/bridge`. Validated per request; invalid values are ignored |
 
 Rule: A Domain is an exact host. Register each host the site signs people in from, including both the apex and `www` when both are used.
+
+Rule: A Domain is registered once and works on every Delegate host. Registering a Domain never depends on which Delegate host the site uses.
+
+### Which Delegate host
+
+Delegate answers on two hosts. The Identity Token's `iss` is the host that issued it.
+
+| Host | Status | `iss` |
+| --- | --- | --- |
+| `https://delegate.network` | Default for `@engine9/id` and `@engine9/core` | `https://delegate.network` |
+| `https://delegate.engine9.ai` | Still works; keep it for sites that set it | `https://delegate.engine9.ai` |
+
+Rule: A site verifies `iss` against the single Delegate URL it configured (`delegateUrl` in `@engine9/id`, `DELEGATE_URL` in `@engine9/core`). Do not tell a site to accept either issuer. A site that sets `delegateUrl` to the old host keeps working and keeps getting old-host tokens until it changes the setting.
+
+Rule: Send the same host for the authorize request, the JWKS, and the issuer check. Mixing hosts fails the `iss` check.
 
 Rule: The contact email is required. Do not register a Domain without one. It does not have to be at the Domain.
 
@@ -106,6 +122,8 @@ dig +short TXT _delegate.www.example.org @1.1.1.1
 
 For `host:port`, verify the host.
 
+Rule: The TXT record is on the site's own host (`_delegate.<host>`). It is the same record whichever Delegate host the site signs in through; it is not on `delegate.network` or `delegate.engine9.ai`.
+
 Rule: Accept only the DNS TXT record as proof of control. An email from an address at the Domain, or a file on the website, does not count.
 
 ### 3. Register (engine9 operator)
@@ -124,16 +142,18 @@ Smoke test. With no cookies, `min_level=1` sends the browser to sign in:
 
 ```bash
 curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' \
-  "https://delegate.engine9.ai/identity/authorize?domain=www.example.org&return_to=https%3A%2F%2Fwww.example.org%2F&min_level=1"
+  "https://delegate.network/identity/authorize?domain=www.example.org&return_to=https%3A%2F%2Fwww.example.org%2F&min_level=1"
 ```
 
-Expected: `302` to `https://delegate.engine9.ai/login?...`.
+Expected: `302` to `https://delegate.network/login?...`.
+
+A site that still uses the old host answers the same way from `https://delegate.engine9.ai`, with a redirect to `https://delegate.engine9.ai/login?...`. Run the same command with that host to confirm.
 
 ### 4. Send integration instructions
 
 Tell the site:
 
-- Verify every Identity Token: ES256 against `https://delegate.engine9.ai/.well-known/jwks.json`, plus `iss`, `aud` equal to their Domain, and `exp`. `@engine9/id` and `@engine9/core` already do this.
+- Verify every Identity Token: ES256 against `https://delegate.network/.well-known/jwks.json`, plus `iss`, `aud` equal to their Domain, and `exp`. `@engine9/id` and `@engine9/core` already do this.
 - Add a **Change your Delegate information** button (an authorize request with `prompt=select`) wherever a signed-in person could get stuck: next to Log out, on access-denied messages, and on the login page.
 - Keep the `_delegate` TXT record in place.
 - Send branding on each request, as described below.
@@ -195,7 +215,7 @@ const url = auth.identityUrl({ returnTo, brand: { name: 'Example Org', color: '#
 Anything else: add the parameters to the authorize URL:
 
 ```text
-https://delegate.engine9.ai/identity/authorize?domain=www.example.org
+https://delegate.network/identity/authorize?domain=www.example.org
   &return_to=https%3A%2F%2Fwww.example.org%2Fauth%2Fdelegate
   &brand_name=Example%20Org&brand_color=%230b6e4f
   &brand_logo=https%3A%2F%2Fwww.example.org%2Flogo.png
@@ -254,6 +274,19 @@ Anything else: add `&login_providers=google,facebook` to the authorize URL.
 
 If Facebook does not appear, Delegate's operator has not added `facebook.com` to `ENABLED_PROVIDERS`, or the Facebook provider is not set up in Firebase and Meta.
 
+## Google sign-in redirect URI (engine9 operator)
+
+Delegate signs in with Google through Firebase on the host the page loaded from. Each Delegate host is a Firebase authorized domain and needs its own redirect URI on the Google OAuth client.
+
+| Delegate host | Authorized redirect URI |
+| --- | --- |
+| `delegate.network` | `https://delegate.network/__/auth/handler` |
+| `delegate.engine9.ai` | `https://delegate.engine9.ai/__/auth/handler` |
+
+Rule: Add the `delegate.network` redirect URI and authorized domain before a site moves to it. A missing URI fails Google sign-in on that host with `redirect_uri_mismatch`.
+
+Rule: Keep the `delegate.engine9.ai` redirect URI in place until the old host is retired. Removing it breaks every site that still uses it.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -263,6 +296,8 @@ If Facebook does not appear, Delegate's operator has not added `facebook.com` to
 | Plain `http` page | Delegate refuses `http` except on `localhost` | Serve the site over `https` |
 | Facebook button missing | `facebook.com` is not in Delegate's `ENABLED_PROVIDERS`, the request lacks `login_providers=…facebook`, or the Domain is not registered (unregistered hosts get Google only) | Ask the operator to enable it; send `login_providers` |
 | Logo or font missing | The value failed validation and was dropped | Host the logo on the Domain over `https`; use a plain Google Fonts family name |
+| Google sign-in shows `redirect_uri_mismatch` on one host | That host's `/__/auth/handler` URI or authorized domain is missing | Add it to the Google OAuth client and Firebase (see Google sign-in redirect URI) |
+| Token rejected with an issuer error | The site's configured Delegate URL differs from the host that issued the token | Make `delegateUrl` / `DELEGATE_URL` the host the browser was sent to |
 | Returning Users get no consent page after the Domain changed hands | Their Grants still cover the request | Run `--revoke-grants` |
 
 ## Related documentation

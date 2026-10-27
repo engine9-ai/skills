@@ -82,7 +82,7 @@ Some codes are origin-only (list acquisition). Some are last-click-only (an appe
 
 ### Extract source codes from message links
 
-Scan message links for these query parameters (complete list). If several are present, keep them all; the first twelve are ranked in this order when choosing the message’s **primary** source code. `utm_term` and `utm_campaign` are used only when present **and** they are the longest candidate.
+Scan message links for these query parameters (complete list). If several are present, keep them all; the first thirteen are ranked in this order when choosing the message’s **primary** source code. `utm_term` and `utm_campaign` are used only when present **and** they are the longest candidate.
 
 1. `refcode`
 2. `source`
@@ -94,10 +94,11 @@ Scan message links for these query parameters (complete list). If several are pr
 8. `ms`
 9. `en_txn_10`
 10. `supporter.appealCode`
-11. `utm_source`
-12. `ref`
-13. `utm_term` (longest-only)
-14. `utm_campaign` (longest-only)
+11. `appealCode`
+12. `utm_source`
+13. `ref`
+14. `utm_term` (longest-only)
+15. `utm_campaign` (longest-only)
 
 Example: `?src=EM_FR_20221215_donorappeal_3` → message source `EM_FR_20221215_donorappeal_3`. A later transaction with that exact code is attributed to the message.
 

@@ -145,7 +145,7 @@ Pick a stem you can keep forever (`acme_blog`, `acme_loyalty`). In the future, p
 
 ### Stacks
 
-A stack at `@engine9/schemas/stacks/<name>` is a metadata-only schema plugin with `name`, `description`, `include`, and `exclude`. Core `PluginWorker`, not `SchemaWorker`, installs stacks: it deploys the plugin table, records the stack as a plugin row, walks `include`, and rejects paths forbidden by an installed plugin's `metadata.exclude`. `SchemaWorker` installs only one plugin's schema and row.
+A stack at `@engine9/schemas/stacks/<name>` is a metadata-only schema plugin with `name`, `description`, and `include` (optional `exclude` for other stacks). Core `PluginWorker`, not `SchemaWorker`, installs stacks: it deploys the plugin table, records the stack as a plugin row, and walks `include`. `SchemaWorker` installs only one plugin's schema and row. PII-free refusal is not stack `exclude`: it is `exclude_pii` on `@engine9/schemas/utilities/limited-pii`. The limited-pii stack is an install list only.
 
 `installDefaultPlugins({ path })` resolves an omitted path from (1)
 `exclude_pii` on `@engine9/schemas/utilities/limited-pii` (when that plugin is
@@ -159,9 +159,10 @@ installing standard must throw.
 Set `default_stack` on `@engine9/schemas/plugin` and `exclude_pii` on
 `@engine9/schemas/utilities/limited-pii` via MCP `plugin` `setSetting` (or
 `PluginWorker.updateSetting`). Empty `default_stack` means core person
-schema plugins only. `exclude_pii: true` forces the limited-pii stack and refuses
-standard, `person_email`, `person_phone`, and `person_address`, even when those
-plugins are already installed.
+schema plugins only. `exclude_pii: true` is the one PII-free check: it forces
+the limited-pii stack and refuses standard, `person_name`, `person_email`,
+`person_phone`, `person_address`, and `transaction/contact_details`, even when
+those plugins are already installed.
 
 ### Inbound people pipeline
 
@@ -620,7 +621,7 @@ Thin, schema-only schema plugins are also valid. `message/index.js` exports only
 | Segment membership is unexpectedly broad        | Inspect `universe`, clause path, and optional `pluginId` scope                                                                 |
 | Schema plugin report is not available           | Move it to a native `@engine9/plugins/reports/<area>` package                                                                  |
 | Package cannot resolve                          | Use the package path and inspect resolver/registration rules; do not add a prefix                                              |
-| Stack installation conflicts                    | Inspect installed stack `exclude` metadata and utilities/limited-pii `exclude_pii`                                                         |
+| Stack / PII-free install conflicts              | Inspect utilities/limited-pii `exclude_pii` (and any stack `exclude` metadata other stacks still declare)                                  |
 
 ## Related documentation
 
