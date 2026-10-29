@@ -131,6 +131,8 @@ Comments and trailing commas are allowed (JSON5). String values in `options` mus
 
 - **`listFlows` / `getFlowById`** — read and normalize built-in `.json5` files (`normalizeFlow` fills `task_key`, `flow_id`, timestamps).
 - **`getFlowDetails`** — MCP `task` `action: "getFlow"`. The default reads `flow_path` or a built-in slug. `remote: true` loads a Frakture dataflow via `GET /flows/:id`.
+- **`loadFlowFromFile` / `loadFlowFromDefinition`** — read a flow file (an `engine9-accounts/` path goes through FileWorker, like an export `definition_path`) or normalize a posted flow object.
+- **`publishRemoteFlow`** — MCP `task` `action: "publishFlow"`. Creates or updates the Frakture dataflow whose `labels.source` is the flow's location: `flow_path` on the server, or `definition` + `source` from anywhere. See [deploy-flow.md](../e9-tasks-api/deploy-flow.md#publish-a-flow-file-to-the-scheduler).
 - **`createFlowRun`** — create a flow run under `flow_runs/{uuid}/run.json` and **one `task_run` per task** (does not execute them).
 - **`runFlow`** — `createFlowRun` then **`executeTaskRun`** for each task in order (blocking). Each task runs in a forked `WorkerRunner` child process, same as Manager. Updates flow and task run state (`RUNNING` → `COMPLETED` / `FAILED`). Set `stop_on_error: false` to continue after a failed task.
 - **`executeTaskRun`** — run a single task run in-process and persist state/output artifacts.

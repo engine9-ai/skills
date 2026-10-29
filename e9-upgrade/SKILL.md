@@ -5,8 +5,9 @@ description: >-
   release: Cloudflare sites on D1, Node sites on SQLite or MySQL, and accounts
   on an engine9 server. One mechanism everywhere: install, deploy, then
   `e9core upgrade` (PluginWorker.upgrade) with a dry run first. Covers
-  POST /api/admin/upgrade, MCP `plugin` `upgrade`, the upgrade.<id> ledger,
-  blocked and opt-in upgrades (--drop-name-columns, --discard-names), release guides
+  POST /api/admin/upgrade, MCP `plugin` `upgrade`, plugin-declared upgrades,
+  upgrade windows, blocked and opt-in upgrades (--drop-name-columns,
+  --discard-names, --drop-plugin-history), the audit record of each run, release guides
   such as 1.10.1 person names moving to person_name, rollback, and why
   wrangler d1 migrations are not used for engine9 tables. Use when upgrading,
   migrating, or rolling out a core or schemas version, or when columns,
@@ -15,7 +16,7 @@ description: >-
 
 # engine9 upgrades
 
-A deploy changes code, never the database. After a new `@engine9/core` or `@engine9/schemas` reaches a host, every engine9 database needs `e9core upgrade` (`PluginWorker.upgrade`). It applies the release's data upgrades in order, then reinstalls the installed schema plugins so new tables, columns, and inbound snapshots are deployed. Use this skill for any version rollout, on core sites or on engine9 server accounts.
+A deploy changes code, never the database. After a new `@engine9/core` or `@engine9/schemas` reaches a host, every engine9 database needs `e9core upgrade` (`PluginWorker.upgrade`). It runs the data upgrades the `@engine9/schemas` plugins declare, then reinstalls the installed schema plugins so new tables, columns, and inbound snapshots are deployed. Use this skill for any version rollout, on core sites or on engine9 server accounts.
 
 ## Quick reference
 
@@ -28,6 +29,7 @@ A deploy changes code, never the database. After a new `@engine9/core` or `@engi
 
 | Release | Guide |
 | --- | --- |
+| 1.17.0 | Upgrades move out of core into the plugins (`@engine9/schemas` 1.13.0); upgrade windows; `plugin_history` retired with an opt-in drop (`--drop-plugin-history`) |
 | 1.11.2 | `setting.value` widens from `varchar(255)` to `text` so JSON plugin settings are not truncated |
 | 1.10.1 | Person names are copied from `person` to `person_name`; the `person` columns stay until the opt-in `--drop-name-columns` |
 | 1.9.1 | Package rename `@engine9/interfaces` → `@engine9/schemas` (manual runbook, predates `e9core upgrade`) |
@@ -46,10 +48,11 @@ Release guides live in `@engine9/core` under `docs/upgrade-<version>.md`. The pr
 
 | Step | What happens |
 | --- | --- |
-| Account upgrades | Each upgrade in release order inspects the database, does nothing if the account is current, otherwise moves the data (for example copies names into `person_name` and verifies). Safe to re-run; a re-run finishes a partial run |
+| Window | A database last upgraded with a core older than the release supports is refused before anything runs (`blocked`, with the release to upgrade through first) |
+| Plugin upgrades | Core carries none. Each `@engine9/schemas` plugin declares its own; `shouldUpgrade` checks the schema, and only an upgrade that applies reads the data, does nothing if the account is current, otherwise moves it (for example copies names into `person_name` and verifies). Safe to re-run; a re-run finishes a partial run. Other plugins' upgrades run only with `--plugin <path>` |
 | Opt-in upgrades | A removal (for example dropping `person.given_name`) runs only with its switch (`drop_name_columns`). Without it the run reports `opt_in` and changes nothing |
 | Refresh | Reinstalls every installed `@engine9/schemas/*` plugin from the deployed package. Adds tables and columns (never drops) and refreshes inbound snapshots. Stacks first, so a stack that gained a plugin installs it |
-| Ledger | One `setting` row per upgrade on the `@engine9/schemas/plugin` row, named `upgrade.<id>`, value `{ at, status, schemas }`. Written once, on the first real run that finds the account current |
+| Record | Nothing is kept in the database: every run asks every upgrade again. A real run writes one `upgrade` record to the audit log (what it applied, as `{ plugin, id }`, what it reinstalled, who ran it). `upgrade.<id>` rows in `setting` are left over from core 1.10.1–1.16; nothing reads them |
 
 ### Reading the result
 
@@ -58,8 +61,10 @@ Release guides live in `@engine9/core` under `docs/upgrade-<version>.md`. The pr
 | `ok` | `false` when an upgrade is blocked or a plugin failed to reinstall. The CLI exits 1 |
 | `schemas_version` | The `@engine9/schemas` version the host is running |
 | `upgrades[].status` | `pending` (dry run, work to do), `applied`, `current`, `blocked`, or `opt_in` (a removal that runs only with the switch named in `opt_in`) |
+| `upgrades[].plugin` | The plugin that declares it. Upgrades are listed by plugin (`@engine9/schemas/plugin` first), so find one by `id`, not by position |
 | `upgrades[].plan` | What the upgrade does or did, in order |
-| `upgrades[].recorded` | The ledger value, if this account already has one |
+| `window` | The core upgrade window: `ok`, `unrecorded` (no install records yet; the run records them), or `too_old` |
+| `unused_options` | A flag no upgrade reads, usually a misspelling |
 | `refresh.plugins` | Paths reinstalled, or that would be reinstalled on a dry run |
 | `refresh.failed` | `{ path, error }` for each plugin that did not reinstall, usually a path no longer in the package |
 
@@ -103,7 +108,7 @@ wrangler deploy && npx e9core upgrade --url "$E9_SITE_URL"
 - [ ] plugin upgrade dry_run: true per account; collect status and blocked
 - [ ] Ask about every blocked account; do not discard data by default
 - [ ] plugin upgrade per account (small parallel batches)
-- [ ] Re-run dry_run; every upgrade reports current and ok is true
+- [ ] Re-run dry_run; every upgrade reports current (or opt_in) and ok is true
 ```
 
 **Rule:** `plugin` `upgrade` needs account admin. It is one call per `account_id`; there is no bulk upgrade RPC. Do not schedule `PluginWorker.upgrade` through MCP `task`.
@@ -132,10 +137,12 @@ npx e9core upgrade --url https://www.example.com --dry-run
 {
   "ok": true,
   "dry_run": true,
-  "schemas_version": "1.10.1",
+  "schemas_version": "1.13.0",
+  "window": { "status": "ok", "from": "1.9.0", "last": "1.17.0" },
   "upgrades": [
     {
       "id": "person_name",
+      "plugin": "@engine9/schemas/person",
       "since": "1.10.1",
       "status": "pending",
       "pii_free": false,
@@ -148,6 +155,7 @@ npx e9core upgrade --url https://www.example.com --dry-run
     },
     {
       "id": "person_name_columns",
+      "plugin": "@engine9/schemas/person",
       "since": "1.10.1",
       "opt_in": "drop_name_columns",
       "status": "opt_in",
@@ -177,10 +185,12 @@ npx e9core upgrade --url https://www.example.com --dry-run
 | Site shows old names after 1.10.1 | Site code still reads `person.given_name`, which stopped changing at the upgrade | Join `person_name` on `person_id` |
 | Site errors on `given_name` after `--drop-name-columns` | Site code still reads `person.given_name` | Join `person_name` on `person_id` |
 | New columns missing after a deploy | Upgrade not run | Run `e9core upgrade` |
+| `blocked`: last upgraded with an older core, or a plugin outside its upgrade window | The database is older than this release upgrades | Upgrade through the release the message names first, then this one |
+| No upgrades run after installing core 1.17.0 | `@engine9/schemas` is below 1.13.0, which declares them | Install `@engine9/schemas@^1.13.0` |
 
 ## Related documentation
 
 - [Plugin install](../e9-plugin/SKILL.md)
 - [MCP](../e9-mcp/SKILL.md)
 - [Person identity](../e9-person-id/SKILL.md)
-- `@engine9/core` `docs/upgrading.md` and `docs/upgrade-<version>.md`
+- `@engine9/core` `docs/upgrading.md`, `docs/plugin-upgrades.md`, and `docs/upgrade-<version>.md`

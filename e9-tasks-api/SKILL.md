@@ -7,7 +7,8 @@ description: >-
   Built-in workers use `@engine9/plugins/e9workers:<Worker>` (e.g. EchoWorker + echo).
   Scheduling uses the same scheduleTasks path as MCP task. MCP itself stays on Firebase
   OAuth — do not mix credentials. For deploying a built-in flow to an account (e.g.
-  identity-rebuild), see deploy-flow.md.
+  identity-rebuild), or publishing a flow file as a cron-scheduled dataflow
+  (publishFlow), see deploy-flow.md.
 ---
 
 # engine9 Task API
@@ -24,6 +25,7 @@ The engine9 Task API schedules predefined flows and on-demand worker methods ove
 | One flow definition | `GET /flows/:id` (local file). `?remote=true` for a Frakture dataflow. MCP `task` `action: "getFlow"` |
 | Enable or disable a remote dataflow | `PUT /flows/:id?remote=true` with `{ "labels": { "disabled": true } }` (`tasks:schedule`). MCP `task` `action: "setDisabled"` |
 | Set a remote dataflow cron | `PUT /flows/:id?remote=true` with `{ "schedule": { "cron": "0 6 * * *" } }`. Empty `cron` clears it. MCP `task` `action: "setSchedule"` |
+| Put a flow file on the cron scheduler | MCP `task` `action: "publishFlow"` (admin; no engine9 REST route). The file location is the lookup (`labels.source`). [deploy-flow.md](./deploy-flow.md#publish-a-flow-file-to-the-scheduler) |
 | Schedule a predefined flow | `POST /flow_runs/` with `flow_id` (built-in slug), `flow_path`, or `definition` |
 | Run an existing Frakture dataflow | `POST /flow_runs/` with `flow_id` = dataflow Mongo id (`remote` default); or Frakture `POST /tasks/schedule` with `dataflow_id` |
 | Schedule an on-demand task | `POST /tasks/schedule` with `path` + `method` |
@@ -110,7 +112,7 @@ Full list: [errors.md](./errors.md).
 | [concepts.md](./concepts.md) | Terminology: flows, runs, IDs, async execution, `completed_since`, checkpoints |
 | [authentication.md](./authentication.md) | API keys, task scopes, and account headers |
 | [getting-started.md](./getting-started.md) | First requests in five minutes |
-| [deploy-flow.md](./deploy-flow.md) | Check and schedule a built-in or account flow with MCP or CLI |
+| [deploy-flow.md](./deploy-flow.md) | Check and schedule a built-in or account flow with MCP or CLI, or publish a flow file to the cron scheduler |
 | [echo-walkthrough.md](./echo-walkthrough.md) | Run the end-to-end Echo schedule, poll, and completion demo |
 | [endpoints.md](./endpoints.md) | Review every HTTP route and curl examples |
 | [errors.md](./errors.md) | Interpret HTTP status codes |

@@ -192,6 +192,10 @@ curl $CURL_TLS -sS -X PUT \
 
 The response includes `schedule.cron` when a cron is stored. MCP `task` `action: "setSchedule"` is that write: `flow_id` plus `cron` (the string from `getFlow` `schedule.cron`). Empty `cron` clears it. Admin role. `dry_run: true` returns the diff and does not write.
 
+### Create a remote dataflow from a flow file
+
+There is no engine9 REST route for this. Use MCP `task` `action: "publishFlow"`, which finds the dataflow by the flow file's location (`labels.source`) and then creates or updates it with Frakture `POST /flows` or `PUT /flows/:id`. See [deploy-flow.md](./deploy-flow.md#publish-a-flow-file-to-the-scheduler).
+
 ### `POST /flows/filter`
 
 Search and paginate flows.

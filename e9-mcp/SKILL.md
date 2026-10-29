@@ -1,6 +1,6 @@
 ---
 name: e9-mcp
-description: Use the engine9 MCP server — log in first via mcp_auth, MCP-only discovery (never local code), prefer native tools over task. Plugin install/settings are first-class MCP `plugin` (see e9-plugin), not task. Use @engine9/plugins/e9workers:EchoWorker + echo for on-demand smoke tests (no plugin lookup), discover other plugin methods via account, and invoke task as the catch-all for worker execution.
+description: Use the engine9 MCP server — log in first via mcp_auth, MCP-only discovery (never local code), prefer native tools over task. Plugin install/settings are first-class MCP `plugin` (see e9-plugin), not task. Use @engine9/plugins/e9workers:EchoWorker + echo for on-demand smoke tests (no plugin lookup), discover other plugin methods via account, and invoke task as the catch-all for worker execution. Publish a flow file (on the server or in any outside repo) as a scheduled Frakture dataflow with task publishFlow.
 ---
 
 # engine9 MCP
@@ -22,6 +22,7 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 | Run a predefined flow | `task` with `flow_id` |
 | Enable or disable a remote dataflow | `task` `action: "setDisabled"` with `flow_id` and `disabled` (admin) |
 | Set a remote dataflow cron | `task` `action: "setSchedule"` with `flow_id` and `cron` (admin). Empty `cron` clears it |
+| Put a flow file on the Frakture scheduler (create or update its dataflow) | `task` `action: "publishFlow"` with `flow_path` (engine9-accounts/ on the server) or `definition` + `source` (file anywhere). Admin, on demand. [Publish a flow file](#publish-a-flow-file-as-a-remote-dataflow) |
 | Diagnose generated queries | The response's top-level `sql` field |
 | Debug an input (table, store files, download, record count and sample) | `input` — [Input](#input). Caller supplies `input_type`. Third parties: `files` then `download` by `input_id` (no AWS) |
 | Legacy report folders | Do not call unless the user explicitly asked. Never code reports against them. [Legacy report folders](../e9-reports/legacy-folders.md) |
@@ -190,6 +191,7 @@ Account discovery when using MCP should only be through that MCP, not through an
 | Read one flow definition | MCP `task` `action: "getFlow"` — built-in slug or JSON5 file. `remote: true` loads a Frakture dataflow via `GET /flows/:id` |
 | Enable or disable a remote dataflow | MCP `task` `action: "setDisabled"` with `flow_id` and `disabled` (`true` disables, `false` enables). Admin. Frakture `PUT /flows/:id` `{ labels: { disabled } }` |
 | Set a remote dataflow cron | MCP `task` `action: "setSchedule"` with `flow_id` and `cron` (getFlow `schedule.cron`). Admin. Frakture `PUT /flows/:id` `{ schedule: { cron } }` |
+| Publish a flow file as a Frakture dataflow | MCP `task` `action: "publishFlow"`. Found again by `labels.source`; Frakture `POST /flows` or `PUT /flows/:id`. Admin |
 | Run an existing Frakture dataflow (console Run) | MCP `task` `action: "schedule"` with `flow_id` set to the dataflow id (remote default). No `getFlow` first |
 
 If a path, method, or option is not present in MCP responses, report that to the user — do not guess from local code.
@@ -240,6 +242,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Pause / resume / retry a task run, edit options, fetch log/output/checkpoints | `task` with `action: "pause"` / `"resume"` / `"retry"` (`task_run_id`) / `"updateOptions"` / `"log"` / `"output"` / `"get"` (`checkpoints` only on `get`). To walk back checkpoints: `action: "resetCheckpoints"` with `start_index` (0 / omitted clears all; N keeps the first N — cannot yank from the middle) |
 | Enable or disable a remote Frakture dataflow | `task` `action: "setDisabled"` with `flow_id` and `disabled` (admin). Cron schedule only |
 | Set or clear a remote dataflow cron | `task` `action: "setSchedule"` with `flow_id` and `cron` (admin). Empty string clears |
+| Create or update a remote dataflow from a flow file | `task` `action: "publishFlow"` (admin). Never hand-build dataflows |
 | Method option schema for a plugin path (Options form) | `task` with `action: "describe"` and `path` (same naming as schedule; `method` optional) |
 
 `task` is the **catch-all** for behaviors that do not have a native MCP call. Do not reach for `task` when a native tool already covers the request with equal or better fidelity.
@@ -999,6 +1002,66 @@ MCP `task` with `action: "setSchedule"` sets that dataflow's cron. Pass `flow_id
 { "action": "setSchedule", "account_id": "<account_id>", "flow_id": "<dataflow_id>", "cron": "0 6 * * *" }
 ```
 
+#### Publish a flow file as a remote dataflow
+
+engine9 flows are files. MCP `task` `action: "publishFlow"` copies one flow file onto the Frakture scheduler: it creates the file's dataflow the first time and updates it after that. Requires the admin role. It runs only when you call it. Nothing syncs, disables, or deletes dataflows when files change or are removed.
+
+Rule: The file's location is the lookup. `publishFlow` stores it as `labels.source` (Frakture `flow_source`). The next publish with the same `source` updates that dataflow instead of creating another. The tasks always come from the file.
+
+There are two ways to send the flow. Both use the same lookup.
+
+| Where the file lives | Send | `labels.source` |
+|----------------------|------|-----------------|
+| The engine9-accounts repo deployed on the MCP server | `flow_path`: `engine9-accounts/<org>/<account>/<dir>/<name>.flow.json5` | The `flow_path` |
+| Anywhere else: your own GitHub repo, a URL, a local checkout | `definition` (the parsed flow file) and `source` | The `source` you pass, e.g. `github:<org>/<repo>@main:<path>.flow.json5` |
+
+With `flow_path`, the server reads the file from `ENGINE9_ACCOUNT_DIR` the same way it reads an export `definition_path`, so push and deploy the file first. The file must set `labels.account_id` to the `account_id` you call with.
+
+With `definition` + `source`, the server never reads `source`. It is only a name. Use one that says where the file lives so a reader can find it. `labels.account_id` in the definition is optional; when it is set it must equal `account_id`. Do not send `flow_path` with `definition`.
+
+Rule: Keep `source` the same for one file. A different string (a renamed file, another branch in the name) creates a second dataflow. The old one keeps running on its cron until you disable it with `setDisabled`.
+
+Rule: Task options that name files, such as an ExportWorker `definition_path`, are read by the worker when the task runs, not at publish. Those files must be readable there, for example under `engine9-accounts/` on the server, even when the flow itself was sent as `definition`.
+
+What one publish does:
+
+1. Loads the flow (from `flow_path`, or normalizes `definition`). It needs at least one task.
+2. Picks each task's Frakture bot from the account's installed plugins, the same as `schedule`. A task whose plugin is not installed fails the publish.
+3. Calls Frakture `POST /flows/filter` with `{ source }`. One match: `PUT /flows/:id`. No match: `POST /flows`. More than one: error; disable or delete the extras first.
+4. Sends `name`, `tags`, `labels` (with `account_id` and `source`), `tasks`, and `schedule.cron` when the flow has one. A flow without `schedule` leaves the stored cron alone. `labels.disabled` changes only if the flow sets it.
+
+Run `dry_run: true` first. It returns `operation` (`create` or `update`), and for an update the would-be diff, without writing.
+
+```json
+{
+  "action": "publishFlow",
+  "account_id": "<account_id>",
+  "flow_path": "engine9-accounts/<org>/<account>/<dir>/<name>.flow.json5",
+  "dry_run": true
+}
+```
+
+From outside the server, post the flow you parsed from your file:
+
+```json
+{
+  "action": "publishFlow",
+  "account_id": "<account_id>",
+  "source": "github:<org>/<repo>@main:<dir>/<name>.flow.json5",
+  "definition": {
+    "id": "<name>",
+    "name": "<Flow name>",
+    "labels": { "account_id": "<account_id>" },
+    "schedule": { "label": "Every 2 hours", "cron": "0 */2 * * *" },
+    "tasks": [
+      { "task_key": "<step>", "name": "<Step>", "path": "<plugin path>", "method": "<method>", "options": {} }
+    ]
+  }
+}
+```
+
+The result is `{ ok, operation, dry_run, dataflow_id, source, result }`. Check it with `getFlow` `remote: true` and `flow_id` set to `dataflow_id`; `labels.source` and `schedule.cron` should match what you sent. To stop the schedule, use `setDisabled` or `setSchedule` with an empty `cron`.
+
 MCP `task` with `action: "get"` calls `GET /task_runs/:id` (`TaskWorker.getRemoteTaskRun`). This is the single-task detail read: `resolved_options`, `output`, and **`checkpoints`** (`[{ modified, options }]` from worker `modify_history`). A task can have **multiple** checkpoints, oldest first. Checkpoints can exceed 1MB — request them only for one task. Workers write them; `PATCH` does not create a checkpoint. **Retry does not clear them.** `allowed_actions` includes `reset_checkpoints` when the job has checkpoints.
 
 MCP `task` with `action: "resetCheckpoints"` (alias `"reset_checkpoints"`) calls `POST /task_runs/:id/reset_checkpoints`. Reset only walks **back from the most recent**: `start_index` N keeps `checkpoints[0 .. N)` and drops later ones. Omitted / `0` clears all (RESET ALL). You cannot yank a checkpoint out of the middle while keeping later ones. Same as GraphQL `job_reset_checkpoint`. Not status-gated.
@@ -1016,6 +1079,7 @@ MCP `task` per-task-run controls (Firebase / MCP session — **do not** send `e9
 | `getFlow` | `GET /flows/:id` | Flow definition. Built-in slug (`flow_id`) or JSON5 file (`flow_path`). `remote: true` reads a Frakture dataflow id |
 | `setDisabled` | `PUT /flows/:id` `{ labels: { disabled } }` | Enable (`disabled: false`) or disable (`disabled: true`) a remote dataflow. Admin. Cron schedule only. `dry_run: true` previews the diff |
 | `setSchedule` | `PUT /flows/:id` `{ schedule: { cron } }` | Set the remote dataflow cron (`cron` from getFlow `schedule.cron`). Empty `cron` clears it and `next_run`. Admin. `dry_run: true` previews the diff |
+| `publishFlow` | `POST /flows/filter` `{ source }`, then `PUT /flows/:id` or `POST /flows` | Create or update the dataflow for one flow file. `flow_path` (engine9-accounts/ on the server) or `definition` + `source`. Admin. `dry_run: true` previews |
 | `get` | `GET /task_runs/:id` | Single-task details including **`checkpoints`**. Do not use `listTasks` for this |
 | `resetCheckpoints` | `POST /task_runs/:id/reset_checkpoints` | Walk back checkpoints. `{ "start_index": 0 }` (default) is RESET ALL; `N` keeps the first N (oldest) and drops later ones. Cannot yank from the middle. Retry does not clear. Alias: `reset_checkpoints` |
 | `log` / `output` | `GET /task_runs/:id/log` / `/output` | `{ log_link, log, truncated }` and optional signed **`log_url`** from remote-legacy; prefer **`log_link`** for integrations |
