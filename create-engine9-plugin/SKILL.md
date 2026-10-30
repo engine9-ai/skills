@@ -502,7 +502,7 @@ export const settings = [
     name: "summary_model_kind",
     type: "string",
     values: ["legacy", "current"],
-    default: "legacy",
+    default: "current",
     description:
       "Use legacy origin/pivot models or current model_*_stats tables.",
   },
