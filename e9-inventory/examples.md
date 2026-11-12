@@ -9,7 +9,7 @@ e9 inventoryworker inventory -a <account_id>
 # Build or refresh {account root}/cache/inventory.json.gz
 e9 inventoryworker buildInventorySummaryFile -a <account_id>
 
-# Full report with a bundle definition
+# Full report with an export definition
 e9 inventoryworker buildInventorySummaryFile -a <account_id> \
   --definition_path=engine9-accounts/<org>/<account>/export
 
@@ -335,7 +335,7 @@ Audit **Messages** (aggregate) more often than **Timeline → Messages** (per-pe
 
 Do not use timeline `inputs` for Home email or SMS. Do not let `message_activity` replace email publish-month history. Ad coverage (not email) stays on `message_summary_by_date`.
 
-## Bundle export `inventory.json5`
+## Export `inventory.json5`
 
 During `e9 exportworker export`, `inventory.json5` is written **last** and catalogs what landed (`statistics` omitted). Collect statistics into the account cache separately:
 
@@ -361,7 +361,7 @@ const report = await buildInventorySummaryFile(worker, {
 // report.tables — export plan
 ```
 
-For plan-only (mirrors export bundle):
+For plan-only (what export would copy):
 
 ```javascript
 const plan = await buildInventorySummaryFile(worker, {

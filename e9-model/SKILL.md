@@ -131,9 +131,13 @@ Consequences to respect:
   revenue, and that is not a bug. A petition that never asks for money can have
   huge model revenue and near-zero attributed revenue.
 - `source_code_summary.revenue` / `attributed_*` are attribution. The
-  `source_code_summary.origin_*` columns are the old-identity model
-  implementation. Current output is `{prefix}_*`. Read
-  [legacy.md](legacy.md) only when the user explicitly asked for legacy.
+  `source_code_summary.origin_*` columns are a model, but **which** model
+  depends on the account's `summary_model_kind`. With `current`, they map to
+  the first touch model's stats (or the next complete model). With `legacy` or
+  no setting, they map to old-identity `source_code_stats`. Check the mode
+  before comparing `origin_*` with `{prefix}_*` —
+  [e9-source-code](../e9-source-code/SKILL.md#origin_-on-source_code_summary-legacy-or-current-model).
+  Read [legacy.md](legacy.md) only when the user explicitly asked for legacy.
 
 ## Reference
 
@@ -328,6 +332,31 @@ Read it in this order:
 
 Stored `reason` and `date_of_source` reflect the last `run`; a model does not
 re-decide when you read it.
+
+**For a source code rather than a person**, call `timelinePerson` with
+`source_codes` and read the breakdown tables instead of paging detail rows:
+
+| Table | Answers |
+| --- | --- |
+| `source_code_inputs` | Which entry types and inputs carry each code (count, people, min/max `ts`, load times, input type, plugin) |
+| `source_code_overlap` | How many people carry both of two matched codes |
+| `source_code_model_credit` | For people on each code: the credited code and `reason`, per `model_*_person` (NULL = not in that model) |
+
+Rule: Two codes that share people resolve to **one** credit per person. When
+one of them is on a source code override file, that code wins for everyone on
+the file (`reason` = `Source Code Override`). The other code keeps only the
+remaining people, so its model people and revenue can be near zero. That is
+correct behavior, not lost data.
+
+**`date_of_source` is NULL on every row.** `date_of_source` is the stored
+column name; it was not renamed. It holds the credited entry's
+`timeline.ts`. If it is NULL across a whole `{prefix}_person` table, the run
+predates the fix that writes it as an ISO string. Earlier runs spilled a
+JavaScript Date to CSV as epoch milliseconds, which the DATETIME reload turned
+into NULL. Effects: `{prefix}_person_stats_by_date` is empty, and lifetime
+stats are unaffected. Fix: rerun the model on a server that has the fix.
+NULL on only some rows is a different problem; check the credited entry's
+`ts`.
 
 ## Workflow
 

@@ -517,7 +517,7 @@ Rule: `inspect` never loads `timeline_v3*`. Call **`timelinePersonLegacy`** for 
 Rule: `inspect` requires `emails`, `person_ids`, `source_codes`, or `segment_id`. Unfiltered account-wide inspect is rejected.
 
 - Required: `account_id`
-- **command: inspect** (default) — requires `emails`, `person_ids`, `source_codes`, or `segment_id`. Returns entry-type min/max/count plus capped timeline detail and `model_*_person` when people resolve. `person_ids` is a number, string, or array of either (warehouse `person.id` is an integer — do not stringify). `source_codes` (comma-delimited; `%` is LIKE) scopes timeline queries. Missing tables are skipped. Do not join `person.id` to `person_id_int`.
+- **command: inspect** (default) — requires `emails`, `person_ids`, `source_codes`, or `segment_id`. Returns entry-type min/max/count plus capped timeline detail and `model_*_person` when people resolve. `person_ids` is a number, string, or array of either (warehouse `person.id` is an integer — do not stringify). `source_codes` (comma-delimited; `%` is LIKE) scopes timeline queries. With `source_codes` it also returns `source_code_inputs` (code × entry type × input / plugin), `source_code_overlap` (people on two codes), and `source_code_model_credit` (credited code + `reason` per `model_*_person`), uncapped. Overlap and credit are skipped above 2,000,000 matched entries. Rows appear once, in `tables[]`. Missing tables are skipped. Do not join `person.id` to `person_id_int`.
 - **command: compareSourceCodes** — all current `model_*_stats` by source code (`person_count`, `revenue`, `transactions`). Omit `source_codes` to union each model's top 10 by people and by revenue. Optional `models` subset. Returns `sql` for top-N selection and per-model stats. Pivot stems and `legacy: true` are in [e9-model/legacy.md](../e9-model/legacy.md); use them only when the user explicitly asked for legacy.
 - **command: compareSourceCodesLegacy** — legacy pivot vs current. [e9-model/legacy.md](../e9-model/legacy.md). Only when the user explicitly asked for legacy.
 - **command: summarizeSourceCodesLegacy** — pivot rows only. [e9-model/legacy.md](../e9-model/legacy.md). Only when the user explicitly asked for legacy.
@@ -540,6 +540,12 @@ Example — source-code scoped timeline:
 
 ```json
 { "account_id": "test", "source_codes": "EM_%" }
+```
+
+Example — why two codes for the same list get different model credit (read `source_code_inputs`, then `source_code_model_credit`):
+
+```json
+{ "account_id": "test", "source_codes": "ACQ_LIST_20260323_%,ACQ_LIST_20260324_%" }
 ```
 
 Example — auto top source codes across current models:

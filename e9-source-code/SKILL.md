@@ -8,8 +8,10 @@ description: >-
   global_message_summary). Use when working with source_code,
   source_code_dictionary, message_source_code, transaction_summary, attributed
   revenue, last click, recommended_message_id, or diagnosing a source-code
-  attribution issue. Distinguishes current timeline-model `{prefix}_*` output
-  from legacy `source_code_summary.origin_*` fields.
+  attribution issue. Explains that `source_code_summary.origin_*` is either
+  legacy (`source_code_stats`) or the current first-touch model depending on
+  `summary_model_kind`, how acquisition cost overrides change the view, and
+  how to diagnose origin revenue that differs between surfaces.
 ---
 
 # engine9 source codes
@@ -29,6 +31,10 @@ attribution all connect through the dictionary.
 | Parse codes, labels, and overrides | [Workflow](#workflow) |
 | Apply safety constraints | [Rules](#rules) |
 | Trace missing or wrong revenue | [Troubleshooting](#troubleshooting) |
+| Older sends show $0 `attributed_*` after a history load | [F — `updateAllAttributionStatistics`](#f-updateallattributionstatistics--global_message_summary) (`start`/`end`; default `-270d`) |
+| Is `source_code_summary.origin_*` legacy or first touch? | [`origin_*` on `source_code_summary`](#origin_-on-source_code_summary-legacy-or-current-model) |
+| Why acquisition cost differs between dictionary and summary | [Acquisition cost overrides](#acquisition-cost-overrides-on-source_code_summary) |
+| Origin / first touch revenue on one code but not another | [Origin revenue debug](#origin-first-touch-revenue-differs-between-source-codes-or-surfaces) |
 
 ## Concepts
 
@@ -53,7 +59,8 @@ Rule: Do not mix attributed revenue and model revenue into one “value” numbe
 |--------------|------|
 | `source_code_dictionary` | One row per unique source code; parsed elements, format match, last used |
 | `message_source_code` | Source codes extracted from loaded messages (links / primary code), with `publish_date` |
-| `source_code_summary` | Per-code rollups: last-click attributed transactions/revenue (attribution), spend. Also **legacy** `origin_*` (old identity) — current models are `{prefix}_*` ([e9-model](../e9-model/SKILL.md)) |
+| `source_code_summary` | Per-code rollups: last-click attributed transactions/revenue (attribution), spend, dictionary elements with acquisition overrides applied. `origin_*` comes from legacy `source_code_stats` **or** a current `{prefix}_*_stats` model, chosen by `summary_model_kind` — see [`origin_*` on `source_code_summary`](#origin_-on-source_code_summary-legacy-or-current-model) |
+| `source_code_dictionary_override` | Hand-entered element overrides (acquisition cost/date, goal, …) keyed by the `source_code` **string**. Applied by `source_code_summary`, not written into `source_code_dictionary` |
 | `global_message_summary` | Per-message rollups including `attributed_revenue` and `attributed_transactions` — how to read the views: [e9-global-message](../e9-global-message/SKILL.md) |
 | `transaction_summary` | Loaded transactions with `transaction_source_code`, `ts`, `amount`, `recommended_message_id` |
 | `transaction` | Base conversion rows; `source_code_id`, overrides, `recommended_message_id` / `final_message_id` |
@@ -72,11 +79,123 @@ Attributed transaction counts and revenue appear on both `global_message_summary
 **Origin** is a **model**: it connects a person (and that person’s lifetime transactions) to an item in their [timeline](../e9-timeline/SKILL.md) history — not to the message last-click would credit. Usually the CRM origin source (treat as immutable); some systems pick the earliest timeline action instead.
 
 - **Current** (new identity): `model_crm_origin_*`, `model_first_touch_*`, and other `{prefix}_*` tables — [e9-model](../e9-model/SKILL.md). `person_id` is bigint; `transaction_id` is UUID.
-- **Legacy:** `source_code_summary.origin_people` / `origin_revenue` (and other `origin_*` there). Computed against the old identity (`person_metadata` / `person_id_int`). Do not use these for current model work.
+- **Legacy:** `source_code_stats.origin_*`, computed against the old identity (`person_metadata` / `person_id_int`). Do not use these for current model work.
+- **`source_code_summary.origin_*` is either one**, depending on the account's `summary_model_kind`. The column names do not change when the source does. Rule: Before explaining any `origin_*` number, establish which mode the view is in — [`origin_*` on `source_code_summary`](#origin_-on-source_code_summary-legacy-or-current-model).
 
 Some codes are origin-only (list acquisition). Some are last-click-only (an appeal email). Some accrue both.
 
 **Refunds** are not subtracted from raw revenue unless a report explicitly says so.
+
+### `origin_*` on `source_code_summary`: legacy or current model
+
+`source_code_summary` is a view rebuilt by the source-code summary job. When it
+is built, it reads one setting and conditionally maps the `origin_*` output
+columns to either the legacy origin stats (old `person_metadata` identity
+mapping) or the current first touch model's stats (when available). This is the
+first thing to check when origin people or origin revenue look wrong.
+
+| `summary_model_kind` | `origin_*` comes from | `trans_model_<stem>_*` comes from |
+| --- | --- | --- |
+| `current` | the preferred complete current model: `model_first_touch_*_stats`, else `model_crm_origin_*`, else `model_last_acquisition_*` (joined as `origin_model_person` / `origin_model_transaction`) | `model_<stem>_person_stats` / `_transaction_stats` for each model that has both |
+| `legacy` | `source_code_stats.origin_*` (old identity) | `transaction_model_pivot` |
+| no setting row | **same as `legacy`** | same as `legacy` |
+
+The setting is `summary_model_kind` on the plugin at path
+`@engine9/plugins/models/deployment/v2026_09_16` (join on `plugin.path`, never a
+plugin UUID). Valid values are `current` and `legacy`.
+
+In `current` mode, the mapped fields are:
+
+| `source_code_summary` column | Current model column |
+| --- | --- |
+| `origin_person_count` | `{prefix}_person_stats.person_count` |
+| `origin_transaction_count` | `{prefix}_transaction_stats.transactions` |
+| `origin_transaction_revenue` | `{prefix}_transaction_stats.revenue` |
+| `origin_refund_count` / `origin_refund_amount` | `{prefix}_transaction_stats.refund_count` / `refund_amount` |
+| `origin_transaction_unique_person` | `{prefix}_transaction_stats.transaction_unique_person` |
+| any other `origin_*` (`origin_initial_*`, `origin_subsequent_*`, …) | `0`; date-typed columns are `2000-01-01` |
+
+Rule: In `current` mode, a `0` or `2000-01-01` on an unmapped `origin_*`
+column is a placeholder, not data. Do not report it as "no initial revenue."
+
+Rule: Zero-filled `trans_model_<stem>_*` columns are a compatibility
+compromise for consumers that still select them out of the view. A `0` there
+means that model's stats are not joined (not deployed or not run), not that the
+model credited nothing. Confirm by checking for `model_<stem>_person_stats`.
+Newer builds of the view omit undeployed standard stems instead of
+zero-filling them, so the column set can differ between accounts.
+
+Rule: The mode is read when the view is **rebuilt**, not when it is queried.
+The live view can disagree with the setting until the next rebuild. Check both
+the setting and the live definition. An account with no setting row whose live
+view still joins current model stats will flip `origin_*` back to legacy on its
+next rebuild.
+
+**Check which mode applies:**
+
+```sql
+-- 1. The setting (no row = legacy on next rebuild)
+SELECT s.value
+FROM setting s
+JOIN plugin p ON p.id = s.plugin_id
+WHERE p.path = '@engine9/plugins/models/deployment/v2026_09_16'
+  AND s.name = 'summary_model_kind';
+
+-- 2. What the live view was actually built with
+SELECT
+  VIEW_DEFINITION LIKE '%origin_model_person%' AS origin_from_current_model,
+  VIEW_DEFINITION LIKE '%source_code_stats%' AS reads_legacy_source_code_stats
+FROM information_schema.VIEWS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'source_code_summary';
+
+-- 3. Compare the three numbers for one code
+SELECT
+  d.source_code,
+  scs.origin_person_count AS summary_origin_people,
+  scs.origin_transaction_revenue AS summary_origin_revenue,
+  ft.person_count AS first_touch_people,
+  ftt.revenue AS first_touch_revenue,
+  st.origin_person_count AS legacy_origin_people
+FROM source_code_dictionary d
+LEFT JOIN source_code_summary scs ON scs.source_code_id = d.source_code_id
+LEFT JOIN model_first_touch_person_stats ft ON ft.source_code_id = d.source_code_id
+LEFT JOIN model_first_touch_transaction_stats ftt ON ftt.source_code_id = d.source_code_id
+LEFT JOIN source_code_stats st ON st.source_code_id = d.source_code_id
+WHERE d.source_code = 'SC_EG_123';
+```
+
+If `summary_origin_*` matches `first_touch_*`, the view is current. If it
+matches `legacy_origin_*`, the view is legacy. Legacy and current can credit
+different codes for the same people, because legacy origin never saw the
+current timeline's source code override entries.
+
+### Acquisition cost overrides on `source_code_summary`
+
+`source_code_summary` applies `source_code_dictionary_override`, joined on the
+`source_code` string (`dict.source_code = override.source_code`). Acquisition
+cost entered through the override folder or console therefore shows on the
+summary view while `source_code_dictionary` keeps the parsed value, often `0`
+or blank.
+
+| Override field | Rule in the view |
+| --- | --- |
+| `acquisition_cost`, `acquisition_cost_per_person`, `acquisition_date` | override wins when it is **not null** (an explicit `0` overrides) |
+| every other element (goal, channel, …) | override wins when it is a **non-empty** string |
+
+Rule: When acquisition cost differs between `source_code_dictionary` and
+`source_code_summary`, check `source_code_dictionary_override` for that exact
+code string before suspecting a load problem. The view does not compute
+`acquisition_cost_per_person`; it only passes through what was entered.
+
+```sql
+SELECT d.source_code, d.acquisition_cost AS dictionary_cost,
+       o.acquisition_cost AS override_cost, scs.acquisition_cost AS summary_cost
+FROM source_code_dictionary d
+LEFT JOIN source_code_dictionary_override o ON o.source_code = d.source_code
+LEFT JOIN source_code_summary scs ON scs.source_code_id = d.source_code_id
+WHERE d.source_code LIKE 'ACQ_%'
+LIMIT 50;
+```
 
 ## Rules
 
@@ -142,18 +261,18 @@ Revenue from last-click **attribution** (may differ from a message system’s na
 | Revenue | Last-click total, including later recurring installments |
 | Refunds | Not netted from revenue unless marked |
 
-Legacy origin **model** on this table (old identity — do not use for current model work). Current origin/LTV is `{prefix}_*` — [e9-model](../e9-model/SKILL.md).
+Origin **model** on `source_code_summary`. The source is legacy or current depending on `summary_model_kind` ([details](#origin_-on-source_code_summary-legacy-or-current-model)). For model-specific work, read `{prefix}_*` directly — [e9-model](../e9-model/SKILL.md).
 
 | Field | Meaning |
 |-------|---------|
-| Origin people / origin revenue | Legacy first-engagement people and their lifetime transactions |
+| Origin people / origin revenue | People the origin model credited to this code, and those people's lifetime transactions. Current mode: the first touch model when deployed. Legacy mode: `source_code_stats` |
 
 Cost (engine9 does not auto-compute ROI; the reporting environment does):
 
 | Field | Meaning |
 |-------|---------|
 | Spend | Uneditable. Captured from ad platforms (Facebook, Google, Bing). Email, SMS, organic, mail are typically `$0`. Platform-reported only — excludes creative, list cost, etc. |
-| Acquisition cost | Set via **Acquisition Cost Override** only; copies into Acquisition Cost. Not used by native reports unless the account wires it in. |
+| Acquisition cost | Set via **Acquisition Cost Override** only (`source_code_dictionary_override`). `source_code_summary` shows the override; `source_code_dictionary` keeps the parsed value. Not used by native reports unless the account wires it in. See [Acquisition cost overrides](#acquisition-cost-overrides-on-source_code_summary). |
 | Budget & projections | Per code, per day, across a start/end range. Console: Source Code → Budget & Projections. |
 
 Common parsed elements (full list in [elements.md](elements.md)): `source_code_channel`, `source_code_date` (`YYYYMMDD`, often ≠ message publish date), `goal`, `geo`.
@@ -199,7 +318,7 @@ Last-click pipeline:
 - [ ] C: Message load → source_code_dictionary + message_source_code
 - [ ] D: Transaction load → transaction_summary.transaction_source_code
 - [ ] E: Attribution → transaction_summary.recommended_message_id
-- [ ] F: updateAttributionStatistics → global_message_summary
+- [ ] F: updateAllAttributionStatistics → global_message_summary (default publish_date lookback -270d)
 ```
 
 Exact string match matters (`SC_EG_123` ≠ `sc_eg_123` ≠ `SC_EG_123 `). Recognized link params are listed under [Extracting source codes from message links](#extracting-source-codes-from-message-links).
@@ -281,9 +400,21 @@ LIMIT 20;
 
 **Gap if join is empty:** string mismatch between C and D (not a missing load). **Gap if join exists but `ts` is not after `publish_date`:** date window (timezone, publish_date default, backdated transaction). **Gap if join and dates look valid but `recommended_message_id` is still null:** attribution has not run, or another row won / was skipped.
 
-### F) `updateAttributionStatistics` → `global_message_summary`
+### F) `updateAllAttributionStatistics` → `global_message_summary`
 
-`updateAttributionStatistics` groups attributed transactions by `message_id` and writes `global_message_summary`: `sum(amount)` → `attributed_revenue`, `count(*)` → `attributed_transactions`.
+Rule: The global `attributed_*` rollup is **`updateAllAttributionStatistics`** (TransactionBase). Message-load `updateAttributionStatistics` is a **no-op** — do not schedule it expecting a fix.
+
+`updateAllAttributionStatistics` groups attributed transactions by final message id and writes `global_message_summary`: `sum(amount)` → `attributed_revenue`, `count(*)` → `attributed_transactions`.
+
+Rule: Automatic runs only include messages with **`publish_date >= -270d`** (optional `end` = `publish_date < end`). Older history is **not** refreshed unless you pass `start` / `end` (or `message_ids`). This is intentional for performance — after a historical message backfill, or when tickets show $0 attributed revenue before ~270 days despite codes on both sides, the first fix to try is:
+
+```text
+task method updateAllAttributionStatistics
+  options.start = <publish_date lower bound for the gap>
+  options.end   = <optional publish_date upper bound>
+```
+
+If E is also empty for that old window, automatic `attribute` only covers transactions with **`ts >= -30d`** by default — widen `attribute` `start` first, then re-run `updateAllAttributionStatistics` for the message `publish_date` window.
 
 ```sql
 SELECT
@@ -309,9 +440,70 @@ LIMIT 20;
 
 **Pass:** summary `attributed_revenue` / `attributed_transactions` match the grouped `transaction_summary` totals for that `message_id` (within the same filter the report uses).
 
-**Gap:** E has `recommended_message_id` but summary is zero/stale/wrong → stats job has not run or is aggregating a different set (overrides, date filters, refunds). A UI report that still disagrees after F matches is a report/UI issue, not this pipeline.
+**Gap:** E has `recommended_message_id` but summary is zero/stale/wrong → stats job has not run for that **publish_date** window (often outside `-270d`), or is aggregating a different set (overrides, date filters, refunds). A UI / BigQuery report that still disagrees after the account DB matches is a sync or report/UI issue, not this pipeline.
 
 Record the first failing step (other accounts; messaging vs payment remotes).
+
+### Origin (first touch) revenue differs between source codes or surfaces
+
+Use this when a source code shows acquisition people or "original revenue" in
+one place and zero in another. A common case is two codes for the same list,
+one added through the override folder and one uploaded to the CRM with a
+different date. This is a **model** question, not last click. Walk the steps in
+order.
+
+```text
+Origin revenue debug:
+- [ ] 1: Which mode is source_code_summary in? (setting + live view)
+- [ ] 2: Is acquisition cost coming from an override?
+- [ ] 3: Which entries carry each code? (entry type × input)
+- [ ] 4: Which code did the model credit those people to, and why?
+- [ ] 5: Do the stats tables agree with the person table?
+```
+
+**1. Mode.** Run the checks in
+[`origin_*` on `source_code_summary`](#origin_-on-source_code_summary-legacy-or-current-model).
+In legacy mode, `origin_*` cannot see current overrides. Stop and explain
+that before comparing with the first touch model.
+
+**2. Acquisition cost.** The summary view shows override cost; the dictionary
+does not. A code can have cost on the summary, revenue in the model, and
+neither on the dictionary row. See
+[Acquisition cost overrides](#acquisition-cost-overrides-on-source_code_summary).
+
+**3. Entries per code.** Call MCP `timelinePerson` with `source_codes` (one
+call can cover all the codes, comma-delimited or with `%`). Read the
+`source_code_inputs` table rather than the capped detail `timeline` rows. It
+gives count, people, and min/max `ts` for each code × entry type × input, so
+`SOURCE_CODE_OVERRIDE` (0), `CRM_ORIGIN` (1), and transaction entries are
+separated per code. `source_code_overlap` shows how many people carry both
+codes.
+
+**4. Model credit.** In the same response, `source_code_model_credit` gives,
+for the people on each code, the credited source code and `reason` per
+`model_*_person`. People on a CRM-loaded code whose model credit is the
+override code (`reason` = `Source Code Override`) are working as designed.
+In every shipped model, a `SOURCE_CODE_OVERRIDE` entry beats the rule, so the
+CRM code keeps only the people who are **not** on the override file.
+
+**5. Stats.** `{prefix}_person_stats` / `_transaction_stats` should match the
+credit counts from step 4. If `{prefix}_person_stats_by_date` is empty while
+lifetime stats are populated, check whether `{prefix}_person.date_of_source`
+is NULL ([e9-model](../e9-model/SKILL.md#troubleshooting)).
+
+Rule: Trust the timeline **entry type** over the input or plugin join when
+classifying an entry. On some older accounts, CRM origin entries were loaded
+under a legacy override input. That input's `input_type` (`override`) and its
+own min/max timeline ts do not describe the CRM rows. That is a legacy-data
+artifact, not a model error. `source_code_inputs` shows it as
+`entry_type_id = 1` on an input whose `input_min_timeline_ts` /
+`input_max_timeline_ts` do not cover the entries' `min_ts` / `max_ts`.
+
+**What to tell the requester** for the two-code case: the override-folder code
+gets the people on its file plus their lifetime revenue. The CRM code keeps
+only people not on the override file. Acquisition cost lives where the
+override was entered. To consolidate on one code, put every person on the
+override file, or remove the override and let the CRM origin stand.
 
 ## Related documentation
 

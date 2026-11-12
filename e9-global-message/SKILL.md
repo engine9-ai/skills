@@ -100,7 +100,7 @@ Joined on `message.final_primary_source_code = summary.source_code` (and matchin
 |---------|--------|
 | Parsed elements (`source_code_channel`, `goal`, `geo`, …) and `*_label` | Dictionary parse + labels for the **primary** source code |
 | `source_code_date_parsed` / `source_code_parsed_date` | Date embedded in the code string (often ≠ `publish_date`) |
-| `origin_person_count`, `origin_transaction_*`, `origin_initial_*`, `origin_subsequent_*`, `origin_refund_*` | **Legacy** origin-model rollups for that **source code**. Not message-scoped last click. Prefer current `{prefix}_*` model tables ([e9-model](../e9-model/SKILL.md)) |
+| `origin_person_count`, `origin_transaction_*`, `origin_initial_*`, `origin_subsequent_*`, `origin_refund_*` | Origin-model rollups for that **source code**, not message-scoped last click. Source depends on `summary_model_kind`: the current first touch model's stats (`current`) or legacy `source_code_stats` (`legacy` / no setting). In `current` mode, only people, transaction count, revenue, refunds, and unique person are mapped; `origin_initial_*` / `origin_subsequent_*` are `0` placeholders ([e9-source-code](../e9-source-code/SKILL.md#origin_-on-source_code_summary-legacy-or-current-model)) |
 
 `origin_*` and element fields on a message row are properties of the primary source code, not of the message alone. If several messages share one primary code, they each show the same code-level origin totals.
 
@@ -115,7 +115,7 @@ Joined on `message.final_primary_source_code = summary.source_code` (and matchin
 | How did this ad or long-running message perform on the days stats were reported? | `global_message_summary_by_date`, filter on `date` (not `publish_date`). Sum engagement and `spend`. |
 | Last-click revenue by the day the transaction happened? | `global_message_summary_by_date`, sum `attributed_revenue` on `date` (transaction day). Email fundraising tied to the send still uses the lifetime summary and `publish_date`. |
 | Cross-channel fundraising truth? | `attributed_*`, not `revenue` / `transactions` |
-| Acquisition / LTV by first touch or CRM origin? | Current model tables (`{prefix}_*`), not `origin_*` on these views |
+| Acquisition / LTV by first touch or CRM origin? | Current model tables (`{prefix}_*`). `origin_*` here matches first touch only when the account's `summary_model_kind` is `current` |
 | ROI for ads? | `sum(attributed_revenue) / sum(spend)` on the by-date view (reports usually do this) |
 
 ### Trace related objects
@@ -128,7 +128,7 @@ Joined on `message.final_primary_source_code = summary.source_code` (and matchin
 | `transaction_summary` | Row-level last-click debug (`recommended_message_id`, `transaction_source_code`) |
 | `union_global_message_summary*` | Account-union variants (multi-warehouse setups) |
 
-Stale `attributed_*` with good `transaction_summary.recommended_message_id` usually means attribution stats have not run for that publish window — diagnose with [e9-source-code](../e9-source-code/SKILL.md) pipeline A–F, not by rewriting these views.
+Stale `attributed_*` with good `transaction_summary.recommended_message_id` usually means attribution stats have not run for that publish window. Automatic `updateAllAttributionStatistics` only covers `publish_date >= -270d`; for older sends (or after a history backfill), pass explicit `start`/`end`. Diagnose with [e9-source-code](../e9-source-code/SKILL.md) pipeline A–F (step F), not by rewriting these views.
 
 ## Examples
 
@@ -178,7 +178,7 @@ Use `message_activity` when the question is “on which days did this ad or long
 
 | Symptom | Check |
 |---------|-------|
-| `attributed_*` is stale but `recommended_message_id` is correct | Attribution statistics may not have run for the publish window |
+| `attributed_*` is stale but `recommended_message_id` is correct | Attribution statistics may not have run for the publish window (default lookback `-270d`; run `updateAllAttributionStatistics` with `start`/`end`) |
 | Revenue appears duplicated | Confirm native `revenue` was not added to `attributed_revenue` |
 | `origin_*` totals repeat across rows | Check whether messages share `final_primary_source_code` |
 | Email chart covers one recent month while Inventory Messages spans a year of publishes | Email was read from `message_activity` / `date`. Use `statistics.messages` on `publish_date`. |

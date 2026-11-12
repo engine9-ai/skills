@@ -99,7 +99,19 @@ Rule: `inspect` requires `emails`, `person_ids`, `source_codes`, or `segment_id`
 { "account_id": "<account_id>", "segment_id": "<segment_uuid>" }
 ```
 
-Optional `start` / exclusive `end` (YYYY-MM-DD or relativeDate) scope `timeline.ts`. Returns `section: "current"` tables: `timeline_counts`, `timeline`, `models`. Timeline type is `entry_type` / `entry_type_id`. `effective_date` is `timeline.ts`.
+Optional `start` / exclusive `end` (YYYY-MM-DD or relativeDate) scope `timeline.ts`. Returns `section: "current"` tables: `timeline_counts`, `timeline`, `models`. Timeline type is `entry_type` / `entry_type_id`. `effective_date` is `timeline.ts`. Rows appear once, in `tables[]`.
+
+With `source_codes`, three uncapped breakdown tables follow `timeline_counts`:
+
+| Table | Use it for |
+|-------|------------|
+| `source_code_inputs` | Per code × entry type × input: count, people, min/max `ts`, first/last load time, `input_type` / `input_name`, plugin, and the input's own `input_min_timeline_ts` / `input_max_timeline_ts` |
+| `source_code_overlap` | People who carry both of two matched codes (2–25 codes) |
+| `source_code_model_credit` | Where each `model_*_person` credited the people on each code, with `reason` |
+
+Rule: For a source-code question, read `source_code_inputs` before the detail `timeline` table. Detail rows are capped (default 100) and sorted by `ts`, so one code's entries can crowd out another's.
+
+Rule: Classify an entry by `entry_type_id`, not by its input. On some older accounts, CRM origin entries (`1`) sit under a legacy override input (`input_type = override`). In that case the input's own ts range does not cover the entries. That is legacy data, not a load error.
 
 **Legacy inspect** (optional second call; unregister the tool to slice it away):
 
@@ -141,7 +153,7 @@ UI merge: keep current and legacy `tables[]` / `sql[]` side by side (`section` a
 | Other | `FILE_IMPORT`, `EXPORT*` | 70, 80–82 | Loads and pushes |
 | Other | `INFERRED_*` | 91–93 | Modeled, not observed |
 
-`SOURCE_CODE_OVERRIDE` (0) is a dictionary override marker, not a person action.
+`SOURCE_CODE_OVERRIDE` (0) is not a person action. It is a per-person entry, loaded from a source code override file, that tells every model "credit this person to this code." It beats the model's rule (first touch, CRM origin, last acquisition), whatever its `ts`. A CRM origin code that shares people with an override file therefore keeps only the people not on the file ([e9-model](../e9-model/SKILL.md#troubleshooting)).
 
 ## Workflow
 

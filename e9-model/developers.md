@@ -6,9 +6,12 @@ running `ModelWorker`, authoring a model plugin, and the internals behind both.
 Reminder that survives into code review: a **model** connects a person (and
 their transactions) to a timeline entry. **Attribution** connects a transaction
 to a **message** and is not a model ([e9-source-code](../e9-source-code/SKILL.md)).
-Never write `source_code_summary.origin_*` — those columns belong to the
-old-identity models in [legacy.md](legacy.md). Read that file only when the
-user explicitly asked for legacy.
+Never write `source_code_summary.origin_*`. The summary view build maps those
+columns from the preferred current model's stats when `summary_model_kind` is
+`current`, and from old-identity `source_code_stats` otherwise
+([e9-source-code](../e9-source-code/SKILL.md#origin_-on-source_code_summary-legacy-or-current-model)).
+Old-identity models are in [legacy.md](legacy.md); read that file only when
+the user explicitly asked for legacy.
 
 ## ModelWorker
 
@@ -173,8 +176,10 @@ surface model numbers:
 2. `LEFT JOIN` on `source_code_id` (and `date` for `*_stats_by_date`) — prefer stats over re-aggregating detail. By-date person counts use credited `date_of_source` (`timeline.ts`), never dictionary `source_code_date`.
 3. Keep attributed `revenue` / transactions separate from model `revenue` /
    `person_count`; never sum them.
-4. Do not fill legacy `origin_*` from `{prefix}_*` unless product explicitly
-   maps one model into those columns for compatibility.
+4. `origin_*` is already mapped by the view build when
+   `summary_model_kind=current` (first touch, else CRM origin, else last
+   acquisition). Do not add a second mapping. Keep zero-filled
+   `trans_model_<stem>_*` placeholders where readers still select them.
 
 Concrete table list, column types, and a join example:
 [schema.md § Optional use from source_code_summary](schema.md#optional-use-from-source_code_summary).
@@ -302,8 +307,17 @@ Optional `start` / exclusive `end` scope `timeline.ts`. Unfiltered calls are
 rejected.
 
 `tables[]` entries have `status` `ok` / `skipped` / `error`. Current tables:
-`timeline_counts`, `timeline`, `models`. Emails are the only identity bridge;
-`person.id` is never joined to `person_id_int`.
+`timeline_counts`, then (with `source_codes`) `source_code_inputs`,
+`source_code_overlap`, `source_code_model_credit`, then `timeline`, `models`.
+Rows appear only in `tables[]`; there is no raw `current` block. Shapes and
+skip thresholds: [schema.md](schema.md#inspectperson-conductor-tables).
+Emails are the only identity bridge; `person.id` is never joined to
+`person_id_int`.
+
+Model result rows normalize a Date or epoch-number `date_of_source` to an ISO
+string before the CSV spill (`dateOfSourceValue` in `model/output.js`).
+`stringToType` cannot parse epoch milliseconds, so the reload would otherwise
+store NULL.
 
 The payload includes top-level **`sql`**: `[{ id, sql, error, table? }]` for
 every warehouse statement the request ran. Same field on `compareSourceCodes`.

@@ -1,11 +1,11 @@
 ---
 name: e9-export
-description: "Read and interpret engine9 export packages, including inventory.json5, warehouse Parquet tables, input-store idv1 files, metadata.json, segment definition export CSVs, entry types, joins, and export diagnostics. Use when consuming an export, determining what it contains, joining person, transaction, message, and timeline data, or validating package completeness."
+description: "Read and interpret engine9 export packages, including inventory.json5, warehouse Parquet tables, input-store idv1 files, metadata.json, query export CSVs, entry types, joins, and export diagnostics. Use when consuming an export, determining what it contains, joining person, transaction, message, and timeline data, or validating package completeness."
 ---
 
 # engine9 exports
 
-An **export** is a self-contained snapshot of one account’s warehouse data; a receiver gets files, not a live database. Typical contents are warehouse table Parquet, idv1 file copies with each store’s `metadata.json`, and optional segment definition export CSVs. Use this skill to inspect, consume, join, or validate those files; use the export-building documentation when creating or running a package.
+An **export** is a self-contained snapshot of one account’s warehouse data; a receiver gets files, not a live database. Typical contents are warehouse table Parquet, idv1 file copies with each store’s `metadata.json`, and optional query export CSVs (one new file of rows per named export). Use this skill to inspect, consume, join, or validate those files; use the export-building documentation when creating or running a package.
 
 ## Quick reference
 
@@ -17,9 +17,9 @@ An **export** is a self-contained snapshot of one account’s warehouse data; a 
 | Inspect a named audience extract | `{export_id}.{export_name}.export.csv` in `export_dir`, and its metadata sidecar |
 | Query an export in a local DuckDB (no engine9 install) | [duckdb.md](duckdb.md): builds `{export_root}/engine9.duckdb`, with participant, opt-out, and transaction/click lists |
 | Create or debug an export | Export building documentation |
-| Limit by start/end date | [Start and end dates](building.md#start-and-end-dates) — tables, segment definition exports, and input stores differ |
+| Limit by start/end date | [Start and end dates](building.md#start-and-end-dates) — tables, query exports, and input stores differ |
 
-Rule: `inventory.json5` is authoritative. Do not infer artifact locations from the default directory structure; use its paths and `relative_path` values.
+Rule: `inventory.json5` is authoritative. Do not infer file locations from the default directory structure; use its paths and `relative_path` values.
 
 ## File format
 
@@ -27,15 +27,17 @@ Default root: `{store_path}/{account_id}/exports/{export_id}/{date}/`
 
 `--export_dir` overrides that root and is the only destination: a local path, the token `temp`, or an `s3://` / `r2://` / `gs://` / `gdrive://` URI. `temp` resolves to `{os.tmpdir()}/{account_id}/exports/{export_id}` and is not copied to the account store. Use `{{account_id}}` / `{{export_id}}` / `{{date}}` in a path when you want a per-run folder under a customer bucket; otherwise a path is used as-is. The account store is not also written. `--credentials` (or account `settings.file_credentials`) is a bootstrap path/URI to the destination key file; it is not part of the package.
 
-Start with **`inventory.json5`**. Bundle export writes it **last**. It is the catalog of what was written; its presence means the run finished. A definition may relocate artifacts with `relative_path`; trust the inventory, not assumed paths.
+Start with **`inventory.json5`**. Every plugin path export writes it **last**. It is the catalog of what was written; its presence means the run finished. A definition may relocate copied files with `relative_path`; trust the inventory, not assumed paths.
+
+A file's contents do not depend on where the account stored the data. The same export can read one account's entries from the warehouse `timeline` table and another's from input-store files, and both packages have the same files and columns.
 
 | Path | Contents |
 |------|----------|
 | `tables/{table}.parquet` | One warehouse table dump |
 | `{input_type}/{input_id}/*.idv1.parquet` | Activity rows for one input (`message`, `person`, `timeline`, …) |
 | `{input_type}/{input_id}/metadata.json` | Descriptor for that input store |
-| `{export_id}.{export_name}.export.csv` + `.metadata.json5` | Named segment definition export, written in `export_dir` |
-| `inventory.json5` | Catalog of what was written (paths, counts, skipped), written after artifacts |
+| `{export_id}.{export_name}.export.csv` + `.metadata.json5` | Named query export, written in `export_dir` |
+| `inventory.json5` | Catalog of what was written (copies and query export files, counts, skipped), written after everything else |
 
 **Not included**
 
@@ -47,16 +49,18 @@ Start with **`inventory.json5`**. Bundle export writes it **last**. It is the ca
 
 ## `inventory.json5`
 
-Bundle exports write this at the export root (`format_version` **2**) after artifacts. It is the catalog of what was written, not monthly statistics.
+A plugin path export writes this at the export root (`format_version` **2**) after everything else. It is the catalog of what was written, not monthly statistics. A run that copies nothing has only the identity keys and `exports[]`.
 
 | Key | Purpose |
 |-----|---------|
-| `definition_path`, `plugin_path`, `export_dir` | Which bundle ran, and the export root |
-| `universe` | Resolved bundle entries |
+| `definition_path`, `plugin_path`, `export_dir` | Which export definition ran, and the export root |
+| `exports[]` | One `{ name, relative_path, records }` per query export file (`no_data: true` when nothing was written) |
+| `skipped_exports[]` | `{ name, reason }` for query exports that failed |
+| `universe` | Resolved entries that were copied |
 | `tables[]` | `{ table, relative_path, records }` |
 | `files[]`, `directories[]` | Planned idv1 copies and `metadata.json` |
 | `skipped_tables[]`, `skipped_files[]` | Omitted items (`does_not_exist`, selector mismatch, …) |
-| `table_records`, `file_records`, `records` | Plan totals |
+| `table_records`, `file_records`, `records` | Copy totals |
 
 `directories[].files` is the **file list** (name, filename, records, source_directory), not a count.
 
@@ -66,7 +70,7 @@ Use it to confirm every expected parquet exists, to recover relative paths, and 
 
 ### Warehouse tables
 
-Table parquet is a dump of the named warehouse table at export time. Columns match the live table; `DESCRIBE` / parquet schema is the authority. Bundles choose a subset — a typical dump includes people, messages, source codes, and transactions, not every warehouse table.
+Table parquet is a dump of the named warehouse table at export time. Columns match the live table; `DESCRIBE` / parquet schema is the authority. An export definition chooses a subset — a typical dump includes people, messages, source codes, and transactions, not every warehouse table.
 
 | Table | Role | Join |
 |-------|------|------|
@@ -85,7 +89,7 @@ Table parquet is a dump of the named warehouse table at export time. Columns mat
 | `global_message` / `message` | Message identity (`channel`, `publish_date`, primary source code) | `input.id` for a message input is often the message id |
 | `global_message_summary` | Lifetime rollups. Email (and other one-shot sends) report sends, opens, and clicks on `publish_date`. | Message / plugin |
 | `global_message_summary_by_date` | One row per message per `date`. `date` is the day the statistic occurred. Use it for ads and other long-running types, not for email. | Message / plugin |
-| `timeline` | Warehouse entry log (when the bundle includes it): `id`, `ts`, `person_id`, `entry_type_id`, `input_id` | Same keys as idv1 rows |
+| `timeline` | Warehouse entry log (when the export copies it): `id`, `ts`, `person_id`, `entry_type_id`, `input_id` | Same keys as idv1 rows |
 
 One person may have many emails, phones, remotes, and hashes.
 
@@ -150,7 +154,7 @@ Snake_case on disk. Older files may still use camelCase (`inputId`, `pluginId`, 
 | `files[]` | `{ filename, records }` for files **in the source store** when `metadata.json` was last written. It can be stale: the copied `.idv1.parquet` may have a different name. Use `inventory.json5` `files[]` or the folder listing for what was copied. Legacy entries may be a bare string. |
 | `entry_types` | Map keyed by **string name** (not an array). Each value has `min_timeline_ts`, `max_timeline_ts`, `records`, `distinct_people`, `distinct_records`. |
 
-`entry_types` names are exact (`EMAIL_OPEN`, not `EMAIL_*`). A bundle can select a store by that map, but message stores selected by `input_type` and `channel` may have an empty `entry_types`. Count `entry_type_id` in the parquet to see which activity kinds it holds.
+`entry_types` names are exact (`EMAIL_OPEN`, not `EMAIL_*`). An export can select a store by that map, but message stores selected by `input_type` and `channel` may have an empty `entry_types`. Count `entry_type_id` in the parquet to see which activity kinds it holds.
 
 `records` in metadata can be stale. Prefer parquet `COUNT(*)` when the count matters.
 
@@ -196,7 +200,7 @@ Parquet stores **`entry_type_id` (integer)**. `metadata.json` `entry_types` uses
 
 `SOURCE_CODE_OVERRIDE` (0) is a dictionary override marker, not a person action.
 
-Email-oriented bundles typically ship stores whose `entry_types` include `EMAIL_*`. SMS-oriented bundles ship `SMS_*`.
+Email-oriented exports typically ship stores whose `entry_types` include `EMAIL_*`. SMS-oriented exports ship `SMS_*`.
 
 ## Workflow
 
@@ -223,25 +227,25 @@ Rule: Plugin scope for remotes is not a column on `person_remote`. Join `person_
 
 A message input’s `input.id` is the handle for that send. Opens and clicks for that send live in stores whose `metadata.json` `input_id` (or `entry_types`) points at that activity; they share `person_id` with `person` / `transaction`.
 
-### Read segment definition export CSVs
+### Read query export CSVs
 
-A named search export is one CSV plus a sidecar:
+A named query export is one CSV plus a sidecar. A person search export (`definition`) has one row per person; a timeline export (`timeline`) has one row per entry:
 
 - `{export_dir}/{export_id}.{export_name}.export.csv` (or `.export.csv.gz`)
 - `{export_dir}/{export_id}.{export_name}.export.csv.metadata.json5`
 
 `export_dir` defaults to `{store_path}/{account_id}/exports/{export_id}/{date}` when omitted. The CSV is written in that directory.
 
-Columns are whatever the search and its row transforms selected — not a fixed warehouse schema.
+Columns are whatever the query and its row transforms selected — not a fixed warehouse schema.
 
 The sidecar records how the file was built:
 
 | Field | Meaning |
 |-------|---------|
 | `configuration` | Options used for the run |
-| `sql` | Compiled search SQL (also pasted as a trailing `/* … */` comment) |
+| `sql` | Compiled SQL (also pasted as a trailing `/* … */` comment) |
 | `records` | Row count |
-| `people_searched` | People in the search universe |
+| `people_searched` | People in the search universe (person search exports) |
 | `sample_person_ids` | Sample of matched ids |
 | `deduplicated` / `deduplicated_against` | Present when prior export files were used as a dedupe set |
 
@@ -276,7 +280,7 @@ Rule: Do not treat timeline `id` as a person key.
 
 ## Troubleshooting
 
-Start with `inventory.json5`: if it is missing the run did not finish. Verify expected artifacts, inspect `skipped_tables` and `skipped_files`, and compare listed counts with Parquet counts when metadata may be stale. For creation, execution, and deeper export diagnostics, use the export-building guide.
+Start with `inventory.json5`: if it is missing the run did not finish. Verify the expected files, inspect `skipped_tables` and `skipped_files`, and compare listed counts with Parquet counts when metadata may be stale. For creation, execution, and deeper export diagnostics, use the export-building guide.
 
 ## Related documentation
 

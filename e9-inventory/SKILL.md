@@ -9,13 +9,13 @@ description: "Run and interpret engine9 warehouse inventory, account cache repor
 
 ## Quick reference
 
-| Task | Command or artifact |
+| Task | Command or file |
 |------|---------------------|
 | Check cache status | `e9 inventoryworker inventory -a <account_id>` |
 | Refresh account inventory | `e9 inventoryworker buildInventorySummaryFile -a <account_id>` |
 | Read the full account report | `cache/inventory.json.gz` |
 | Inspect a custom plan | `cache/inventory-plans/<slug>.json.gz` |
-| Inspect a bundle export plan | `{export_dir}/inventory.json5` |
+| Inspect what an export wrote | `{export_dir}/inventory.json5` |
 
 ## Rules
 
@@ -45,7 +45,7 @@ Rule: Input stores are not warehouse tables. A count mismatch between input stat
 
 Inventories take a while, so each account caches the last **account-wide** report at **`{account root}/cache/inventory.json.gz`**. `inventory` only stats that path (ready / size). `buildInventorySummaryFile` **without** an export definition writes it. Standard builds omit input-store `files[]` (`include_files: false`).
 
-**Custom / export-scoped builds never use that path.** When `definition_path`, `universe`, `tables`, or other bundle overrides are set, the plan is written to **`cache/inventory-plans/<slug>.json.gz`** (or `{export_dir}/inventory.json.gz` when `export_dir` is set). Bundle **export** still writes `{export_dir}/inventory.json5` and does not touch the account cache.
+**Custom / export-scoped builds never use that path.** When `definition_path`, `universe`, `tables`, or other copy overrides are set, the plan is written to **`cache/inventory-plans/<slug>.json.gz`** (or `{export_dir}/inventory.json.gz` when `export_dir` is set). A plugin path **export** still writes `{export_dir}/inventory.json5` and does not touch the account cache.
 
 ## Concepts
 
@@ -54,16 +54,16 @@ Inventories take a while, so each account caches the last **account-wide** repor
 | Worker | Alias | When to use |
 |--------|-------|-------------|
 | `@engine9/plugins/e9workers:InventoryWorker` | `inventoryworker` | **Preferred.** `inventory` stats the **account** cache; `buildInventorySummaryFile` writes that cache only for default (non-export) builds. With `definition_path` / custom universe → `cache/inventory-plans/`. |
-| `@engine9/plugins/e9workers:ExportWorker` | `exportworker` | `inventory` delegates to InventoryWorker (account cache lookup only). Bundle **export** writes `{export_dir}/inventory.json5` last (`statistics: false`) and does not overwrite the account cache. |
+| `@engine9/plugins/e9workers:ExportWorker` | `exportworker` | `inventory` delegates to InventoryWorker (account cache lookup only). A plugin path **export** writes `{export_dir}/inventory.json5` last (`statistics: false`) and does not overwrite the account cache. |
 
 ### What inventory produces
 
 Two logical parts in one JSON report (`format_version` **2**):
 
-1. **Plan** — what an export *would* write: tables, idv1 files, `relative_path`, transforms, skipped items, totals. `InventoryWorker.buildInventorySummaryFile` writes this to `cache/inventory-plans/` (or `{export_dir}/inventory.json.gz`). Bundle **export** writes the same shape as `{export_dir}/inventory.json5` **after** artifacts, as the completion catalog.
+1. **Plan** — what an export *would* copy: tables, idv1 files, `relative_path`, transforms, skipped items, totals. `InventoryWorker.buildInventorySummaryFile` writes this to `cache/inventory-plans/` (or `{export_dir}/inventory.json.gz`). A plugin path **export** writes the same shape as `{export_dir}/inventory.json5` **after** everything else, as the completion catalog, plus `exports[]` listing each query export file. A query export's universe (what `definition` or `timeline` reads) is never planned; only copies are.
 2. **Statistics** — account-wide **monthly** counts and engagement (revenue, people, sends / impressions / clicks by channel) for warehouse timelines, Home KPIs, and analytics iteration (standalone `buildInventorySummaryFile` only by default). Grain is `YYYY-MM`, not daily. Message stats are **aggregate** (`statistics.messages` from `global_message_summary` — Inventory **Messages**). Per-person send/open/click rows are **Timeline → Messages** (`statistics.inputs`, `subcategory: messages`).
 
-Account cache: `{account root}/cache/inventory.json.gz` (gzipped JSON; no `files[]` unless `--include_files=true`). Custom/export plans: `{account root}/cache/inventory-plans/<slug>.json.gz`. Bundle export plan: `{export_dir}/inventory.json5` (statistics omitted; includes files). Examples: [examples.md](examples.md).
+Account cache: `{account root}/cache/inventory.json.gz` (gzipped JSON; no `files[]` unless `--include_files=true`). Custom/export plans: `{account root}/cache/inventory-plans/<slug>.json.gz`. Export catalog: `{export_dir}/inventory.json5` (statistics omitted; includes files). Examples: [examples.md](examples.md).
 
 ## Workflow
 
@@ -91,7 +91,7 @@ e9 inventoryworker buildInventorySummaryFile -a <account_id>
 
 ### Build an export / custom plan (does not clobber the account cache)
 
-With a bundle definition (or `universe` / `tables` / `input_directories`), writes `cache/inventory-plans/<slug>.json.gz` and returns `account_inventory: false`:
+With a copy export definition (or `universe` / `tables` / `input_directories`), writes `cache/inventory-plans/<slug>.json.gz` and returns `account_inventory: false`:
 
 ```
 e9 inventoryworker buildInventorySummaryFile -a <account_id> \
@@ -125,9 +125,9 @@ e9 inventoryworker buildInventorySummaryFile -a <account_id> \
   --sample=true --include_files=true
 ```
 
-Writes `cache/inventory-plans/<slug>_sample.json.gz` with `sample: true`, `sample_table_limit` (100 unless `--limit=N`), and `sample_file_limit` (10). Bundle **export** with `--sample=true` materializes that plan under `{export_id}_sample/` (see [export building](../e9-export/building.md)).
+Writes `cache/inventory-plans/<slug>_sample.json.gz` with `sample: true`, `sample_table_limit` (100 unless `--limit=N`), and `sample_file_limit` (10). An **export** with `--sample=true` materializes that plan under `{export_id}_sample/` (see [export building](../e9-export/building.md)).
 
-### Tables-only override (no bundle definition)
+### Tables-only override (no definition_path)
 
 ```
 e9 inventoryworker buildInventorySummaryFile -a <account_id> \
@@ -138,7 +138,7 @@ e9 inventoryworker buildInventorySummaryFile -a <account_id> \
 
 When `--tables` (or `universe` / `input_directories`) is set without `definition_path`, defaults are not applied — only what you pass is inventoried.
 
-### Override input selectors (with a bundle)
+### Override input selectors (with a definition_path)
 
 ```
 e9 inventoryworker buildInventorySummaryFile -a <account_id> \
@@ -185,7 +185,7 @@ For “what’s in inventory?” questions, stop after parsing that report. Do n
 
 ### Default definition (no `definition_path`)
 
-When `definition_path` is omitted and no explicit bundle options are passed, inventory uses:
+When `definition_path` is omitted and no explicit copy options are passed, inventory uses:
 
 **Tables:** `person`, `person_remote`, `person_email`, `person_phone`, `person_address`, `segment`, `source_code_dictionary`, `transaction`, `global_message_summary`, `global_message_summary_by_date`, `timeline`
 
@@ -193,13 +193,13 @@ Aggregate message views come before `timeline` so the usual message audit is in 
 
 **Inputs:** all rows in `input` via `{ type: 'inputs', eql: { table: 'input', columns: [...] } }` — every input store with listable `.idv1.parquet` files
 
-Override with `--tables`, `--extra_tables`, `--exclude_tables`, `--input_directories`, or `--universe` — any of those replaces the default bundle instead of merging.
+Override with `--tables`, `--extra_tables`, `--exclude_tables`, `--input_directories`, or `--universe` — any of those replaces the default copy list instead of merging.
 
 Implementation: `server/utilities/defaultInventoryDefinition.js`.
 
 ### Inventory report (`cache/inventory.json.gz` and export `inventory.json5`)
 
-The account cache is gzipped JSON. Bundle export still writes uncompressed JSON5. Same object shape (`format_version` **2**). Standard account cache omits `files[]` / `directories[]`.
+The account cache is gzipped JSON. Export still writes uncompressed JSON5. Same object shape (`format_version` **2**). Standard account cache omits `files[]` / `directories[]`.
 
 ### Top level
 
@@ -208,15 +208,15 @@ The account cache is gzipped JSON. Bundle export still writes uncompressed JSON5
 | `format_version` | Schema version (`2`). |
 | `cached_at` | ISO timestamp when the account cache was written (`buildInventorySummaryFile` only). |
 | `definition_path`, `plugin_path`, `source_directory` | Run context. |
-| `universe` | Resolved bundle universe. |
+| `universe` | Resolved universe entries to copy. |
 | `summary` | Baked-in totals: `table_count`, `table_records`, `records`, `people` / `transactions` / `messages` when those tables were inventoried. File counts only when `files` were included. |
 | `tables[]` | `{ table, relative_path, records }` plus `transforms` only when non-empty. |
 | `files[]`, `directories[]` | Planned idv1 copies (export / `--include_files=true` only). |
 | `skipped_tables[]`, `skipped_files[]` | Omitted items (`does_not_exist`, selector mismatch, …). |
 | `table_records`, `file_records`, `records` | Plan totals (`file_records` omitted when files are omitted). |
-| `statistics` | Monthly warehouse statistics (see below). Omitted when `--statistics=false`, `--sample=true`, or during bundle export. |
+| `statistics` | Monthly warehouse statistics (see below). Omitted when `--statistics=false`, `--sample=true`, or during export. |
 | `sample` | `true` on QA sample plans/exports. |
-| `sample_table_limit` / `sample_file_limit` | Row caps used for the sample (tables/segment definition exports vs idv1 copies). |
+| `sample_table_limit` / `sample_file_limit` | Row caps used for the sample (tables/query exports vs idv1 copies). |
 
 Empty `transforms: []` arrays are omitted from serialized output.
 
@@ -288,7 +288,7 @@ Message views: [e9-global-message](../e9-global-message/SKILL.md). Say **transac
 Walk in order when export plan looks wrong (also applies when inventory precedes export):
 
 ```
-- [ ] A: definition_path resolves (bundle plugin or JSON5)
+- [ ] A: definition_path resolves (export plugin or JSON5)
 - [ ] B: expected tables present or skipped_tables explains gaps
 - [ ] C: input selectors match idv1 stores (channel, entry_types, metadata.json)
 - [ ] D: file records > 0 (metadata zeros fall back to parquet count)
@@ -310,7 +310,7 @@ Export-specific steps (F, G): [e9-export debug](../e9-export/building.md#debug-a
 
 - Core logic: `server/utilities/inventoryReport.js`, `inventoryStatistics.js`, `inventorySample.js`.
 - `InventoryWorker.inventory` stats `{account root}/cache/inventory.json.gz` (no parse); `InventoryWorker.buildInventorySummaryFile` writes that path **only** for account (default) builds. Export / custom / `--sample=true` builds write `cache/inventory-plans/` and never overwrite the account cache.
-- `ExportWorker.inventory` delegates to InventoryWorker. Bundle export calls the plan builder with `statistics: false` and writes `{export_dir}/inventory.json5` **after** artifacts, without touching the account cache. `export_dir` may be a local path or an object-store URI. `--sample=true` writes under `{export_id}_sample/` (or `{export_dir}_sample`).
+- `ExportWorker.inventory` delegates to InventoryWorker. Export calls the plan builder with `statistics: false` and writes `{export_dir}/inventory.json5` **after** everything else, without touching the account cache. `export_dir` may be a local path or an object-store URI. `--sample=true` writes under `{export_id}_sample/` (or `{export_dir}_sample`).
 - MCP `inventory` `get` / `build` wraps those two methods (`sample` is a build-only boolean).
 
 ## Related documentation

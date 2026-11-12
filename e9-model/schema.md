@@ -2,7 +2,7 @@
 
 Read [SKILL.md](SKILL.md) for concepts and [developers.md](developers.md) for the API. There is no `@engine9/schemas/model`. Each plugin’s `metadata.prefix` is the stem (`model_first_touch` → `model_first_touch_person`). Same suffix set on every account.
 
-These tables are the **current** identity-aware model output (`person_id` bigint, `transaction_id` UUID). They are not `source_code_summary.origin_*` — those columns are the legacy origin implementation (old identity).
+These tables are the **current** identity-aware model output (`person_id` bigint, `transaction_id` UUID). `source_code_summary.origin_*` is a **read-only projection** of one of two sources. With `summary_model_kind=current`, it shows the preferred model's stats (first touch, else CRM origin, else last acquisition). Otherwise it shows legacy `source_code_stats` (old identity). The view build makes that choice; models never write `origin_*`. See [e9-source-code](../e9-source-code/SKILL.md#origin_-on-source_code_summary-legacy-or-current-model).
 
 `ModelWorker.run` deploys them via SchemaWorker (`prefix: false` on each table so PluginWorker’s install counter is not applied). DDL source: `server/workers/model/schema.js` (`modelResultTables`). Stats are rebuilt from the detail tables by `replaceModelStats` in `server/workers/model/output.js`.
 
@@ -37,7 +37,7 @@ One model source code per person. Unique on `person_id`; indexed on `source_code
 | --- | --- | --- |
 | `person_id` | `person_id` (bigint) | = `person.id`, unique |
 | `source_code_id` | `source_code_id` | chosen entry’s code |
-| `date_of_source` | datetime | chosen entry’s effective date (`timeline.ts`) — when that person was first seen for this credit. This is **not** dictionary `source_code_date` (the campaign date printed in the code). |
+| `date_of_source` | datetime | chosen entry’s effective date (`timeline.ts`) — when that person was first seen for this credit. This is **not** dictionary `source_code_date` (the campaign date printed in the code). Name unchanged since first release. NULL on every row means the run predates the ISO-spill fix; rerun the model ([SKILL.md](SKILL.md#troubleshooting)). |
 | `reason` | text, nullable | why the rule chose this code |
 | `created_at` | datetime | row write time |
 | `modified_at` | datetime | row write time |
@@ -69,7 +69,7 @@ People acquired per source code. Primary key on `source_code_id`.
 | `created_at` | datetime | stats rebuild time |
 | `modified_at` | datetime | stats rebuild time |
 
-Closest conceptual replacement for legacy `source_code_summary.origin_people` (when using first-touch / CRM-origin models), but current-identity and per-model — do not overwrite `origin_*` from these without an explicit product decision.
+With `summary_model_kind=current`, `source_code_summary.origin_person_count` **is** this column for the preferred model (first touch when deployed). With `legacy` or no setting, `origin_person_count` comes from `source_code_stats` and can disagree. Never write `origin_*` from a model run; the summary view build owns that mapping.
 
 ## `{prefix}_transaction_stats`
 
@@ -156,7 +156,7 @@ Rules for that work:
 
 - Probe table presence (or catch missing-table) per prefix; skip missing models.
 - Never treat model revenue as a substitute for attributed `scs.revenue` — different question ([SKILL.md §3](SKILL.md#3-attribution-is-not-a-model)).
-- Do not write into legacy `origin_*` from current `{prefix}_*` unless product explicitly maps one model (usually first touch or CRM origin) into those columns for backward compatibility.
+- Do not write into `origin_*`. The view build maps one current model into those columns when `summary_model_kind=current` (preference: first touch, CRM origin, last acquisition). Unmapped `origin_*` become `0`, or `2000-01-01` for dates. `trans_model_<stem>_*` for a model with no stats tables is zero-filled (or omitted on newer builds) so existing selects keep working.
 - After a manual SQL edit of detail tables, call `ModelWorker.loadStats({ model })` (or `prefix`) before trusting stats joins.
 
 ## Joins (detail grain)
@@ -260,6 +260,19 @@ Rule: `person_id_int` is not `person.id`. Do not join them. The type column on
 ## inspectPerson (conductor tables)
 
 `ModelWorker.inspectPerson` (`server/workers/model/inspect.js`) is **current-identity only** (`timeline`, `model_*_person`). MCP tool **`timelinePerson`**. Requires `emails`, `person_ids`, `source_codes`, `segment_id`, or `search`. Timeline rows add **`effective_date`** = `timeline.ts` (resolved at load time — see [SKILL.md](SKILL.md#effective-date-of-an-entry)). `inspectPersonLegacy` / MCP **`timelinePersonLegacy`** is a separate call documented in [legacy.md](legacy.md); use it only when the user explicitly asked for legacy. Missing tables are `skipped`. Emails bridge identity; `person.id` is never joined to `person_id_int`. Returns top-level **`sql`**: `[{ id, sql, error, table? }]` for every statement this request ran.
+
+The response is `{ queried, person_ids, emails, source_codes?, tables, sql, errors? }`. Rows appear once, in `tables[]`; there is no raw `current` block. `tables[]` ids, in order:
+
+| id | When | Rows |
+| --- | --- | --- |
+| `timeline_counts` | always | entry type min/max ts and count (uncapped) |
+| `source_code_inputs` | `source_codes` set | code × entry type × input: count, people, min/max `ts`, `first_loaded_at` / `last_loaded_at`, `input_type`, `input_name`, `plugin_name` / `plugin_path`, the input's own `input_min_timeline_ts` / `input_max_timeline_ts` (uncapped) |
+| `source_code_overlap` | 2–25 codes matched, ≤ 2,000,000 entries | `source_code`, `other_source_code`, shared `people` (top 100) |
+| `source_code_model_credit` | ≤ 2,000,000 entries, a `model_*_person` exists | `model`, `source_code`, `credited_source_code`, `reason`, `people` (NULL credited = not in that model) |
+| `timeline` | people or `source_codes` | detail rows, capped by `row_limit` (default 100) |
+| `models` | people resolved | `model_*_person` rows |
+
+Overlap and credit report `status: 'skipped'` with a `reason` when the match is too broad. Narrow `source_codes` or add `start` / `end`.
 
 ## compareSourceCodes (all current models)
 

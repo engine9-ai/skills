@@ -154,7 +154,8 @@ A site that still uses the old host answers the same way from `https://delegate.
 Tell the site:
 
 - Verify every Identity Token: ES256 against `https://delegate.network/.well-known/jwks.json`, plus `iss`, `aud` equal to their Domain, and `exp`. `@engine9/id` and `@engine9/core` already do this.
-- Add a **Change your Delegate information** button (an authorize request with `prompt=select`) wherever a signed-in person could get stuck: next to Log out, on access-denied messages, and on the login page.
+- Add a **Change your Delegate information** button (an authorize request with `prompt=select`) wherever a signed-in person could get stuck: next to Log out, on access-denied messages, and on the login page. On access-denied messages, also send `reason=access_denied` so Delegate tells the person why they are back.
+- Never answer "signed in, but not allowed" by sending the person to sign in again. Delegate returns the remembered address and they loop. On `@engine9/core`, gate pages with `requireRole`, which answers with a 403 that links to another address or account ([core: Sign-in on a site](https://github.com/engine9-ai/core/blob/main/docs/sign-in.md)).
 - Keep the `_delegate` TXT record in place.
 - Send branding on each request, as described below.
 - To offer Facebook as well as Google, send `login_providers` on each request (see Sign-in providers below).
