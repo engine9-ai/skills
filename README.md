@@ -58,7 +58,7 @@ When using an engine9 MCP server, discover plugins, methods, and tool parameters
 | Source codes | [e9-source-code/SKILL.md](e9-source-code/SKILL.md) | Work with dictionaries, parsing, last-click attribution, and overrides |
 | Global message tables | [e9-global-message/SKILL.md](e9-global-message/SKILL.md) | Read message engagement and attribution. Email always uses `global_message_summary` on `publish_date`. Ads and long-running types use `global_message_summary_by_date.date`. |
 | Models | [e9-model/SKILL.md](e9-model/SKILL.md) | Analyze timeline lifetime value in `{prefix}_*` model tables, or search people in or out of a current model by source code. Legacy models: [e9-model/legacy.md](e9-model/legacy.md), only when the user explicitly asked |
-| PII-free accounts | [e9-pii-free/SKILL.md](e9-pii-free/SKILL.md) | Turn on, verify, and clean up limited-pii: the stack, `exclude_pii`, hash-only matching, and the plaintext tables and columns to remove |
+| PII-free accounts | [e9-pii-free/SKILL.md](e9-pii-free/SKILL.md) | Turn on, verify, and clean up limited-pii: the pii-free edition, `exclude_pii`, hash-only matching, and the plaintext tables and columns to remove |
 | Person identity | [e9-person-id/SKILL.md](e9-person-id/SKILL.md) | Understand selection of `person_id`, compact identifier tables, and legacy identity models |
 | Person remotes | [e9-person-remote/SKILL.md](e9-person-remote/SKILL.md) | Work with plugin-scoped `person_remote` rows, identity loading, and export joins |
 | Exports | [e9-export/SKILL.md](e9-export/SKILL.md) | Understand tables, ID files, metadata, and entry types in an export |

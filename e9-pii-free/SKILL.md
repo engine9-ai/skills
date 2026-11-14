@@ -21,10 +21,10 @@ A PII-free account stores no plaintext name, email, phone, or postal address in 
 | Question | Answer |
 | --- | --- |
 | What makes an account PII-free | `exclude_pii` is `true` on `@engine9/schemas/utilities/limited-pii`. That is the one check core and the server read for installs, imports, exports, and reports |
-| What new-account setup installs | With the setting on, `installDefaultPlugins` installs the stack `@engine9/schemas/stacks/limited-pii` (an install list: `person_hash` and no plaintext plugins) |
+| What new-account setup installs | The required plugins (`plugin`, `person`, `segment`, `source_code`), then the edition `@engine9/schemas/editions/pii-free` (`person_remote`, `person_hash`, `timeline`, `transaction/core`). The setting does not choose it; you install it |
 | What is stored instead | `person_hash_email`, `person_hash_phone` (SHA-256 `*_hash_v1`, MD5 `*_hash_md5`), plus `person_remote` ids |
-| Plugins that must not be installed | `person_name`, `person_email`, `person_phone`, `person_address`, `transaction/contact_details`, and `stacks/standard` |
-| New account (MCP) | `plugin install` the utility, `plugin setSetting` `exclude_pii` `true`, then `installDefaultPlugins` (or `bootstrapAccount` with `exclude_pii: true` on the server) |
+| Plugins that must not be installed | `person_name`, `person_email`, `person_phone`, `person_address`, `transaction/contact_details`, and any plugin that includes one, such as `editions/contact` |
+| New account (MCP) | `plugin install` the utility, `plugin setSetting` `exclude_pii` `true`, then `installRequiredPlugins` and `plugin install` `@engine9/schemas/editions/pii-free` (or `bootstrapAccount` with `exclude_pii: true` and `path: "@engine9/schemas/editions/pii-free"` on the server) |
 | Existing account | Schedule built-in flow `pii-removal`, review the plan, confirm, verify. See [Existing account](#existing-account-pii-removal) |
 | Hash search without removal | Task `PIIWorker.backfillPersonHash` (installs `person_hash` and backfills) |
 | Regular audit | Built-in flow `pii-audit` (`PIIWorker.buildPiiSummaryFile`) writes `<account root>/pii/summary.json.gz`; Conductor `/pii` renders it. See [Regular audit](#regular-audit-pii-audit) |
@@ -34,8 +34,8 @@ A PII-free account stores no plaintext name, email, phone, or postal address in 
 | Plugin path | Role |
 | --- | --- |
 | `@engine9/schemas/utilities/limited-pii` | Holds `exclude_pii`. Installs no tables |
-| `@engine9/schemas/stacks/limited-pii` | Install list only. Installs `plugin`, `person`, `person_remote`, `segment`, `source_code`, `timeline`, `transaction/core`, `person_hash`. Does not refuse installs by itself |
-| `@engine9/schemas/person_hash` | Hash match keys. Part of the stack. Installable alone |
+| `@engine9/schemas/editions/pii-free` | Install list only. Adds `person_remote`, `person_hash`, `timeline`, `transaction/core` to the required plugins. Does not refuse installs by itself |
+| `@engine9/schemas/person_hash` | Hash match keys. Part of the pii-free edition. Installable alone |
 
 ## Concepts
 
@@ -43,12 +43,11 @@ A PII-free account stores no plaintext name, email, phone, or postal address in 
 
 `exclude_pii` on `@engine9/schemas/utilities/limited-pii` is the only answer to "is this account PII-free?" Core and the server read it for:
 
-- Install refusal (plaintext plugins and `stacks/standard`)
-- `installDefaultPlugins` choosing the limited-pii stack
+- Install refusal (plaintext plugins, and any plugin that includes one, such as `editions/contact`)
 - Skipping leftover plaintext plugin rows in the inbound weave
 - Default export table lists and inventory
 
-The limited-pii stack is what new-account setup installs when the setting is on. Libraries do not detect the stack, and the stack has no `exclude` list. Removing plaintext from an account that already has it is a reviewed server process, not flipping the setting alone.
+The setting does not choose what to install. A PII-free account installs `editions/pii-free` (or only the plugins it needs); a PII-free account does not necessarily want `person_hash`. Libraries do not detect the edition, and the edition has no `exclude` list. Removing plaintext from an account that already has it is a reviewed server process, not flipping the setting alone.
 
 **Different rows, not a flag in the load.** When a load starts it reads the `plugin` table and weaves the inbound steps of whatever is installed. A PII-free account has `person_hash` steps and no plaintext steps (and with the setting on, leftover plaintext rows are skipped). See [the inbound pipeline](../../core/lib/peoplePipeline/README.md).
 
@@ -83,22 +82,25 @@ Two steps, in this order. Sign in first ([e9-mcp](../e9-mcp/SKILL.md)).
 ```
 - [ ] plugin install  @engine9/schemas/utilities/limited-pii   (returns the plugin id)
 - [ ] plugin setSetting  plugin_id=<that id>  name=exclude_pii  value=true
-- [ ] installDefaultPlugins (MCP task, or e9 pluginworker installDefaultPlugins -a <account_id>)
+- [ ] installRequiredPlugins (MCP task, or e9 pluginworker installRequiredPlugins -a <account_id>)
+- [ ] plugin install  @engine9/schemas/editions/pii-free
 - [ ] Verify
 ```
 
 ```json
 { "command": "install", "account_id": "<account_id>", "path": "@engine9/schemas/utilities/limited-pii" }
 { "command": "setSetting", "account_id": "<account_id>", "plugin_id": "<utility plugin id>", "name": "exclude_pii", "value": true }
+{ "command": "install", "account_id": "<account_id>", "path": "@engine9/schemas/editions/pii-free" }
 ```
 
 ```bash
-e9 pluginworker installDefaultPlugins -a <account_id>
+e9 pluginworker installRequiredPlugins -a <account_id>
+e9 pluginworker install --path=@engine9/schemas/editions/pii-free -a <account_id>
 ```
 
-On the server, `bootstrapAccount({ exclude_pii: true })` does both steps (utility + setting, then default plugins).
+On the server, `bootstrapAccount({ exclude_pii: true, path: '@engine9/schemas/editions/pii-free' })` does every step (utility + setting, then the required plugins, then the edition). A site uses `npx e9core install --plugin @engine9/schemas/editions/pii-free` after setting `exclude_pii`.
 
-Rule: Set `exclude_pii` before `installDefaultPlugins`. The setting is what steers the install and blocks plaintext plugins. The stack is only the install list.
+Rule: Set `exclude_pii` before installing anything beyond the required plugins. The setting blocks plaintext plugins; it does not pick the edition. The edition is only the install list.
 
 ### Existing account: `pii-removal`
 
@@ -120,7 +122,7 @@ Hashes are captured before any plaintext is dropped. MD5 exists only where plain
 
 `createRemovalPlan` writes a plan file with `plan_hash`. Sections include plaintext plugin rows, `person` name columns, hash-capture counts, legacy tables, other scan findings, raw input-store files (report only), and blockers. Approval is the plan hash passed to `removePii` / `verifyRemoval`.
 
-`removePii` order: install `person_hash` → turn on `exclude_pii` → migrate legacy `person_identifier` to compact if needed → `backfillPersonHash` → gate (nothing still missing) → `uninstallPlugin` each plaintext plugin with `drop` → `upgrade` with `drop_name_columns` (and `discard_names` when chosen) → drop legacy and approved findings → `installDefaultPlugins`.
+`removePii` order: install `person_hash` → turn on `exclude_pii` → migrate legacy `person_identifier` to compact if needed → `backfillPersonHash` → gate (nothing still missing) → `uninstallPlugin` each plaintext plugin with `drop` → `upgrade` with `drop_name_columns` (and `discard_names` when chosen) → drop legacy and approved findings → `installRequiredPlugins` and install `editions/pii-free` (step `install_pii_free_edition`).
 
 MCP `plugin` `uninstall` calls `PIIWorker.uninstallPlugin` for a single plugin (account admin). Options: `id` or `path`, `drop`, `dry_run`.
 
@@ -151,7 +153,7 @@ Run again without `dry_run` to write. Re-runs write nothing new. `missing` is th
 | Check | Call | Expect |
 | --- | --- | --- |
 | Setting | `plugin` `settings` `{ "account_id": "<account_id>" }` | `exclude_pii` `value: true` on the utility |
-| Installed plugins | `account` `search` with `ids` and `include_plugins: true` | `person_hash` and the stack present. None of the five plaintext paths |
+| Installed plugins | `account` `search` with `ids` and `include_plugins: true` | `person_hash` and `editions/pii-free` present. None of the five plaintext paths, and no `editions/contact` |
 | Upgrade view | `plugin` `upgrade` with `dry_run: true` | `pii_free: true`, no `refresh.failed` for refused plaintext plugins |
 | Tables | `sql` `tables` with `filter: "person_"` | `person`, `person_remote`, `person_hash_email`, `person_hash_phone`, `person_id_*`. No `person_name` / `person_email` / `person_phone` / `person_address` |
 | `person` columns | `sql` `describe` `table: "person"` | `id`, `created_at`, `modified_at` only |
@@ -183,9 +185,9 @@ Rule: The summary holds table and column names, statuses, and counts only. Do no
 
 ## Rules
 
-Rule: `exclude_pii` is the one check. The limited-pii stack is only what new-account setup installs.
+Rule: `exclude_pii` is the one check. The pii-free edition is only what new-account setup installs.
 
-Rule: Never install `@engine9/schemas/stacks/standard`, `person_name`, `person_email`, `person_phone`, `person_address`, or `transaction/contact_details` on a PII-free account. With `exclude_pii` on, core refuses them.
+Rule: Never install `@engine9/schemas/editions/contact`, `person_name`, `person_email`, `person_phone`, `person_address`, or `transaction/contact_details` on a PII-free account. With `exclude_pii` on, core refuses them.
 
 Rule: Do not read names, emails, or phones to prove a leak. Report column names, counts, and a masked pattern, not the values.
 
@@ -195,14 +197,14 @@ Rule: Do not add a plugin that writes plaintext (custom fields, vendor tables) t
 
 | Symptom | Cause and fix |
 | --- | --- |
-| Plaintext still lands after the stack was installed | `exclude_pii` is off, or a plaintext plugin row still exists and the setting is off. Turn the setting on (weave skips leftovers) and remove the row/table via `pii-removal` or `plugin` `uninstall` |
+| Plaintext still lands after the pii-free edition was installed | `exclude_pii` is off, or a plaintext plugin row still exists and the setting is off. Turn the setting on (weave skips leftovers) and remove the row/table via `pii-removal` or `plugin` `uninstall` |
 | `Cannot install <path>: excluded by plugin setting exclude_pii` | Working as designed. Do not install it. Use hashes |
 | `exclude_pii` is not in `plugin settings` | The utility is not installed. Install `@engine9/schemas/utilities/limited-pii` |
 | `lookup` by name returns nothing | Expected. Names are not stored. Look up by email hash, phone hash, or `remote_person_id` |
 | `{{given_name}}` renders empty | Expected. Nothing to merge |
 | Default export still has `person_email` | `exclude_pii` is off, or the caller passed an explicit `tables` list |
 | `drop_name_columns` is blocked | The account is PII-free and people have a name on `person`. The owner must choose `discard_names` |
-| `upgrade` dry run shows `pii_free: false` after the stack was installed | The setting is `false` or the utility is missing. The stack alone is not PII-free |
+| `upgrade` dry run shows `pii_free: false` after the pii-free edition was installed | The setting is `false` or the utility is missing. The edition alone is not PII-free |
 | `removePii` stopped at the hash gate | `backfillPersonHash` dry run still reports `missing` rows. Re-run the backfill; do not drop plaintext until `missing` is zero |
 | Hash search finds nobody after a manual table drop | `person_hash_*` was never backfilled. Run `backfillPersonHash` before dropping plaintext, or use `pii-removal` |
 

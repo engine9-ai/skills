@@ -147,7 +147,7 @@ Natural language ("install `<path>` on all `<parent>` clients") is the same work
 |---------|--------|
 | Path not in `listAvailable` | Report the catalog; stop. The MCP host must ship the package |
 | `Cannot install … unmet plugin dependencies` | Install listed dependency paths first on that account, then retry |
-| `Cannot install … excluded by` | An installed stack forbids the path; do not force |
+| `Cannot install … excluded by` | An installed plugin's `exclude` list, or `exclude_pii`, forbids the path; do not force |
 | `Cannot connect to the <account_id> database` | Skip that account; continue the fleet |
 | `Not authorized for account` | Skip that id; do not look it up on disk |
 | `getPluginMetadata is not a function` | Abort the job (server plugin metadata is broken) |

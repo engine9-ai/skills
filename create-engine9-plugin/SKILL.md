@@ -143,26 +143,15 @@ Do not recommend `metadata.prefix` for ordinary third-party packages. The hex su
 
 Pick a stem you can keep forever (`acme_blog`, `acme_loyalty`). In the future, plugin table-name prefixes may need to be registered; a stable company+plugin stem is the right preparation. Core does not register or validate stems today.
 
-### Stacks
+### Include lists and editions
 
-A stack at `@engine9/schemas/stacks/<name>` is a metadata-only schema plugin with `name`, `description`, and `include` (optional `exclude` for other stacks). Core `PluginWorker`, not `SchemaWorker`, installs stacks: it deploys the plugin table, records the stack as a plugin row, and walks `include`. `SchemaWorker` installs only one plugin's schema and row. PII-free refusal is not stack `exclude`: it is `exclude_pii` on `@engine9/schemas/utilities/limited-pii`. The limited-pii stack is an install list only.
+Any plugin may list other plugins in `include` (installed with it, after it) and `exclude` (refused while it is installed). Core `PluginWorker`, not `SchemaWorker`, follows these lists: `install` deploys the plugin table, records the plugin row, then installs each `include` entry. `SchemaWorker` installs only one plugin's schema and row. Core treats no plugin as special because it has these lists.
 
-`installDefaultPlugins({ path })` resolves an omitted path from (1)
-`exclude_pii` on `@engine9/schemas/utilities/limited-pii` (when that plugin is
-installed) → `@engine9/schemas/stacks/limited-pii`, (2) warehouse
-`default_stack` on `@engine9/schemas/plugin`, or (3) the published core
-person schema plugins — not automatically `@engine9/schemas/stacks/standard`.
-Pass another stack, such as `@engine9/schemas/stacks/limited-pii`, instead
-of hard-coding stack behavior into `SchemaWorker`. With `exclude_pii` set,
-installing standard must throw.
+Every database has the required plugins (`REQUIRED_PLUGINS` in `@engine9/core`: `@engine9/schemas/plugin`, `person`, `segment`, `source_code`). `PluginWorker.installRequiredPlugins()` installs them, `e9core setup` calls it, and `e9core upgrade` installs any that are missing. Nothing else is installed by default.
 
-Set `default_stack` on `@engine9/schemas/plugin` and `exclude_pii` on
-`@engine9/schemas/utilities/limited-pii` via MCP `plugin` `setSetting` (or
-`PluginWorker.updateSetting`). Empty `default_stack` means core person
-schema plugins only. `exclude_pii: true` is the one PII-free check: it forces
-the limited-pii stack and refuses standard, `person_name`, `person_email`,
-`person_phone`, `person_address`, and `transaction/contact_details`, even when
-those plugins are already installed.
+An edition is a metadata-only schema plugin at `@engine9/schemas/editions/<name>` whose `plugin.json` has `name`, `description`, `unique`, and an `include` list of what it adds on top of the required plugins. `editions/contact` adds plaintext names, email, phone, address, remote ids, timeline, and transactions with contact details; `editions/pii-free` adds `person_hash`, remote ids, timeline, and transactions. Install one like any plugin: `e9core install --plugin @engine9/schemas/editions/contact`, MCP `plugin` `install`, or `bootstrapAccount({ path })`. `e9core upgrade` reinstalls installed rows, so an installed edition picks up plugins it gains. Core code never names an edition; do not hard-code one into `SchemaWorker` or core.
+
+PII-free refusal is not an `exclude` list. It is `exclude_pii` on `@engine9/schemas/utilities/limited-pii`, set with MCP `plugin` `setSetting` (or `PluginWorker.updateSetting`). `exclude_pii: true` refuses `person_name`, `person_email`, `person_phone`, `person_address`, `transaction/contact_details`, and any plugin that includes one (such as `editions/contact`), even when those plugins are already installed. It does not choose what to install: a PII-free account installs `editions/pii-free` (or only the plugins it needs) itself.
 
 ### Inbound people pipeline
 
@@ -621,7 +610,7 @@ Thin, schema-only schema plugins are also valid. `message/index.js` exports only
 | Segment membership is unexpectedly broad        | Inspect `universe`, clause path, and optional `pluginId` scope                                                                 |
 | Schema plugin report is not available           | Move it to a native `@engine9/plugins/reports/<area>` package                                                                  |
 | Package cannot resolve                          | Use the package path and inspect resolver/registration rules; do not add a prefix                                              |
-| Stack / PII-free install conflicts              | Inspect utilities/limited-pii `exclude_pii` (and any stack `exclude` metadata other stacks still declare)                                  |
+| PII-free install conflicts                      | Inspect utilities/limited-pii `exclude_pii`: it refuses plaintext contact plugins and any plugin that includes one; then any `exclude` list an installed plugin declares |
 
 ## Related documentation
 
@@ -630,8 +619,9 @@ Thin, schema-only schema plugins are also valid. `message/index.js` exports only
 - [engine9 MCP](../e9-mcp/SKILL.md)
 - [Report authoring](../e9-reports/SKILL.md)
 - `@engine9/core/lib/peoplePipeline/README.md`
-- `stacks/standard/index.js`
-- `stacks/limited-pii/index.js`
+- `editions/contact/plugin.json`
+- `editions/pii-free/plugin.json`
+- `@engine9/core/lib/requiredPlugins.js`
 - `utilities/limited-pii/index.js`
 - `message/schema.js`, `person_email/schema.js`, and `job/schema.js`
 - `person_email/transforms/inbound/upsert_tables.js`

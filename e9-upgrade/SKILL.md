@@ -51,7 +51,7 @@ Release guides live in `@engine9/core` under `docs/upgrade-<version>.md`. The pr
 | Window | A database last upgraded with a core older than the release supports is refused before anything runs (`blocked`, with the release to upgrade through first) |
 | Plugin upgrades | Core carries none. Each `@engine9/schemas` plugin declares its own; `shouldUpgrade` checks the schema, and only an upgrade that applies reads the data, does nothing if the account is current, otherwise moves it (for example copies names into `person_name` and verifies). Safe to re-run; a re-run finishes a partial run. Other plugins' upgrades run only with `--plugin <path>` |
 | Opt-in upgrades | A removal (for example dropping `person.given_name`) runs only with its switch (`drop_name_columns`). Without it the run reports `opt_in` and changes nothing |
-| Refresh | Reinstalls every installed `@engine9/schemas/*` plugin from the deployed package. Adds tables and columns (never drops) and refreshes inbound snapshots. Stacks first, so a stack that gained a plugin installs it |
+| Refresh | Installs any missing required plugin (`plugin`, `person`, `segment`, `source_code`), then reinstalls every installed `@engine9/schemas/*` plugin from the deployed package: the required plugins first, then plugins with an include list (an edition such as `editions/contact`), so one that gained a plugin installs it. Adds tables and columns (never drops) and refreshes inbound snapshots |
 | Record | Nothing is kept in the database: every run asks every upgrade again. A real run writes one `upgrade` record to the audit log (what it applied, as `{ plugin, id }`, what it reinstalled, who ran it). `upgrade.<id>` rows in `setting` are left over from core 1.10.1–1.16; nothing reads them |
 
 ### Reading the result
@@ -120,8 +120,8 @@ wrangler deploy && npx e9core upgrade --url "$E9_SITE_URL"
 **Rule:** A `blocked` upgrade needs a decision before it can run. For 1.10.1:
 
 - `person_is_view: true`: `person` is a view over an older table. Replace the view with a `person` table first, then re-run.
-- `person_plugin_installed: false`: the `person` table exists without its `@engine9/schemas/person` plugin row. Install the account's stack, then re-run.
-- With `--drop-name-columns` on a PII-free account that still has names on `person`: ask the data owner. Either the account should not be PII-free (install the standard stack, then upgrade), or the names are discarded (`--discard-names`).
+- `person_plugin_installed: false`: the `person` table exists without its `@engine9/schemas/person` plugin row. Install `@engine9/schemas/person` (`installRequiredPlugins`, or the next `upgrade` installs it), then re-run.
+- With `--drop-name-columns` on a PII-free account that still has names on `person`: ask the data owner. Either the account should not be PII-free (install `@engine9/schemas/editions/contact`, then upgrade), or the names are discarded (`--discard-names`).
 
 **Rule:** After an opt-in drop, roll back the database and the code together (`wrangler d1 time-travel restore` plus `wrangler rollback`). Rolling back only the Worker leaves old code on new tables.
 
@@ -166,7 +166,7 @@ npx e9core upgrade --url https://www.example.com --dry-run
       ]
     }
   ],
-  "refresh": { "dry_run": true, "plugins": ["@engine9/schemas/stacks/standard", "@engine9/schemas/person"], "failed": [] }
+  "refresh": { "dry_run": true, "plugins": ["@engine9/schemas/person", "@engine9/schemas/editions/contact"], "failed": [] }
 }
 ```
 

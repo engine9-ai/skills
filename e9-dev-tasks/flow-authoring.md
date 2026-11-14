@@ -166,7 +166,7 @@ Requirements:
 - **`account_id`** in the body (or on the worker) — required for DB-backed task runs.
 - **`flow` file path** (any location), or **`flowId`** if the flow is listed via `getFlowById` / `listFlows`.
 
-`TaskWorker.createFlowRun` and `createTaskRun` deploy `@engine9/schemas/task` uniquely for the account (`SchemaWorker.install` plus schema `deploy`), so `task_run` exists even when `installDefaultPlugins` was not run. `runFlow()` calls `createFlowRun`, which performs this step.
+`TaskWorker.createFlowRun` and `createTaskRun` deploy `@engine9/schemas/task` uniquely for the account (`SchemaWorker.install` plus schema `deploy`), so `task_run` exists even on an account that installed only the required plugins. `runFlow()` calls `createFlowRun`, which performs this step.
 
 Idempotency: pass `body.idempotency_key` to return an existing run for the same flow.
 
