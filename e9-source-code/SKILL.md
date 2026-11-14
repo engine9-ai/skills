@@ -22,6 +22,11 @@ code parsing and overrides, interpret attribution metrics, or diagnose a
 last-click attribution gap. Performance metrics, parsed elements, and
 attribution all connect through the dictionary.
 
+Rule: First Touch is the standard model, and every account should run it with
+`summary_model_kind` set to `current`. Use CRM Origin or Last Acquisition only
+when the user explicitly asks. Last click (`attributed_*`) is attribution to a
+message, not a model ([e9-model — Default: First Touch](../e9-model/SKILL.md#default-first-touch)).
+
 ## Quick reference
 
 | Need | Start here |

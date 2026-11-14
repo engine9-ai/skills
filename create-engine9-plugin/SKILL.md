@@ -303,16 +303,16 @@ Each report contains `name`, `description`, `tags`, optional `data_sources`, `fi
 
 ### Settings
 
-Settings are per-install warehouse configuration, stored per plugin row in the `setting` table. They are **not** authorization: credentials and vendor keys stay in `auth_fields`.
+Settings are per-install warehouse configuration, stored per plugin row in the `setting` table. They are **not** authorization: credentials and vendor keys are declared under the catalog entry's `credentials` (or the package's `credentials` export) and kept in secrets. A `secret` setting is deprecated.
 
 A plugin declares settings in either or both places:
 
 | Where | Use when | How |
 | --- | --- | --- |
-| Plugin catalog entry | Always works, and is the only option for plugins that run remotely (third-party bots whose code the engine9 host does not load) | `metadata.settings` on the entry for plugin-wide settings; `submodules.<Name>.metadata.settings` for settings that belong to one submodule |
+| Plugin catalog entry | Always works, and is the only option for plugins that run remotely (third-party bots whose code the engine9 host does not load) | `settings` on the entry for plugin-wide settings; `submodules.<Name>.settings` for settings that belong to one submodule |
 | Package | The host loads the plugin's code (`@engine9/schemas`, `@engine9/plugins`, packages in `engine9.pluginPackages`) | Export `settings` from `index.js` and/or ship a sibling `settings.js` |
 
-The plugin catalog is the set of JSON/JSON5 files the server reads from `ENGINE9_PLUGIN_METADATA_PATH`, keyed by plugin path (`engine9-plugins.catalog.json`, plus one file per third-party catalog). When both places declare the same name, the catalog declaration wins. If the host cannot load the package but the catalog has an entry for the path, the settings catalog reports no error for that plugin.
+The catalog entry format is the standard in `@engine9/core` [docs/plugin-catalog.md](https://github.com/engine9-ai/core/blob/main/docs/plugin-catalog.md) (schema `@engine9/core/pluginCatalog.schema.json`). Build and check entries from a package with `e9core catalog build --package <name> --out catalog` and `e9core catalog validate`. The server reads the JSON/JSON5 files under `ENGINE9_PLUGIN_METADATA_PATH`: a bundle keyed by plugin path (`engine9-plugins.catalog.json`, `frakture-bots.catalog.json`) or a single entry. Older entries with `metadata.settings` and `submodules.<Name>.metadata.settings` are still read. When both places declare the same name, the catalog declaration wins. If the host cannot load the package but the catalog has an entry for the path, the settings catalog reports no error for that plugin.
 
 Each declaration is `{ name, type?, default?, values?, description?, label?, required?, secret?, hidden?, section? }` (an array, or a name→def object). On `PluginWorker.install`, each package-declared name is inserted into `setting` for that plugin row when it is missing. Reinstall does not overwrite an existing value. Plugins with no `metadata.prefix` get an empty `table_prefix` (settings-only packages, and third-party schemas that self-scope table names).
 
@@ -436,7 +436,7 @@ For every predefined segment, document its display name, export key, definition 
 
 **Rule:** Segment exports must be keyed objects, and every key must be documented in the package README with membership and universe behavior.
 
-**Rule:** Declare settings in the plugin catalog entry (`metadata.settings`, `submodules.<Name>.metadata.settings`) or on the package (`settings` export or sibling `settings.js`). Plugins that run remotely declare them in the catalog. Do not put settings in `auth_fields`; `auth_fields` are for credentials only.
+**Rule:** Declare settings in the plugin catalog entry (`settings`, `submodules.<Name>.settings`) or on the package (`settings` export or sibling `settings.js`). Plugins that run remotely declare them in the catalog. Declare API keys, passwords and other third-party credentials under `credentials`, never as settings.
 
 **Rule:** Wire only standard named exports and the default aggregate from a schema plugin's `index.js`.
 
@@ -458,39 +458,39 @@ Identifier extraction transforms set `export const type = 'id'` and mutate each 
 
 ### Declare plugin settings in the plugin catalog
 
-A plugin catalog file maps each plugin path to an entry. Put plugin-wide settings in `metadata.settings` and submodule settings in `submodules.<Name>.metadata.settings`:
+One catalog entry per plugin path. Put credentials in `credentials`, plugin-wide settings in `settings` and submodule settings in `submodules.<Name>.settings`:
 
 ```json
 {
-  "@acme-com/bots/CrmBot": {
-    "path": "@acme-com/bots/CrmBot",
-    "metadata": {
-      "name": "Acme CRM",
-      "auth_fields": { "api_key": { "label": "API key" } },
+  "$schema": "https://market.engine9.ai/schemas/plugin/v1.json",
+  "catalog_version": 1,
+  "path": "@acme-com/bots/CrmBot",
+  "package": { "name": "@acme-com/bots", "version": "1.4.0" },
+  "name": "Acme CRM",
+  "publisher": { "name": "Acme", "url": "https://acme.com" },
+  "credentials": {
+    "fields": [{ "name": "api_key", "type": "password", "label": "API key", "secret": true, "required": true }]
+  },
+  "settings": [
+    { "name": "default_phone_type", "type": "select", "values": ["home", "mobile"], "default": "mobile" }
+  ],
+  "submodules": {
+    "Gifts": {
       "settings": [
-        { "name": "default_phone_type", "type": "string", "values": ["home", "mobile"], "default": "mobile" }
-      ]
-    },
-    "submodules": {
-      "Gifts": {
-        "metadata": {
-          "settings": [
-            {
-              "name": "transaction_custom_fields",
-              "type": "array",
-              "default": [],
-              "label": "Transaction custom fields",
-              "description": "Custom field names to include on every transaction load"
-            }
-          ]
+        {
+          "name": "transaction_custom_fields",
+          "type": "array",
+          "default": [],
+          "label": "Transaction custom fields",
+          "description": "Custom field names to include on every transaction load"
         }
-      }
+      ]
     }
   }
 }
 ```
 
-`transaction_custom_fields` appears in the settings catalog with `section: "Gifts"`. A plugin that generates its catalog from code should emit the same shape: the plugin's own metadata becomes `metadata`, and each submodule's metadata becomes `submodules.<Name>.metadata`.
+`transaction_custom_fields` appears in the settings catalog with `section: "Gifts"`. A plugin that generates its catalog from code should use `buildPluginCatalogEntry` from `@engine9/core/pluginCatalog` (or `e9core catalog build`) rather than writing the shape by hand.
 
 Set a value with MCP `plugin` `{ "command": "setSetting", "plugin_id": "<plugin uuid>", "name": "transaction_custom_fields", "value": ["custom_fund"] }`. The value is validated as JSON and stored as a string. The plugin reads it from `setting` for its plugin row (`select name, value from setting where plugin_id = ?`).
 
@@ -617,7 +617,7 @@ Thin, schema-only schema plugins are also valid. `message/index.js` exports only
 | Installed transform is absent                   | Confirm `metadata.inbound` names an exported transform and its `type` matches the slot                                         |
 | Upsert fails on duplicate keys                  | Merge rows by the schema's unique key with `mergeIntoQueue`                                                                    |
 | Clause does not appear in discovery             | Confirm the plugin is installed, the clause is on `segmentDefinitionClauses`, and it uses a canonical form                    |
-| Settings do not appear in MCP `plugin` settings | Confirm the plugin is installed, the setting is not `hidden`, and it is declared in one of two places: the catalog entry for the exact plugin path (`metadata.settings` or `submodules.<Name>.metadata.settings`, in a file under `ENGINE9_PLUGIN_METADATA_PATH`; the server re-reads changed catalog files every `ENGINE9_PLUGIN_METADATA_REFRESH_MS`, default 5 minutes), or the package's default export or sibling `settings.js` |
+| Settings do not appear in MCP `plugin` settings | Confirm the plugin is installed, the setting is not `hidden`, and it is declared in one of two places: the catalog entry for the exact plugin path (`settings` or `submodules.<Name>.settings`, in a file under `ENGINE9_PLUGIN_METADATA_PATH`; the server re-reads changed catalog files every `ENGINE9_PLUGIN_METADATA_REFRESH_MS`, default 5 minutes), or the package's default export or sibling `settings.js` |
 | Segment membership is unexpectedly broad        | Inspect `universe`, clause path, and optional `pluginId` scope                                                                 |
 | Schema plugin report is not available           | Move it to a native `@engine9/plugins/reports/<area>` package                                                                  |
 | Package cannot resolve                          | Use the package path and inspect resolver/registration rules; do not add a prefix                                              |

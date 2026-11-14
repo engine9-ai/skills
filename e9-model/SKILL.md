@@ -27,6 +27,32 @@ run a model, or select people in or out of a current model by source code. It
 assumes no prior engine9 knowledge. Legacy model clauses are
 [legacy.md](legacy.md), and only when the user explicitly asked for legacy.
 
+## Default: First Touch
+
+Rule: **First Touch (`@engine9/plugins/models/first_touch`) is the standard
+model.** Every account should have it installed and running. Use it for
+person-level credit, lifetime value, and acquisition ROI unless the user
+explicitly asks for another model.
+
+Rule: Use CRM Origin, Last Acquisition, or an account-specific model only when
+the user explicitly asks for it. Do not install or run them on your own
+initiative, and do not report their absence as a problem.
+
+An account is on the standard model when all of these hold:
+
+| Check | Where |
+| --- | --- |
+| First Touch is installed | MCP `account` plugins: `@engine9/plugins/models/first_touch` |
+| It has run and is current | `model_first_touch_person` has rows; `max(date_of_source)` is near the latest transaction |
+| Transactions are covered | `model_first_touch_transaction` row count matches `transaction` |
+| `source_code_summary.origin_*` reads First Touch | `summary_model_kind` is `current` ([e9-source-code](../e9-source-code/SKILL.md#origin_-on-source_code_summary-legacy-or-current-model)) |
+
+Rule: An account that has only legacy model tables (`person_model_source_code`,
+`transaction_model_*`) is not on the standard model. Legacy tables do not count.
+
+Last click is attribution (transaction → message), not a model. It stays as
+described in [Rules](#rules).
+
 ## Quick reference
 
 | Need | Start here |
@@ -113,7 +139,8 @@ wrong.
 
 Rule: Attribution is exclusively transaction → message. It is never a model.
 Do not call last click "the last-click model", list it among the models, or put
-it in a model comparison as if it were a peer.
+it in a model comparison as if it were a peer. The standard model is First Touch
+([Default: First Touch](#default-first-touch)).
 
 Both are true at once, and they are not alternatives:
 

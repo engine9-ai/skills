@@ -79,7 +79,7 @@ Handlers live on `segmentDefinitionClauses`. Each has optional `title`/`descript
 
 ## Settings (warehouse configuration)
 
-Declared in the plugin catalog entry (`metadata.settings`, `submodules.<Name>.metadata.settings`) and/or on the package (`export const settings` or sibling `settings.js`), stored per installed plugin row in `setting`. The catalog declaration wins on a name collision. Settings are not authorization; credentials stay in `auth_fields`.
+Declared in the plugin catalog entry (`settings`, `submodules.<Name>.settings`; format in `@engine9/core` docs/plugin-catalog.md) and/or on the package (`export const settings` or sibling `settings.js`), stored per installed plugin row in `setting`. The catalog declaration wins on a name collision. Settings are not authorization; credentials are declared under the entry's `credentials` and kept in secrets.
 
 Account-scoped discovery uses the same aggregate path as inbound weaving, search, and reports: list installed plugins, read each path's catalog entry (`PluginWorker.getPluginCatalogEntry`) and package (`compilePlugin`), group by plugin path.
 

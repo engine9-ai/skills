@@ -198,6 +198,8 @@ If a path, method, or option is not present in MCP responses, report that to the
 
 ## Tool selection strategy
 
+**Rule:** First Touch is the standard model and should be installed and running on every account. Install or run CRM Origin or Last Acquisition only when the user explicitly asks for one. See [e9-model — Default: First Touch](../e9-model/SKILL.md#default-first-touch).
+
 **Prefer explicit native MCP tools when there is a quality match.** Only fall back to `task` when no native tool covers the request.
 
 **Rule:** Use a native MCP tool whenever it covers the request with equal or better fidelity; treat `task` as the catch-all.
