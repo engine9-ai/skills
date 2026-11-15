@@ -5,9 +5,10 @@ description: >-
   (listAvailable, install, settings, setSetting). Fast path for deploying a
   package onto one account or every child of a parent. Use when the user says
   install a plugin, deploy a package, listAvailable, plugin settings, setSetting,
-  or asks to install `@engine9/plugins`, `@engine9/schemas`, or a models
-  deployment path on accounts. Do not use create-engine9-plugin (authoring) or
-  MCP `task` for install.
+  contact edition / contact plugin (`@engine9/schemas/editions/contact`), or asks
+  to install `@engine9/plugins`, `@engine9/schemas`, or a models deployment path
+  on accounts. Do not use create-engine9-plugin (authoring) or MCP `task` for
+  install.
 ---
 
 # engine9 plugin install
@@ -24,6 +25,7 @@ Plugins are first-class on a connected engine9 MCP server. Installing a package 
 | Find children of a parent | `account` `{ "command": "search", "parents": ["<parent_account_id>"], "limit": 500 }` |
 | Verify a path is installed | `account` `{ "command": "search", "parents": ["<parent_account_id>"], "plugins": ["<path substring>"], "limit": 500, "max_scan": 500 }` |
 | Settings catalog / update | `plugin` `settings` / `setSetting` |
+| Contact edition (common) | `@engine9/schemas/editions/contact` — see [Editions](#editions) |
 | Author / version a package | [create-engine9-plugin](../create-engine9-plugin/SKILL.md) (not this skill) |
 
 **Rule:** Prefer MCP `plugin`. Never schedule `PluginWorker.install` via MCP `task`. Never invent paths from local `plugins/` or `schemas/`.
@@ -41,10 +43,24 @@ The **version of code that runs** is the host’s npm package pin (e.g. `acme-pl
 | Full path (preferred) | `@engine9/plugins/models/deployment/v2026_09_16`, `acme-plugins/loyalty` |
 | Shorthand from catalog | `models/deployment/v2026_09_16`, `e9email`, `loyalty` (only if unambiguous in `listAvailable`) |
 | User omits `@` | `engine9/plugins/...` → match `listAvailable` (`@engine9/plugins/...`) |
+| Edition shorthand | "contact" / "contact edition" → `@engine9/schemas/editions/contact` when present in `listAvailable` |
 
 Unique packages (`metadata.unique`, typical `@engine9/plugins/*` and most `@engine9/schemas/*`) reuse the existing row. Reinstall is idempotent for that path. Third-party packages often default to non-unique unless they set `metadata.unique: true`.
 
 Declared `settings` are inserted on first install only. Changing a value later is `setSetting`, not reinstall. Marketplace `auth_fields` are not settings.
+
+### Editions
+
+An **edition** is a metadata-only `@engine9/schemas/editions/<name>` package whose `include` list installs the usual schema plugins for that account shape (on top of the required plugins). Install it like any other path; `include` entries are deployed with it.
+
+| User said | Prefer (if in `listAvailable`) | What it brings in |
+|-----------|--------------------------------|-------------------|
+| "contact plugin", "contact edition", "add contact" | `@engine9/schemas/editions/contact` | Plaintext names, email, phone, address, remote ids, **timeline**, and **transactions** with contact details |
+| "pii-free edition" / PII-free stack | `@engine9/schemas/editions/pii-free` | `person_hash`, remote ids, timeline, transaction/core (no plaintext contact) — see [e9-pii-free](../e9-pii-free/SKILL.md) |
+
+**Rule:** When the user says "contact plugin" or "contact edition" without a full path, resolve to `@engine9/schemas/editions/contact` (confirm it appears in `listAvailable`). Do **not** treat that request as only `@engine9/schemas/transaction/contact_details` — that path is the narrow transaction contact-columns plugin, not the edition.
+
+Editions and include lists: [create-engine9-plugin — Include lists and editions](../create-engine9-plugin/SKILL.md#include-lists-and-editions).
 
 ## Workflow
 
@@ -70,7 +86,7 @@ Call `plugin` `listAvailable` with any `account_id` the user can access (session
 { "command": "listAvailable", "account_id": "<account_id>" }
 ```
 
-Match the user's string to a returned path (exact, or add `@` / treat as suffix). If nothing matches, **stop**.
+Match the user's string to a returned path (exact, or add `@` / treat as suffix). If the user said "contact" / "contact plugin" / "contact edition" without a path, prefer `@engine9/schemas/editions/contact` when it is in the catalog (see [Editions](#editions)). If nothing matches, **stop**.
 
 ### 3. Resolve target accounts
 
@@ -159,5 +175,6 @@ Natural language ("install `<path>` on all `<parent>` clients") is the same work
 - [PII-free accounts (`exclude_pii`)](../e9-pii-free/SKILL.md)
 - [CLI / account scope](../e9-cli/SKILL.md)
 - [Author a plugin or schema plugin](../create-engine9-plugin/SKILL.md)
+- [Include lists and editions](../create-engine9-plugin/SKILL.md#include-lists-and-editions)
 - [Plugin settings authoring](../create-engine9-plugin/SKILL.md#settings)
 - [Add custom fields to a pull](../e9-custom-fields/SKILL.md)
