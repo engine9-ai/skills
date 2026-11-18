@@ -74,10 +74,15 @@ The scope list **is** the permission model. The same key type covers forms, inbo
 
 Constants: `SCOPES` from `@engine9/core`. Canonical list for UIs: MCP `apiKey` `command: catalog` → `scopes[]`.
 
-A public signup or payment form typically needs:
+A public signup or payment form needs `public` only. A key that sits in a
+browser is public whatever else it carries, so core treats any key with
+`public` as a form: fields that point a row at a record (`person_id` other
+than the signed-in person's own, `identifiers`, hashes, Domain UNIDs) are
+removed with a `warnings` entry, and the rest goes through dedupe as usual. Adding `people:write` to a
+browser key gains nothing and must not be done (PERMISSIONS.md PL-5).
 
 ```text
-public,people:write
+public
 ```
 
 A partner that discovers flows and schedules tasks needs:

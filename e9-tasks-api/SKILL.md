@@ -27,6 +27,7 @@ The engine9 Task API schedules predefined flows and on-demand worker methods ove
 | Set a remote dataflow cron | `PUT /flows/:id?remote=true` with `{ "schedule": { "cron": "0 6 * * *" } }`. Empty `cron` clears it. MCP `task` `action: "setSchedule"` |
 | Put a flow file on the cron scheduler | MCP `task` `action: "publishFlow"` (admin; no engine9 REST route). The file location is the lookup (`labels.source`). [deploy-flow.md](./deploy-flow.md#publish-a-flow-file-to-the-scheduler) |
 | Schedule a predefined flow | `POST /flow_runs/` with `flow_id` (built-in slug), `flow_path`, or `definition` |
+| Step through a flow one task at a time (every task held, run one, inspect/override files) | MCP only: `task` `schedule` with `step: true`, `taskData` `io` / `setInput`, `task` `runStep`. [e9-mcp step mode](../e9-mcp/SKILL.md#step-mode) |
 | Run an existing Frakture dataflow | `POST /flow_runs/` with `flow_id` = dataflow Mongo id (`remote` default); or Frakture `POST /tasks/schedule` with `dataflow_id` |
 | Schedule an on-demand task | `POST /tasks/schedule` with `path` + `method` |
 | Poll task runs | `POST /task_runs/filter` |

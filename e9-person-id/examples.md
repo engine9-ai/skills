@@ -116,7 +116,7 @@ Store lookup applies **`remote_person_id` hits first**, then email/phone. A row 
 
 They share `email_hash_v1`, so they share a `temp_id` → **one** `person_id`, two `person_remote` rows (`A` and `B`). Email overlap in-batch merges.
 
-**Separate loads**, `A` first: `A` creates person 10 and owns `email_hash_v1`. Later `B` hits `remote_person_id` as new → creates person 11, tries to insert the email key, store ignores it (still 10). `person_email` may still grow a `(shared@example.com, 11)` attribute row because uniqueness is `(email, person_id)`, not email alone. Lookup by email continues to return **10**.
+**Separate loads**, `A` first: `A` creates person 10 and owns `email_hash_v1`. Later `B` arrives: its `remote_person_id` is new, but its email hash already maps to 10, so `B` joins **10** too. One person, two `person_remote` rows, as in the same batch.
 
 That is why “quality `person_id`” prefers loading a stable `remote_person_id` together with emails/phones on the first pass when the CRM knows they are one constituent.
 

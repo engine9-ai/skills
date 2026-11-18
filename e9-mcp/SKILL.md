@@ -246,6 +246,7 @@ If a path, method, or option is not present in MCP responses, report that to the
 | Set or clear a remote dataflow cron | `task` `action: "setSchedule"` with `flow_id` and `cron` (admin). Empty string clears |
 | Create or update a remote dataflow from a flow file | `task` `action: "publishFlow"` (admin). Never hand-build dataflows |
 | Method option schema for a plugin path (Options form) | `task` with `action: "describe"` and `path` (same naming as schedule; `method` optional) |
+| Step through a flow one task at a time, checking or replacing the files between tasks | `task` `action: "schedule"` with `step: true` (every task run held PAUSED), then per task: `taskData` `command: "io"` (input/output files, `samples: true` for rows), optional `makeSample` / `setInput`, then `task` `action: "runStep"` with `task_run_id`. [Step mode](#step-mode) |
 
 `task` is the **catch-all** for behaviors that do not have a native MCP call. Do not reach for `task` when a native tool already covers the request with equal or better fidelity.
 
@@ -886,6 +887,19 @@ To launch a dataflow already in the Frakture console (e.g. Load Messages), pass 
 ```
 
 Built-in slugs such as `identity-rebuild` still resolve locally first. Use `getFlow` with `remote: true` only when you need to inspect the definition, not to schedule.
+
+Per-step option overrides: `tasks: [{ "task_key": "<step>", "options": { … } }]` on `schedule` (same as REST `POST /flow_runs/`). For a dataflow id they are PATCHed onto the new task runs; misses are in `result.override_warnings`.
+
+### Step mode
+
+Run a flow one task at a time. Files are the intermediates: an upstream task writes a path into its output (`output.filename`) and a downstream option reads it through `{{tasks.<task_key>.output.filename}}`.
+
+1. `task` `action: "schedule"` with `step: true`. Every task run is held PAUSED (local: created PAUSED; remote: paused right after createJoblist — any that could not be paused are in `result.step_warnings`). The response has `step: true` and `flow_run_id`.
+2. `taskData` `command: "io"` with `task_run_id` → `inputs` / `outputs` FileRefs (`key`, `path`, `exists`, `size`, `records`, `origin`: `upstream` / `sample` / `override` / `option` / `output`, `template`, `upstream_task_key`, `original`, `error`). `samples: true` adds `columns` + `rows`. Paths outside the account are never read.
+3. Optional: `taskData` `command: "makeSample"` (`filename`, `limit`, `flow_run_id`, `task_key`) writes `samples/<flow_run_id>/<task_key>/<name>.sample-<N>.csv`; `command: "setInput"` (`task_run_id`, `key`, `filename` **or** `value`) changes one option on a PENDING/PAUSED run and records `_e9_overrides[key] = { original, at }`. Send `value` = `original` to revert. 409 when the run is not held.
+4. `task` `action: "runStep"` with `task_run_id` → runs that task only and keeps the others held. Remote returns once Frakture accepts it (poll `get` / `listTasks`); local (`remote: false`) waits for the result. Response `{ task_run_id, flow_run_id, state_type, state_name, held }`.
+
+`taskData` `command: "sample"` (`filename`, `limit`, `count`) returns rows and a record count for any account file.
 
 ### Built-in engine9 Workers
 
