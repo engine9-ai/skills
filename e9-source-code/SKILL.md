@@ -40,6 +40,7 @@ message, not a model ([e9-model — Default: First Touch](../e9-model/SKILL.md#d
 | Is `source_code_summary.origin_*` legacy or first touch? | [`origin_*` on `source_code_summary`](#origin_-on-source_code_summary-legacy-or-current-model) |
 | Why acquisition cost differs between dictionary and summary | [Acquisition cost overrides](#acquisition-cost-overrides-on-source_code_summary) |
 | Origin / first touch revenue on one code but not another | [Origin revenue debug](#origin-first-touch-revenue-differs-between-source-codes-or-surfaces) |
+| Last-click revenue and First Touch revenue differ on the same codes | [e9-first-touch-vs-last-click](../e9-first-touch-vs-last-click/SKILL.md) |
 
 ## Concepts
 
@@ -517,5 +518,6 @@ override file, or remove the override and let the CRM origin stand.
 | Full source-code element catalog | [Elements](elements.md) |
 | Conversion tracking and transaction-to-message attribution | [Attribution](attribution.md) |
 | Current person-level models and `{prefix}_*` tables | [e9-model](../e9-model/SKILL.md) |
+| Last click vs First Touch on the same codes | [e9-first-touch-vs-last-click](../e9-first-touch-vs-last-click/SKILL.md) |
 | Timeline entries used by models | [e9-timeline](../e9-timeline/SKILL.md) |
 | Message performance summary views | [e9-global-message](../e9-global-message/SKILL.md) |
