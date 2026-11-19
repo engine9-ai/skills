@@ -37,9 +37,9 @@ Access has two tiers: a superadmin (a file on the server) can open every account
 
 If `user` already succeeds this session, skip to step 4.
 
-**In Cursor, login is only `mcp_auth` → user completes prompt → verify with `user`.** Nothing else. In Claude, see [Claude (custom connector)](#claude-custom-connector) below.
+**In Cursor, login is only `mcp_auth` → user completes prompt → verify with `user`.** Nothing else. In Claude, see [Log in from Claude](#log-in-from-claude-custom-connector) below.
 
-### Claude (custom connector)
+### Log in from Claude (custom connector)
 
 In Claude, the engine9 server is added as a custom connector, and the user signs in to engine9 when they connect it. The connector does not expose `mcp_auth`. Do not look for it or report it missing.
 

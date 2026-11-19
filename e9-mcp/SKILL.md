@@ -44,7 +44,7 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 
 If `user` already succeeds this session, skip to step 4.
 
-**In Cursor, login is only `mcp_auth` → user completes prompt → verify with `user`.** Nothing else. In Claude, see [Claude (custom connector)](#claude-custom-connector) below.
+**In Cursor, login is only `mcp_auth` → user completes prompt → verify with `user`.** Nothing else. In Claude, see [Log in from Claude](#log-in-from-claude-custom-connector) below.
 
 | Do not use for login | Why |
 |---------------------|-----|
@@ -55,7 +55,7 @@ If `user` already succeeds this session, skip to step 4.
 
 After login, if MCP tools still fail, see [e9-cli — troubleshooting](../e9-cli/SKILL.md#troubleshooting-after-login).
 
-### Claude (custom connector)
+### Log in from Claude (custom connector)
 
 In Claude, the engine9 server is added as a custom connector, and the user signs in to engine9 when they connect it. The connector does not expose `mcp_auth`. Do not look for it or report it missing.
 
