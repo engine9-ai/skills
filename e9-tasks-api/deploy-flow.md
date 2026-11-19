@@ -4,7 +4,7 @@ Use this when an operator or agent needs to **check** and **schedule** a multi-s
 
 ## Prefer MCP `task` (production)
 
-After `mcp_auth` → `user`:
+After login ([e9-mcp Step 0](../e9-mcp/SKILL.md#step-0--log-in-always-first)) → `user`:
 
 ```json
 {

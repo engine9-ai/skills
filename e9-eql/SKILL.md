@@ -31,7 +31,7 @@ Prefer **`eql`** over raw SQL when the user is describing a structured query (ta
 
 ## Workflow
 
-1. **Log in** — `mcp_auth` → user completes prompt → `ok` / `user` ([e9-mcp Step 0](../e9-mcp/SKILL.md#step-0--log-in-always-first)).
+1. **Log in** — `mcp_auth` → user completes prompt → `ok` / `user` (in Claude: `ok` / `user` only) ([e9-mcp Step 0](../e9-mcp/SKILL.md#step-0--log-in-always-first)).
 2. **Know `account_id`** — from `/e9a`, this chat’s session scope, or `account`
    search.
 3. **Optional discovery** — `sql` `tables` / `describe`, or MCP `analyze`, to learn table shape before writing EQL. See [Analyzing a table](#analyzing-a-table).

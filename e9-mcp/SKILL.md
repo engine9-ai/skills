@@ -1,6 +1,6 @@
 ---
 name: e9-mcp
-description: Use the engine9 MCP server — log in first via mcp_auth, MCP-only discovery (never local code), prefer native tools over task. Plugin install/settings are first-class MCP `plugin` (see e9-plugin), not task. Use @engine9/plugins/e9workers:EchoWorker + echo for on-demand smoke tests (no plugin lookup), discover other plugin methods via account, and invoke task as the catch-all for worker execution. Publish a flow file (on the server or in any outside repo) as a scheduled Frakture dataflow with task publishFlow.
+description: Use the engine9 MCP server — log in first (mcp_auth in Cursor; in Claude the connector is already signed in, verify with ok), MCP-only discovery (never local code), prefer native tools over task. Plugin install/settings are first-class MCP `plugin` (see e9-plugin), not task. Use @engine9/plugins/e9workers:EchoWorker + echo for on-demand smoke tests (no plugin lookup), discover other plugin methods via account, and invoke task as the catch-all for worker execution. Publish a flow file (on the server or in any outside repo) as a scheduled Frakture dataflow with task publishFlow.
 ---
 
 # engine9 MCP
@@ -11,7 +11,7 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 
 | Need | Use |
 |------|-----|
-| Authenticate | `mcp_auth` with `{}`, then verify with `ok` and `user` |
+| Authenticate | Cursor: `mcp_auth` with `{}`, then verify with `ok` and `user`. Claude: signed in at connect time, so verify with `ok` and `user` ([Step 0](#step-0--log-in-always-first)) |
 | Install a plugin / list installable paths | `plugin` `install` / `listAvailable` — [e9-plugin](../e9-plugin/SKILL.md) |
 | Discover accounts or installed plugins | `account` |
 | Child-account history for billing (signup, disabled, active months) | `account` search with `history: true` |
@@ -44,16 +44,28 @@ The engine9 MCP server exposes authenticated, account-scoped tools for discovery
 
 If `user` already succeeds this session, skip to step 4.
 
-**Login is only `mcp_auth` → user completes prompt → verify with `user`.** Nothing else.
+**In Cursor, login is only `mcp_auth` → user completes prompt → verify with `user`.** Nothing else. In Claude, see [Claude (custom connector)](#claude-custom-connector) below.
 
 | Do not use for login | Why |
 |---------------------|-----|
 | Shell commands (`curl`, `grep`, `npm run mcp`, …) | Not login; wastes time |
 | Reading `mcp.json`, `STATUS.md`, `.env`, local config | Not login |
 | `e9 oauth token`, local CLI, repo worker code | Wrong path for Cursor MCP |
-| Reporting "MCP unavailable" before `mcp_auth` | Always try `mcp_auth` first |
+| Reporting "MCP unavailable" before `mcp_auth` (or `ok` in Claude) | Always try the login step first |
 
 After login, if MCP tools still fail, see [e9-cli — troubleshooting](../e9-cli/SKILL.md#troubleshooting-after-login).
+
+### Claude (custom connector)
+
+In Claude, the engine9 server is added as a custom connector, and the user signs in to engine9 when they connect it. The connector does not expose `mcp_auth`. Do not look for it or report it missing.
+
+1. Call **`ok`**. It needs no sign-in and reports `authenticated` and the signed-in user.
+2. Call **`user`** to confirm the account list.
+3. Proceed with the user's request.
+
+If `ok` reports `authenticated: false`, or `user` fails with `Authentication required`, stop and ask the user to reconnect the engine9 connector in Claude. Setup: [e9-cli — Claude custom connector](../e9-cli/SKILL.md#claude-custom-connector).
+
+For a superadmin, `user` returns every account (hundreds of entries). Prefer `ok` to confirm sign-in, and `account` search to find accounts.
 
 ## MCP tool errors — stop immediately
 

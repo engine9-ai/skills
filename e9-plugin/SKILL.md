@@ -19,7 +19,7 @@ Plugins are first-class on a connected engine9 MCP server. Installing a package 
 
 | Need | Call |
 |------|------|
-| Sign in | `mcp_auth` `{}`, then `ok` / `user` — [e9-mcp](../e9-mcp/SKILL.md#step-0--log-in-always-first) |
+| Sign in | `mcp_auth` `{}` (Cursor only; Claude is signed in at connect time), then `ok` / `user` — [e9-mcp](../e9-mcp/SKILL.md#step-0--log-in-always-first) |
 | Catalog of installable paths (this server) | `plugin` `{ "command": "listAvailable", "account_id": "<any accessible id>" }` |
 | Install on one account | `plugin` `{ "command": "install", "account_id": "<account_id>", "path": "<package>" }` |
 | Find children of a parent | `account` `{ "command": "search", "parents": ["<parent_account_id>"], "limit": 500 }` |
@@ -67,7 +67,7 @@ Editions and include lists: [create-engine9-plugin — Include lists and edition
 Copy this checklist:
 
 ```
-- [ ] mcp_auth → user
+- [ ] Log in (`mcp_auth` in Cursor, `ok` in Claude) → user
 - [ ] listAvailable once; resolve path
 - [ ] Resolve account ids (one id, or account search)
 - [ ] plugin install per account_id (parallel batches)
