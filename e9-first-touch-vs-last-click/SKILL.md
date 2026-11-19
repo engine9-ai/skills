@@ -34,10 +34,10 @@ finds the people for whom that is not true and says why.
 ## Step 0 — Connect through MCP
 
 Rule: Run every query in this skill through the engine9 MCP server (`sql`,
-`timelinePerson`). Log in with `mcp_auth` → `ok` → `user`, then confirm the
+`timelinePerson`). Log in with `mcp_auth` → `ok` → `user` (in Claude: `ok` → `user`), then confirm the
 account with `account` search ([e9-mcp](../e9-mcp/SKILL.md#step-0--log-in-always-first)).
 
-Rule: If engine9 MCP is not connected in this session, `mcp_auth` fails, or the
+Rule: If engine9 MCP is not connected in this session, login fails, or the
 account is not found, **stop and ask the user** how to proceed. Do not fall back
 to the `e9` CLI (`e9 sqlworker query`), `accounts.d`, `accounts.compiled.json5`,
 or any other local config or shell route to find the account or run SQL.

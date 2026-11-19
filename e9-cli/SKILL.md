@@ -1,23 +1,24 @@
 ---
 name: e9-cli
-description: Connect Cursor to engine9 MCP — log in first via mcp_auth, set account scope with /e9a, and handle /e9 command-style interactions including plugin install, people lookup, and task scheduling.
+description: Connect Cursor or Claude to engine9 MCP — log in first (mcp_auth in Cursor; Claude custom connector signs in at connect time), set account scope with /e9a, and handle /e9 command-style interactions including plugin install, people lookup, and task scheduling.
 ---
 
 # engine9 CLI
 
-Use this skill to configure or troubleshoot an engine9 MCP connection in Cursor or another MCP client. It also defines `/e9` and `/e9a` command behavior, including account scope, plugin install, people lookup, reports, segments, API keys, and task scheduling.
+Use this skill to configure or troubleshoot an engine9 MCP connection in Cursor, Claude, or another MCP client. It also defines `/e9` and `/e9a` command behavior, including account scope, plugin install, people lookup, reports, segments, API keys, and task scheduling.
 
 ## Quick reference
 
 | Need | Action |
 |------|--------|
-| Sign in | Call `mcp_auth` with `{}`, then verify with `ok` and `user` |
+| Sign in | Cursor: call `mcp_auth` with `{}`, then verify with `ok` and `user`. Claude: verify with `ok` and `user` (no `mcp_auth`) |
 | Select one account | `/e9a <account_id>` |
 | Select children of a parent | `/e9a parent <parent_account_id>` |
 | Install a plugin | `/e9 plugin install <path>` — [e9-plugin](../e9-plugin/SKILL.md) |
 | Look up people | `/e9 lookup <terms>` |
 | Run an on-demand method | `/e9 task <plugin-path-or-alias> <method> [options...]` |
 | Configure Cursor | Add the server to `~/.cursor/mcp.json` and permissions to `~/.cursor/permissions.json` |
+| Configure Claude | Add `https://data.engine9.ai/mcp` as a custom connector — [Claude custom connector](#claude-custom-connector) |
 
 **Rule:** On any MCP tool error, follow [e9-mcp — MCP tool errors — stop immediately](../e9-mcp/SKILL.md#mcp-tool-errors--stop-immediately); do not call downstream account-scoped tools after a failed `account`, `task`, `lookup`, or similar call.
 
@@ -36,13 +37,25 @@ Access has two tiers: a superadmin (a file on the server) can open every account
 
 If `user` already succeeds this session, skip to step 4.
 
-**Login is only `mcp_auth` → user completes prompt → verify with `user`.** Nothing else.
+**In Cursor, login is only `mcp_auth` → user completes prompt → verify with `user`.** Nothing else. In Claude, see [Log in from Claude](#log-in-from-claude-custom-connector) below.
+
+### Log in from Claude (custom connector)
+
+In Claude, the engine9 server is added as a custom connector, and the user signs in to engine9 when they connect it. The connector does not expose `mcp_auth`. Do not look for it or report it missing.
+
+1. Call **`ok`**. It needs no sign-in and reports `authenticated` and the signed-in user.
+2. Call **`user`** to confirm the account list.
+3. Proceed with the user's request.
+
+If `ok` reports `authenticated: false`, or `user` fails with `Authentication required`, stop and ask the user to reconnect the engine9 connector in Claude. Setup: [Claude custom connector](#claude-custom-connector).
+
+For a superadmin, `user` returns every account (hundreds of entries). Prefer `ok` to confirm sign-in, and `account` search to find accounts.
 
 ## Troubleshooting after login
 
 Only if login succeeded (`user` works) but other MCP calls still fail:
 
-- Ask the user to reload MCP servers in Cursor (Settings → MCP) if config recently changed.
+- Ask the user to reload MCP servers in Cursor (Settings → MCP) if config recently changed. In Claude, ask them to reconnect the engine9 connector, then start a new chat.
 - For local dev server issues, see [Server endpoint and startup](#server-endpoint-and-startup) below.
 
 Do **not** use shell commands or config greps as a substitute for step 0 login.
@@ -61,7 +74,7 @@ When handling `/e9` or `/e9a` requests, **do not read local workspace code** to 
 
 ## Concepts
 
-1. Cursor MCP config (`mcp.json`, `permissions.json`)
+1. Cursor MCP config (`mcp.json`, `permissions.json`), or a Claude custom connector
 2. Auth expectations (OAuth vs `localdev` bearer)
 3. `/e9a` account scope and plugin cache
 4. `/e9` session behavior, lookup parsing, and task scheduling
@@ -102,6 +115,21 @@ Notes:
 - The server key (`engine9.ai` above) should match engine9's MCP server name (`ENGINE9_MCP_SERVER_NAME`, default `engine9.ai`).
 - If local standalone MCP runs without TLS, use `http://127.0.0.1:3334/mcp`.
 - After config changes, reload MCP servers in Cursor.
+
+## Claude custom connector
+
+Add the production server to Claude as a custom connector:
+
+1. In Claude's connector settings, add a custom connector with the URL `https://data.engine9.ai/mcp`.
+2. Complete the engine9 sign-in when Claude prompts for it. An unauthenticated `GET` of the URL redirects to the Delegate sign-in page; that is expected.
+3. Start a new chat, or refresh tools, so the engine9 tools load.
+4. Verify with `ok` (expect `authenticated: true` and the user's email), then `user`.
+
+Notes:
+
+- Claude signs in once per connection. There is no `mcp_auth` tool, and no `mcp.json` or `permissions.json`. Tool approval is managed in Claude's connector settings.
+- Claude prefixes tool names with the connector name (for example `Engine_9_MCP__account`). The tool names and parameters after the prefix are the same as in Cursor.
+- Local servers (`127.0.0.1:3334`) and `Bearer localdev` are not reachable from a Claude custom connector. Use Cursor for local development.
 
 ## Cursor permissions configuration
 
@@ -223,7 +251,7 @@ Use this for requests like “list current errored tasks”, cross-account job s
 
 ### Recommended `/e9` bootstrap flow
 
-0. **[Step 0 — Log in](#step-0--log-in-always-first)** — `mcp_auth` → user completes prompt → `user`.
+0. **[Step 0 — Log in](#step-0--log-in-always-first)** — `mcp_auth` → user completes prompt → `user` (in Claude: `ok` → `user`).
 1. `/e9` with no subcommand:
    - Confirm signed in via MCP `user`.
    - Confirm active `account_id` (from session or user); if missing, suggest `/e9a <account_id>`.

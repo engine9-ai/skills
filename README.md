@@ -11,7 +11,7 @@ This directory contains public skills for working with engine9 deployments, data
 | Upgrade databases after a core or schemas release | [Upgrades](e9-upgrade/SKILL.md) |
 | Make an account PII-free (limited-pii, hash-only) | [PII-free](e9-pii-free/SKILL.md) |
 | Build a schema plugin or plugin | [Create plugin or schema plugin](create-engine9-plugin/SKILL.md) |
-| Connect Cursor and choose account scope | [CLI](e9-cli/SKILL.md) |
+| Connect Cursor or Claude and choose account scope | [CLI](e9-cli/SKILL.md) |
 | Select and call MCP tools | [MCP](e9-mcp/SKILL.md) |
 | Query data with EQL | [EQL](e9-eql/SKILL.md) |
 | Schedule work through REST | [Task API](e9-tasks-api/SKILL.md) |
@@ -44,7 +44,7 @@ When using an engine9 MCP server, discover plugins, methods, and tool parameters
 | Plugin install | [e9-plugin/SKILL.md](e9-plugin/SKILL.md) | Deploy a package path onto one account or all children of a parent via MCP `plugin` |
 | Custom fields | [e9-custom-fields/SKILL.md](e9-custom-fields/SKILL.md) | Append vendor custom fields to `people_custom_fields` / `transaction_custom_fields`; hard stop when the setting does not exist |
 | Create plugin or schema plugin | [create-engine9-plugin/SKILL.md](create-engine9-plugin/SKILL.md) | Implement `@engine9/schemas/*` packages and `@engine9/plugins/*` native plugins |
-| CLI and account scope | [e9-cli/SKILL.md](e9-cli/SKILL.md) | Connect Cursor to engine9 MCP, choose account scope, search, or schedule tasks |
+| CLI and account scope | [e9-cli/SKILL.md](e9-cli/SKILL.md) | Connect Cursor or Claude to engine9 MCP, choose account scope, search, or schedule tasks |
 | MCP tools | [e9-mcp/SKILL.md](e9-mcp/SKILL.md) | Select native MCP tools, discover accounts, install plugins, or use task fallback |
 | API keys | [e9-api-key/SKILL.md](e9-api-key/SKILL.md) | Manage generic non-session `e9key_` authentication and scopes for forms, inbound APIs, and Task API |
 | EQL | [e9-eql/SKILL.md](e9-eql/SKILL.md) | Write engine9 Query Language expressions and query objects or call MCP `eql` |

@@ -102,7 +102,7 @@ wrangler deploy && npx e9core upgrade --url "$E9_SITE_URL"
 ### engine9 server accounts (MCP)
 
 ```
-- [ ] mcp_auth → user
+- [ ] Log in (`mcp_auth` in Cursor, `ok` in Claude) → user
 - [ ] Confirm the server already runs the new release (staff deploy it)
 - [ ] Resolve account ids (one id, or account search by parent)
 - [ ] plugin upgrade dry_run: true per account; collect status and blocked
