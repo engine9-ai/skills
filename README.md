@@ -22,6 +22,7 @@ This directory contains public skills for working with engine9 deployments, data
 | Map payment records | [Transaction mapping](inputs/transaction-mapping/SKILL.md) |
 | Build or consume exports | [Exports](e9-export/SKILL.md) |
 | Add a site to Delegate sign-in, or brand it | [Delegate Domains](e9-delegate-domain/SKILL.md) |
+| Create a folio from a client request | [Folio request intake](e9-folio-request/SKILL.md) |
 
 ## Concepts
 
@@ -66,6 +67,7 @@ When using an engine9 MCP server, discover plugins, methods, and tool parameters
 | Export building | [e9-export/building.md](e9-export/building.md) | Create, run, and debug exports with `e9 exportworker` |
 | Inventory | [e9-inventory/SKILL.md](e9-inventory/SKILL.md) | Run warehouse inventory and monthly statistics with `e9 inventoryworker` |
 | Delegate Domains | [e9-delegate-domain/SKILL.md](e9-delegate-domain/SKILL.md) | Register, brand, disable, or hand over a Domain on Delegate sign-in; DNS TXT proof; required contact email |
+| Folio request intake | [e9-folio-request/SKILL.md](e9-folio-request/SKILL.md) | Turn a client email or ask into a folio: client folder by `account_id`, context, filed email, CCs, action sub-folios |
 | Reports | [e9-reports/SKILL.md](e9-reports/SKILL.md) | Install JSON dashboards, list filters, execute reports, or open [GitHub-hosted sample definitions](e9-reports/samples/messaging/README.md) |
 
 ## Related documentation
