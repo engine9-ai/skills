@@ -138,11 +138,11 @@ The script refuses to allow a Domain without `--email`. It saves the contact
 on the registry row (`contact_email`) and writes the allow cache. Run it once
 for each host. Record the TXT value and verification date with the request.
 
-Smoke test. With no cookies, `min_level=1` sends the browser to sign in:
+Smoke test. With no cookies, `min_level=2` sends the browser to sign in:
 
 ```bash
 curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' \
-  "https://delegate.network/identity/authorize?domain=www.example.org&return_to=https%3A%2F%2Fwww.example.org%2F&min_level=1"
+  "https://delegate.network/identity/authorize?domain=www.example.org&return_to=https%3A%2F%2Fwww.example.org%2F&min_level=2"
 ```
 
 Expected: `302` to `https://delegate.network/login?...`.
@@ -262,7 +262,7 @@ Rule: One User per email address. If a Facebook email already belongs to a Googl
 
 ```js
 const id = createEngine9Id({ domain: 'www.example.org', loginProviders: ['google', 'facebook'] });
-await id.requestIdentity({ minLevel: 1, loginProviders: ['google', 'facebook'] });
+await id.requestIdentity({ minLevel: 2, loginProviders: ['google', 'facebook'] });
 ```
 
 `@engine9/core` on a server:
