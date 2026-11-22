@@ -178,7 +178,7 @@ Two schedule modes (same `scheduleTasks` engine):
 - **REST on-demand task:** `POST /tasks/schedule` with plugin `path` + `method` (Echo: `@engine9/plugins/e9workers:EchoWorker` + `echo`).
 - **MCP `task` / TaskWorker:** `flow_id` or `flow_path` (JSON5 file) for a flow; `path` + `method` for a single job.
 
-Tasks in a flow file come from `flow.tasks`; optional schedule fields come from `flow.schedule` (or top-level overrides). Explicit call parameters override flow defaults. Local tasks use `worker_path` values under `workers/...`; remote/plugin tasks use dotted plugin paths (e.g. `engine9.Engine9Workers.EchoWorker`). Mixed local and remote tasks in one flow are not supported in a single `scheduleTasks` call. API consumers should not pass a server filesystem `flow_path`.
+Tasks in a flow file come from `flow.tasks`; optional schedule fields come from `flow.schedule` (or top-level overrides). Explicit call parameters override flow defaults. Local tasks use `worker_path` values under `workers/...`; remote/plugin tasks use dotted plugin paths (e.g. `engine9.Engine9Workers.EchoWorker`). Frakture and engine9 plugin tasks mix freely in one flow: both are remote tasks (dotted plugin paths run through the Frakture job list), and a typical flow pulls with a Frakture task, transforms with an engine9 task (`engine9.Engine9Workers.InputWorker` `transform`), and pushes with another Frakture task, handing files over through S3 (small results travel in the task output). What one `scheduleTasks` call cannot mix is server-local `workers/...` tasks (the SQL task manager) with remote plugin tasks. API consumers should not pass a server filesystem `flow_path`.
 
 ## SQLTaskManager: execution
 
