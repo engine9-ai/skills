@@ -53,6 +53,8 @@ Executable tasks must include worker routing (see `engine9/server/test/task/echo
 | `name` | Flow display name (top-level) |
 | `tags`, `labels` | Optional metadata |
 | `schedule` | Optional scheduling overrides for `TaskWorker.scheduleTasks` / MCP `task`: `{ label, tracking_code, start_after_timestamp }` |
+| `parameter_schema` | Optional. Declares the flow's run parameters, with defaults. See [Flow parameters](#flow-parameters-replaces-configstep). |
+| `parameters` | Optional. Values that override `parameter_schema` defaults for this flow. |
 | `tasks[]` | Ordered steps |
 | `task_key` | Unique key per task (required in practice). Address for `{{tasks.<task_key>.output.*}}`. Auto-generated from id/name/worker if omitted. |
 | `name` (per task) | Unique display name per task. **Must differ from every other task in the flow.** Do not set this to the worker method when two steps share a method. |
@@ -119,9 +121,85 @@ For remote schedules, keep `task_key` equal to `method` so Frakture merge contex
 |----------|---------|
 | `{{tasks.<task_key>.output.<field>}}` | Preferred — sibling task output |
 | `{{jobs.<context_id>.output.<field>}}` | Remote-legacy alias (same merge context) |
+| `{{parameters.<name>}}` | Flow run parameter (see below) |
 | `{{account_id}}`, `{{date '…'}}`, etc. | Shared `@engine9/input-tools` Handlebars helpers |
 
 Upstream refs must be `COMPLETED` before the downstream task starts (`SQLTaskManager` / `executeTaskRun` wait or fail). Original templates stay on `task_inputs.options`; merged values are stored as `task_inputs.resolved_options` and passed to the worker.
+
+### Flow parameters (replaces configStep)
+
+Values someone sets per run (an entity, a date window, a batch size) are flow parameters. Do not add a `configStep` task for them. This follows Prefect: the flow declares parameters with defaults, and each flow run supplies values.
+
+```json5
+{
+  id: 'actblue-donation-count',
+  name: 'Count ActBlue donations',
+  parameter_schema: {
+    properties: {
+      entity: { type: 'string', enum: ['c3', 'c4'], default: 'c3', title: 'Entity' },
+      start_date: { type: 'string', format: 'date', default: '-7d', description: 'Inclusive' },
+      end_date: { type: 'string', format: 'date', default: 'now', description: 'Exclusive' },
+    },
+    required: ['entity'],
+  },
+  tasks: [
+    {
+      task_key: 'countDonations',
+      name: 'Count donations in the window',
+      worker_path: 'workers/SQLWorker',
+      worker_method: 'query',
+      options: {
+        sql: "select count(*) as n from actblue_{{parameters.entity}}_donations where ts >= '{{date parameters.start_date 'YYYY-MM-DD'}}' and ts < '{{date parameters.end_date 'YYYY-MM-DD'}}'",
+      },
+    },
+  ],
+}
+```
+
+- `parameter_schema` is a JSON Schema object. The supported keywords are listed below. Any other keyword is rejected when the flow loads, rather than ignored. `account_id` is reserved.
+  - At the schema level: `type: 'object'`, `properties`, `required`, `additionalProperties`, `title`, `description`.
+  - On each property: `type` (`string`, `number`, `integer`, `boolean`, `array`, `object`), `default`, `enum`, `title`, `description`, `format`, `examples`, `items`.
+- Precedence, from low to high: schema `default`, then the flow's `parameters`, then the run's `parameters`. A run supplies values through REST `POST /flow_runs/` `{ parameters }`, MCP `task` `schedule` `parameters`, or `scheduleFlow({ parameters })`.
+- `null` and `''` mean "unset" and fall back to the next layer.
+- A name the schema does not declare is an error, unless `additionalProperties: true`.
+- Strings are converted for `integer`, `number` and `boolean`, so `'250'` becomes `250`.
+- The merged values are stored on `flow_run.parameters` when the run is created. Invalid values fail with a 422 that lists every problem.
+- Values are stored as given. A relative date such as `-7d` stays `-7d` and resolves where it is used (`{{date parameters.start_date …}}`, or the worker), as before. `format: 'date'` is a hint for forms only.
+- Never put secrets in parameters. They are stored on the run and shown in the UI.
+- Works for local and remote (Frakture) runs. For a flow file or definition, engine9 resolves the parameters and sends them with the job list. For a remote dataflow id, Frakture resolves them against the dataflow's `parameter_schema` (the parent's, for a child). Frakture keeps them on `job_list.parameters`, and its merge context exposes `{{parameters.*}}` too.
+- A spawned job list's `stdin` `start` / `end` fill declared `start` / `end` parameters (configStep did the same). Pass anything else with `spawnDataflow` `parameters`.
+
+#### Converting a configStep
+
+The exporter (`exportRemoteFlows`, `manager/convertConfigStep.js`) does this when it writes flow files. To do it by hand:
+
+1. Move the configStep options into `parameter_schema` properties, each with its value as `default`.
+2. Replace `{{jobs.<configStep>.output.<key>}}` with `{{parameters.<key>}}`.
+3. Make the implicit pass explicit. Frakture gave the task right after configStep all of configStep's output as default options. On that task, set each parameter it does not already set to `'{{parameters.<key>}}'`.
+4. Delete the configStep task. A child's options for it become the child's `parameters`.
+
+Before (the task after configStep used `end` without a template):
+
+```json5
+{ task_key: 'job0', method: 'configStep', options: { start: '-7d', end: '' } },
+{ task_key: 'job1', method: 'loadTimeline3', options: { start: '{{jobs.job0.output.start}}' } },
+```
+
+After:
+
+```json5
+parameter_schema: {
+  properties: { start: { type: 'string', default: '-7d', format: 'date' }, end: { type: 'string' } },
+},
+tasks: [
+  { task_key: 'job1', method: 'loadTimeline3', options: { start: '{{parameters.start}}', end: '{{parameters.end}}' } },
+]
+```
+
+Leave the configStep in place when the result would behave differently. That covers:
+- a configStep value that is itself a template;
+- a template that reads a key configStep does not set (it came from a spawn's stdin);
+- a reference to configStep that is not `output.<key>`.
 
 Comments and trailing commas are allowed (JSON5). String values in `options` must be valid JSON5 (no template literals or `+` concatenation); escape inner quotes or use a single line.
 

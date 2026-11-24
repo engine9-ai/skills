@@ -54,7 +54,7 @@ The common shape is three or four tasks:
 
 | Task | Runs on | Typical path |
 | --- | --- | --- |
-| configStep (optional) | engine9 | sets values later tasks read |
+| configStep (legacy; new flows use `parameter_schema`, see e9-dev-tasks/flow-authoring.md) | engine9 | sets values later tasks read |
 | Get data | Frakture | the source system's plugin (`LeadGeneration.getLeadsFile`, an SFTP pick-up, …) |
 | Transform | engine9 | `engine9.Engine9Workers.InputWorker` `transform` |
 | Push | Frakture | the destination system's plugin |
@@ -107,6 +107,20 @@ export default {
 
 Put a few made-up rows (never real people's data) in `fixtures/<task_key>.json` beside it, so the person can run it locally without server data.
 
+### 4b. Iterate on scratch (no laptop needed)
+
+The engine9 server keeps draft code in a scratch workspace and runs it in a sandbox on demand, with no publish or deploy per edit. Use the folio id as the workspace, and keep each file at its engine9-accounts path so promoting it is a copy:
+
+```json
+{ "command": "write", "account_id": "<account_id>", "workspace": "<folio_id>",
+  "path": "engine9-accounts/<org>/<account_id>/<flowName>/<flowName>.plugin.js", "content": "<the plugin>" }
+{ "command": "run", "account_id": "<account_id>", "workspace": "<folio_id>",
+  "steps": ["engine9-accounts/<org>/<account_id>/<flowName>/<flowName>.plugin.js:transforms:mapRow"],
+  "path": "fixtures/transform.json" }
+```
+
+(`engine9` MCP tool `scratch`). The input is `rows`, a workspace file (`path`, with `delimiter` for `.dat`), or any account file (`filename`, such as an upstream task's `s3://` output). Read the trace, edit, run again. On a held step of a test run, `taskData previewStep` with `code: "scratch:<folio_id>"` runs that step's own transforms from the workspace.
+
 ### 5. List the flow on the folio and hand over
 
 ```json
@@ -122,18 +136,20 @@ Use `flow_id` instead of (or as well as) `source` once the flow is published. Th
 - **New step-through run:** every task is held; each runs only when they run it. Conductor records the run on the folio.
 - Per task tab: see where it runs (Frakture or engine9) and as what, replace or sample its inputs, run it alone, read its output.
 - **Run locally** on the transform task: choose the folder holding the plugin file; it runs in the browser on a masked sample (or the fixture), with breakpoints. The result can go into the next task as a sample input (up to 5 MB). **Note in folio** posts what the run did.
+- **Run on scratch** on the transform task: the same, with the code from the folio's scratch workspace, run by the server.
+- **The whole file with draft code:** on the held transform task, `taskData setInput` key `code`, value `{ "source": "scratch", "workspace": "<folio_id>", "until": "<ISO time, at most 48 hours ahead>" }`, then run the step. It runs the full input in the sandbox and writes the output file, so the next tasks can be tested.
 
 ### 7. Publishing
 
 The servers only run code from engine9-accounts, which only engine9 or Frakture pull. When the person says it works:
 
-1. Commit the plugin and flow file to engine9-accounts (a pull request for review).
+1. Copy the plugin from the scratch workspace (`scratch` `read`), if that is where it was edited, and commit it with the flow file to engine9-accounts (a pull request for review). Remove any `code` option first: `publishFlow` refuses a flow that carries scratch code.
 2. After it is merged and pulled, publish the flow only when told to: `task` `publishFlow` with `flow_path` and `dry_run: true`, show the user the result, then without `dry_run`.
 3. `add_flow` again with the `flow_id` so the folio links to the published flow.
 
 ## Rules
 
-Rule: Never send transform code to a server or put it in task options. Code reaches the servers only through engine9-accounts.
+Rule: Draft transform code goes only to a scratch workspace (`scratch` `write`). Never put code in task options. Scheduled production runs get code only through engine9-accounts.
 
 Rule: Do not start, publish, enable or schedule a flow unless the user asks.
 
