@@ -93,9 +93,9 @@ Decline, or pass to a person, when:
 - The host is already allowed (`.engine9.ai`, `.engine9.io`, `localhost:3000`–`3003`).
 - The host is `localhost` on another port, an IP address, or a public host over `http`.
 - The name imitates another organization (`examp1e-login.org`), or the requester has no visible connection to the Domain.
-- The request is for a session-bridge secret or a wildcard suffix. Those are for engine9 API hosts only.
+- The request is for a wildcard suffix (engine9 hosts only), or for a session-bridge secret (retired: no Domain gets one; an app that wants engine9 data uses `@engine9/id/mcp`).
 
-Rule: Never grant a customer Domain a wildcard suffix, a session-bridge suffix, or a session-bridge secret.
+Rule: Never grant a customer Domain a wildcard suffix.
 
 ### 2. Verify control with a DNS TXT record
 
