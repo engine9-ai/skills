@@ -172,6 +172,23 @@ Segments are keyed saved-audience definitions. The export key is the final part 
 
 Reports are composed dashboards owned by native report plugins at `@engine9/plugins/reports/<area>`, never by schema plugins. Export a keyed `reports` map on the default plugin object. `ReportWorker` compiles report EQL/SQL.
 
+### Messaging plugins
+
+A plugin that sends messages (email, SMS, ads, social posts, push) keeps two things apart:
+
+| What | Where |
+| --- | --- |
+| Drafts, content, templates, audiences, schedules, send queues | The plugin's own self-scoped tables (`acme_sms_message`, `acme_sms_message_content`) |
+| Each message that went out, with platform statistics | `@engine9/schemas/global_message`: `global_message`, `global_message_stats`, `global_message_stats_by_date` |
+
+Message reports, inventory, and the Messages page read only the global tables, so a message the plugin does not publish there does not appear anywhere. Depend on `'@engine9/schemas/global_message': '>=1.16.0'`, and publish either by keeping the standard `{prefix}message` and `{prefix}{channel}_summary_pivot` tables or with a method that upserts into the global tables after each send and statistics pull. The [global_message README](../../schemas/global_message/README.md#how-a-messaging-plugin-publishes) has the columns, keys, timing, and rules.
+
+**Rule:** Publish only messages that went out. Never write drafts to `global_message`.
+
+**Rule:** Never write `attributed_*` columns, not even `0`. Attribution owns them.
+
+**Rule:** Do not build on `@engine9/schemas/message`. It is deprecated.
+
 ## File format
 
 ### Schema plugin layout

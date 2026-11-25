@@ -1,6 +1,6 @@
 ---
 name: e9-global-message
-description: "Read and consume engine9 global message warehouse views, including message identity, plugin context in legacy bot_* columns, platform engagement, native conversions, last-click attributed_* metrics, and primary-source-code dictionary fields. Use when querying message performance, attributed revenue, spend or impressions, building message grids and reports, interpreting inventory message statistics, or choosing publish_date versus by-date date. Email always uses global_message_summary on publish_date. Ads and other long-running types use global_message_summary_by_date.date (the day the statistic occurred). Do not use it to build messaging plugins or the attribution pipeline."
+description: "Read and consume engine9 global message warehouse views, including message identity, plugin context in legacy bot_* columns, platform engagement, native conversions, last-click attributed_* metrics, and primary-source-code dictionary fields. Use when querying message performance, attributed revenue, spend or impressions, building message grids and reports, interpreting inventory message statistics, or choosing publish_date versus by-date date. Email always uses global_message_summary on publish_date. Ads and other long-running types use global_message_summary_by_date.date (the day the statistic occurred). The tables are the @engine9/schemas/global_message plugin; to publish messages from a messaging plugin, follow that plugin's README instead. Do not use it to build the attribution pipeline."
 ---
 
 # engine9 global message tables
@@ -14,7 +14,9 @@ Global message warehouse views put a message’s identity, platform engagement, 
 | `global_message_summary` | One row per `message_id` | `publish_date` — when the message went out | **Email always.** Also other one-shot sends whose platform totals are lifetime stats on the message (SMS blasts). |
 | `global_message_summary_by_date` | One row per `message_id` + `date` | `date` — the day the platform reported the statistic (not `publish_date`) | **Ads and other long-running types**, where impressions, clicks, and spend are reported on the day they occurred. |
 
-Both sit under the account `global_table_prefix` (often empty). They are views over `global_message`, `global_message_stats` / `_by_date`, plugin metadata, and `source_code_summary` / `_by_date`; they are not base tables you write to.
+Both sit under the account `global_table_prefix` (often empty). They are views over `global_message`, `global_message_stats` / `_by_date`, `plugin`, and `source_code_dictionary`; they are not base tables you write to. The tables and the standard views are the [`@engine9/schemas/global_message`](../../schemas/global_message/README.md) schema plugin, which depends on `@engine9/schemas/source_code`. A host may replace a view with one that adds columns: Frakture's views join `source_code_summary` / `_by_date` for per-element and origin columns (category 5 below).
+
+The tables hold **published** messages only, from every channel and plugin. Drafts live in each messaging plugin's own tables. The `attributed_*` columns are results; the attribution tables that produce them (`message_source_code`, `attribution`, `transaction_metadata`) are a separate pipeline.
 
 ## Rules
 
@@ -40,7 +42,7 @@ Treat columns as separate categories. Mixing them (e.g. adding `revenue` + `attr
 
 | Typical columns | Meaning |
 |-----------------|--------|
-| `message_id`, `id` | Frakture message key (int); optional UUID `id` |
+| `message_id`, `id` | Integer key that attribution and source-code tables use; UUID `id`, which is the message's `input.id` when it has per-person timeline entries |
 | `label`, `subject`, `preview_url` | Platform-facing copy / preview |
 | `channel`, `channel_label`, `type`, `status` | Channel and lifecycle |
 | `publish_date` | When the message published |
@@ -52,11 +54,12 @@ Treat columns as separate categories. Mixing them (e.g. adding `revenue` + `attr
 
 ### 2. Plugin context — legacy `bot_*` columns
 
-These come from plugin / deployment metadata. Column names still use the older **bot** vocabulary; treat them as **plugin** fields.
+These come from the `plugin` row whose `remote_plugin_id` is the message's `bot_id`. Column names still use the older **bot** vocabulary; treat them as **plugin** fields.
 
 | Columns | Meaning |
 |---------|--------|
-| `bot_id`, `bot_path`, `bot_label`, `bot_nickname` | Plugin that owns the message (reports often break down by `bot_nickname`) |
+| `bot_id` | `plugin.remote_plugin_id` of the plugin that published the message |
+| `bot_path`, `bot_label`, `bot_nickname` | `plugin.path`, `plugin.name`, `plugin.nickname` (reports often break down by `bot_nickname`) |
 
 Filter or group by `bot_nickname` / `bot_path` the same way you would by plugin. Do not invent a separate “bot” concept when explaining results to users — say **plugin**.
 
@@ -92,9 +95,18 @@ Rollups of transactions whose final message id is this message. Pipeline details
 
 On `_by_date`, `attributed_*` are grouped by **transaction calendar day** (`ts`), not by `publish_date`. A day can have attributed revenue with zero impressions (or the reverse): engagement days and conversion days are independent.
 
-### 5. Source-code elements and legacy origin — from `source_code_summary` / `_by_date`
+### 5. Source code — from `source_code_dictionary`, and on Frakture `source_code_summary` / `_by_date`
 
-Joined on `message.final_primary_source_code = summary.source_code` (and matching `date` for the by-date view).
+The standard views join `source_code_dictionary` on the computed `final_primary_source_code = source_code_dictionary.source_code`. Every message row has these, null when its code is not in the dictionary (an empty code joins the dictionary's empty-code row, when there is one):
+
+| Columns | Meaning |
+|---------|--------|
+| `source_code_id` | The dictionary id of the final primary source code; transactions and timeline entries carry the same id |
+| `source_code_channel` | The channel the source code names; can differ from the message's `channel` |
+| `source_code_format` | The format that parsed the code (dictionary `format`); empty when none matched |
+| `source_code_parsing` | Parsed elements of the code as JSON (dictionary `parsing`) |
+
+Frakture's views join `source_code_summary` / `_by_date` instead (on `final_primary_source_code = summary.source_code`, and matching `date` for the by-date view) and add one column per parsed element, plus legacy origin totals:
 
 | Columns | Meaning |
 |---------|--------|
@@ -186,6 +198,7 @@ Use `message_activity` when the question is “on which days did this ad or long
 
 ## Related documentation
 
+- [Global message schema plugin: columns, keys, and how plugins publish](../../schemas/global_message/README.md)
 - [Source codes and last-click attribution](../e9-source-code/SKILL.md)
 - [Acquisition and LTV models](../e9-model/SKILL.md)
 - [Inventory statistics and Home mapping](../e9-inventory/SKILL.md#using-statistics)

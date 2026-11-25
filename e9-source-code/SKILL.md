@@ -410,7 +410,7 @@ LIMIT 20;
 
 Rule: The global `attributed_*` rollup is **`updateAllAttributionStatistics`** (TransactionBase). Message-load `updateAttributionStatistics` is a **no-op** — do not schedule it expecting a fix.
 
-`updateAllAttributionStatistics` groups attributed transactions by final message id and writes `global_message_summary`: `sum(amount)` → `attributed_revenue`, `count(*)` → `attributed_transactions`.
+`updateAllAttributionStatistics` groups attributed transactions by final message id and writes the `attributed_*` columns of `global_message_stats` and `global_message_stats_by_date`, which `global_message_summary` shows: `sum(amount)` → `attributed_revenue`, `count(*)` → `attributed_transactions`. It is the only writer of those columns; the plugin that published the message writes only the platform columns.
 
 Rule: Automatic runs only include messages with **`publish_date >= -270d`** (optional `end` = `publish_date < end`). Older history is **not** refreshed unless you pass `start` / `end` (or `message_ids`). This is intentional for performance — after a historical message backfill, or when tickets show $0 attributed revenue before ~270 days despite codes on both sides, the first fix to try is:
 
